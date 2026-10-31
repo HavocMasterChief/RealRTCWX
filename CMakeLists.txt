@@ -76,7 +76,8 @@ target_link_libraries(realrtcw PRIVATE
   opengl32 ws2_32 winmm psapi gdi32 ole32
 )
 # win_resource.rc already embeds win_manifest.xml.
-target_link_options(realrtcw PRIVATE /MANIFEST:NO)
+# GUI subsystem but standard main() entry point (SDL3 doesn't supply WinMain here).
+target_link_options(realrtcw PRIVATE /MANIFEST:NO /ENTRY:mainCRTStartup)
 
 # ---------------------------------------------------------------------------
 # Game modules (loaded at runtime from main/)

@@ -2289,7 +2289,7 @@ int CIN_PlayCinematic( const char *arg, int x, int y, int w, int h, int systemBi
 		ext = Z_Malloc( strlen( pDotExt ) );
 		if ( ext != NULL ) {
 			strcpy( ext, pDotExt + 1 );
-			cin.isRoq = strcasecmp( ext, "roq" ) == 0;
+			cin.isRoq = Q_stricmp( ext, "roq" ) == 0;
 			Z_Free( ext );
 		}
 	}

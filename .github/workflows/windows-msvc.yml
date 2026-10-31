@@ -55,7 +55,8 @@ jobs:
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
-            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}\vcpkg_installed" 2>&1 | Tee-Object -FilePath configure.log
+            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}\vcpkg_installed" `
+            -DVCPKG_MANIFEST_INSTALL=OFF 2>&1 | Tee-Object -FilePath configure.log
           exit $LASTEXITCODE
 
       - name: Build
@@ -75,8 +76,13 @@ jobs:
             $lines += Select-String -Path build.log -Pattern ': (fatal )?error' |
               ForEach-Object { $_.Line.Trim() } | Select-Object -Unique -First 60
           }
-          foreach ($f in 'vcpkg.log','configure.log') {
-            if ((Test-Path $f) -and $lines.Count -eq 0) { $lines += "== $f"; $lines += Get-Content $f -Tail 50 }
+          if ($lines.Count -eq 0) {
+            foreach ($f in 'configure.log','vcpkg.log') {
+              if (Test-Path $f) { $lines += "== $f"; $lines += Get-Content $f -Tail 45; break }
+            }
+            foreach ($f in 'build\CMakeFiles\CMakeConfigureLog.yaml') {
+              if (Test-Path $f) { $lines += "== $f"; $lines += Get-Content $f -Tail 30 }
+            }
           }
           # vcpkg port build logs, if a port failed
           Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Recurse -Filter '*-err.log' -ErrorAction SilentlyContinue |

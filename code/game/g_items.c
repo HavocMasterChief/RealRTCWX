@@ -37,8 +37,7 @@ If you have questions concerning this license or the applicable additional terms
  *				movers and respawn apropriately.
  *
 */
-#include <pthread.h>
-#include <unistd.h>
+#include "g_thread_compat.h"
 
 #include "g_local.h"
 

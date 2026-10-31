@@ -36,8 +36,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "g_local.h"
 #include "g_survival.h"
 
-#include <pthread.h>
-#include <unistd.h>
+#include "g_thread_compat.h"
 
 #include "../steam/steam.h"
 

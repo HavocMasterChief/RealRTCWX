@@ -127,6 +127,9 @@ static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 	args[ n++ ] = "+set"; args[ n++ ] = "r_mode"; args[ n++ ] = "-2";
 	args[ n++ ] = "+set"; args[ n++ ] = "in_joystick"; args[ n++ ] = "1";
 	args[ n++ ] = "+set"; args[ n++ ] = "s_useOpenAL"; args[ n++ ] = "0";
+	// Flush every console line to LocalState/main/qconsole.log so a crash
+	// still leaves a usable log to pull from Device Portal.
+	args[ n++ ] = "+set"; args[ n++ ] = "logfile"; args[ n++ ] = "2";
 	args[ n ] = NULL;
 
 	return Sys_Main( n, args );

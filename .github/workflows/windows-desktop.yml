@@ -31,13 +31,19 @@ jobs:
       - name: Build (non-Steam)
         run: ARCH=x86_64 make -j"$(nproc)"
 
-      - name: List outputs
-        run: find build -maxdepth 3 \( -name '*.exe' -o -name '*.dll' \) | sort
+      - name: Stage outputs
+        run: |
+          mkdir -p dist
+          # Output dir is build/release-<platform>-<arch>-<flavor>; copy
+          # binaries out keeping their relative layout (main/ holds game DLLs).
+          cd build/release-*
+          find . \( -name '*.exe' -o -name '*.dll' \) -not -path '*/obj/*' -print \
+            | tee ../../dist/FILES.txt \
+            | while read -r f; do mkdir -p "../../dist/$(dirname "$f")"; cp "$f" "../../dist/$f"; done
+          test -s ../../dist/FILES.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: realrtcw-win64-desktop
-          path: |
-            build/release-mingw*-x86_64/**/*.exe
-            build/release-mingw*-x86_64/**/*.dll
+          path: dist/
           if-no-files-found: error

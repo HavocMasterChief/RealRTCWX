@@ -75,6 +75,8 @@ target_link_libraries(realrtcw PRIVATE
   ${FFMPEG_LIBRARIES}
   opengl32 ws2_32 winmm psapi gdi32 ole32
 )
+# win_resource.rc already embeds win_manifest.xml.
+target_link_options(realrtcw PRIVATE /MANIFEST:NO)
 
 # ---------------------------------------------------------------------------
 # Game modules (loaded at runtime from main/)

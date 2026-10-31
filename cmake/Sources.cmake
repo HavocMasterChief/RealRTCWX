@@ -52,13 +52,13 @@ set(CLIENT_CORE_SRC
   code/qcommon/puff.c
   code/qcommon/vm.c
   code/qcommon/vm_interpreted.c
-  code/splines/math_angles.c
-  code/splines/math_matrix.c
-  code/splines/math_quaternion.c
-  code/splines/math_vector.c
-  code/splines/q_parse.c
-  code/splines/splines.c
-  code/splines/util_str.c
+  code/splines/math_angles.cpp
+  code/splines/math_matrix.cpp
+  code/splines/math_quaternion.cpp
+  code/splines/math_vector.cpp
+  code/splines/q_parse.cpp
+  code/splines/splines.cpp
+  code/splines/util_str.cpp
   code/sdl/sdl_input.c
   code/sdl/sdl_snd.c
   code/sys/con_log.c

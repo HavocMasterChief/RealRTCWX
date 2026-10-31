@@ -4,7 +4,7 @@
 # toolchain, which the Xbox (UWP) target requires.
 
 cmake_minimum_required(VERSION 3.21)
-project(RealRTCW C ASM_MASM)
+project(RealRTCW C CXX ASM_MASM)
 
 if(NOT MSVC)
   message(FATAL_ERROR "This CMake build targets MSVC only. Use the Makefile for other compilers.")

@@ -13,6 +13,9 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "Only x64 is supported.")
 endif()
 
+option(RTCW_UWP "Build for Xbox (UWP Dev Mode) instead of desktop Windows" OFF)
+set(SDL3_UWP_DIR "" CACHE PATH "SDL3-uwp build: folder with include/, SDL3.lib and SDL3.dll (RTCW_UWP only)")
+
 set(PRODUCT_VERSION "5.4")
 include(cmake/Sources.cmake)
 
@@ -33,7 +36,19 @@ set(COMMON_INCS
 )
 # /W3 rather than the project's -Wall: MSVC's /Wall is extremely noisy.
 add_compile_options(/W3 /MP /utf-8 /wd4996 /wd4244 /wd4267 /wd4305 /wd4018)
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+if(RTCW_UWP)
+  # Static CRT: an AppContainer process can't load the desktop vcruntime DLLs.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  if(NOT EXISTS "${SDL3_UWP_DIR}/SDL3.lib")
+    message(FATAL_ERROR "RTCW_UWP needs SDL3_UWP_DIR pointing at an SDL3-uwp build (missing ${SDL3_UWP_DIR}/SDL3.lib)")
+  endif()
+  set(SDL3_INC "${SDL3_UWP_DIR}/include")
+  set(SDL3_LIB "${SDL3_UWP_DIR}/SDL3.lib")
+else()
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+  set(SDL3_INC "${CMAKE_SOURCE_DIR}/code/SDL3/include")
+  set(SDL3_LIB "${CMAKE_SOURCE_DIR}/code/libs/win64/SDL3.lib")
+endif()
 
 # ---------------------------------------------------------------------------
 # Client executable (engine + statically linked OpenGL renderer)
@@ -45,21 +60,30 @@ set(MASM_SRC
 )
 set_source_files_properties(${MASM_SRC} PROPERTIES COMPILE_OPTIONS "/Didx64")
 
+if(RTCW_UWP)
+  set(PLATFORM_SRC code/sys/sys_uwp.c)
+  # No OpenAL (desktop audio backend) or Mumble on Xbox; SDL handles audio.
+  set(PLATFORM_DEFS RTCW_UWP)
+else()
+  set(PLATFORM_SRC code/sys/win_resource.rc)
+  set(PLATFORM_DEFS USE_OPENAL USE_OPENAL_DLOPEN USE_MUMBLE USE_ICON)
+endif()
+
 add_executable(realrtcw WIN32
   ${CLIENT_CORE_SRC} ${BOTLIB_SRC} ${CODEC_SRC} ${ZLIB_SRC}
   ${RENDERER_SRC} ${JPEG_SRC} ${FREETYPE_SRC}
   ${MASM_SRC}
-  code/sys/win_resource.rc
+  ${PLATFORM_SRC}
 )
 set_target_properties(realrtcw PROPERTIES OUTPUT_NAME "RealRTCW.x64")
-target_compile_definitions(realrtcw PRIVATE ${COMMON_DEFS}
-  USE_OPENAL USE_OPENAL_DLOPEN USE_VOIP USE_MUMBLE USE_BLOOM USE_ICON
+target_compile_definitions(realrtcw PRIVATE ${COMMON_DEFS} ${PLATFORM_DEFS}
+  USE_VOIP USE_BLOOM
   USE_CODEC_OPUS OPUS_BUILD HAVE_LRINTF FLOATING_POINT FLOAT_APPROX USE_ALLOCA
   USE_CODEC_VORBIS
 )
 set_source_files_properties(${BOTLIB_SRC} PROPERTIES COMPILE_DEFINITIONS BOTLIB)
 target_include_directories(realrtcw PRIVATE ${COMMON_INCS}
-  ${CMAKE_SOURCE_DIR}/code/SDL3/include
+  ${SDL3_INC}
   ${CMAKE_SOURCE_DIR}/code/opus-1.2.1/include
   ${CMAKE_SOURCE_DIR}/code/opus-1.2.1/celt
   ${CMAKE_SOURCE_DIR}/code/opus-1.2.1/silk
@@ -71,13 +95,20 @@ target_include_directories(realrtcw PRIVATE ${COMMON_INCS}
   ${FFMPEG_INCLUDE_DIRS}
 )
 target_link_libraries(realrtcw PRIVATE
-  ${CMAKE_SOURCE_DIR}/code/libs/win64/SDL3.lib
+  ${SDL3_LIB}
   ${FFMPEG_LIBRARIES}
-  opengl32 ws2_32 winmm psapi gdi32 ole32
+  ws2_32 winmm psapi gdi32 ole32
 )
-# win_resource.rc already embeds win_manifest.xml.
-# GUI subsystem but standard main() entry point (SDL3 doesn't supply WinMain here).
-target_link_options(realrtcw PRIVATE /MANIFEST:NO /ENTRY:mainCRTStartup)
+if(RTCW_UWP)
+  # OpenGL comes from Mesa's opengl32.dll in the package, loaded by SDL at
+  # runtime. WinMain lives in sys_uwp.c. The exe must be flagged AppContainer.
+  target_link_options(realrtcw PRIVATE /MANIFEST:NO /APPCONTAINER)
+else()
+  target_link_libraries(realrtcw PRIVATE opengl32)
+  # win_resource.rc already embeds win_manifest.xml.
+  # GUI subsystem but standard main() entry point (SDL3 doesn't supply WinMain here).
+  target_link_options(realrtcw PRIVATE /MANIFEST:NO /ENTRY:mainCRTStartup)
+endif()
 
 # ---------------------------------------------------------------------------
 # Game modules (loaded at runtime from main/)
@@ -87,6 +118,10 @@ function(rtcw_module name srcs defs)
   target_compile_definitions(${name} PRIVATE ${COMMON_DEFS} ${defs})
   target_include_directories(${name} PRIVATE ${COMMON_INCS})
   target_link_libraries(${name} PRIVATE ws2_32 winmm psapi)
+  if(RTCW_UWP)
+    target_compile_definitions(${name} PRIVATE RTCW_UWP)
+    target_link_options(${name} PRIVATE /APPCONTAINER)
+  endif()
   set_target_properties(${name} PROPERTIES
     PREFIX ""
     OUTPUT_NAME "${name}_sp_x64"
@@ -105,8 +140,15 @@ set_target_properties(realrtcw PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/out")
 
 # Ship the runtime DLLs next to the exe.
-add_custom_command(TARGET realrtcw POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    ${CMAKE_SOURCE_DIR}/code/libs/win64/SDL3.dll
-    ${CMAKE_SOURCE_DIR}/code/libs/win64/OpenAL64.dll
-    $<TARGET_FILE_DIR:realrtcw>)
+if(RTCW_UWP)
+  add_custom_command(TARGET realrtcw POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      ${SDL3_UWP_DIR}/SDL3.dll
+      $<TARGET_FILE_DIR:realrtcw>)
+else()
+  add_custom_command(TARGET realrtcw POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      ${CMAKE_SOURCE_DIR}/code/libs/win64/SDL3.dll
+      ${CMAKE_SOURCE_DIR}/code/libs/win64/OpenAL64.dll
+      $<TARGET_FILE_DIR:realrtcw>)
+endif()

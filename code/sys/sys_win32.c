@@ -97,6 +97,16 @@ Sys_DefaultHomePath
 */
 char *Sys_DefaultHomePath( void )
 {
+#ifdef RTCW_UWP
+	{
+		// Xbox: the app's writable LocalState folder.
+		extern const char *Sys_UWP_LocalDir( void );
+		if ( !*homePath ) {
+			Q_strncpyz( homePath, Sys_UWP_LocalDir(), sizeof( homePath ) );
+		}
+		return homePath;
+	}
+#else
 	TCHAR szPath[MAX_PATH];
 	HMODULE shfolder = LoadLibrary("shfolder.dll");
 
@@ -138,6 +148,7 @@ char *Sys_DefaultHomePath( void )
 
 	FreeLibrary(shfolder);
 	return homePath;
+#endif
 }
 
 #ifdef STEAM

@@ -1,0 +1,221 @@
+name: Xbox (UWP) package
+
+# Builds an installable .msix for Xbox Series X|S in Dev Mode.
+#
+# Stack: RealRTCW (MSVC, static CRT) -> SDL3-uwp (CoreWindow, input, audio,
+# WGL) -> Mesa for UWP (desktop OpenGL on top of Direct3D 12). This keeps the
+# game's existing OpenGL renderer; no GLES conversion is needed.
+#
+# The artifact contains the signed package, the VCLibs dependency package,
+# and the signing certificate. Game data is NOT included: copy your own
+# main/*.pk3 files into the app's LocalState folder via Device Portal.
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bincache
+  VCPKG_TRIPLET: x64-windows-static
+  # Pinned third-party inputs
+  SDL3_UWP_REPO: https://github.com/XboxEmulationHub/SDL3-uwp
+  SDL3_UWP_COMMIT: b3852a0076c358f65ee19765e85ef9eded6e50df
+  MESA_UWP_REPO: XboxEmulationHub/mesa-uwp
+  MESA_UWP_TAG: "26.1.3"
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: microsoft/setup-msbuild@v2
+
+      # ---------------------------------------------------------------- vcpkg
+      - name: Set up vcpkg
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg" >> $env:GITHUB_ENV
+
+      - name: Restore vcpkg cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+          restore-keys: vcpkg-${{ env.VCPKG_TRIPLET }}-
+
+      - name: Install dependencies (vcpkg)
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_ROOT\vcpkg.exe" install --triplet $env:VCPKG_TRIPLET --x-install-root="${{ github.workspace }}\vcpkg_installed" 2>&1 | Tee-Object -FilePath vcpkg.log
+          exit $LASTEXITCODE
+
+      - name: Save vcpkg cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+
+      # ------------------------------------------------------------- SDL3-uwp
+      - name: Build SDL3-uwp
+        shell: pwsh
+        run: |
+          $src = "$env:RUNNER_TEMP\sdl3-uwp"
+          git init -q $src
+          git -C $src remote add origin $env:SDL3_UWP_REPO
+          git -C $src fetch -q --depth 1 origin $env:SDL3_UWP_COMMIT
+          git -C $src checkout -q FETCH_HEAD
+          msbuild "$src\VisualC-WinRT\SDL-UWP.vcxproj" /m /p:Configuration=Release /p:Platform=x64 /v:minimal 2>&1 | Tee-Object -FilePath sdl.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $out = "${{ github.workspace }}\sdl3uwp"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item -Recurse "$src\include" "$out\include"
+          $dll = Get-ChildItem -Recurse "$src\VisualC-WinRT" -Filter SDL3.dll | Select-Object -First 1
+          $lib = Get-ChildItem -Recurse "$src\VisualC-WinRT" -Filter SDL3.lib | Select-Object -First 1
+          if (-not $dll -or -not $lib) {
+            Get-ChildItem -Recurse "$src\VisualC-WinRT" -Include *.dll,*.lib | ForEach-Object FullName
+            throw "SDL3-uwp build produced no SDL3.dll/SDL3.lib"
+          }
+          Copy-Item $dll.FullName, $lib.FullName $out
+          "SDL3-uwp: $($dll.FullName)"
+
+      # ---------------------------------------------------------- Mesa (UWP)
+      - name: Download Mesa for UWP
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dl = "$env:RUNNER_TEMP\mesa-dl"
+          gh release download $env:MESA_UWP_TAG -R $env:MESA_UWP_REPO -D $dl
+          Get-ChildItem $dl | ForEach-Object { "asset: $($_.Name) ($($_.Length) bytes)" }
+          $x = "$env:RUNNER_TEMP\mesa-x"
+          New-Item -ItemType Directory -Force $x | Out-Null
+          foreach ($a in Get-ChildItem $dl) {
+            if ($a.Extension -in '.zip') { Expand-Archive $a.FullName -DestinationPath "$x\$($a.BaseName)" -Force }
+            elseif ($a.Name -match '\.(7z|tar|gz|xz|zst)$') { 7z x $a.FullName "-o$x\$($a.BaseName)" -y | Out-Null }
+            else { Copy-Item $a.FullName $x }
+          }
+          # Nested archives (e.g. .tar inside .gz)
+          Get-ChildItem -Recurse $x -Filter *.tar | ForEach-Object { 7z x $_.FullName "-o$($_.DirectoryName)" -y | Out-Null }
+
+          $gl = Get-ChildItem -Recurse $x -Filter opengl32.dll | Where-Object { $_.FullName -match 'x64|amd64|release|bin' -or $true } | Select-Object -First 1
+          $listing = Get-ChildItem -Recurse $x -File | ForEach-Object { $_.FullName.Substring($x.Length) }
+          $assets = (Get-ChildItem $dl | ForEach-Object Name) -join ', '
+          Write-Output ("::warning title=Mesa release files::assets: $assets%0A" + (($listing | Select-Object -First 60) -join '%0A'))
+          if (-not $gl) { throw "No opengl32.dll found in Mesa UWP release" }
+
+          $out = "${{ github.workspace }}\mesa"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item "$($gl.DirectoryName)\*.dll" $out
+          "Mesa DLLs (from $($gl.DirectoryName)):"
+          Get-ChildItem $out | ForEach-Object { "  $($_.Name)" }
+
+      # --------------------------------------------------------------- engine
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 `
+            -DRTCW_UWP=ON `
+            -DSDL3_UWP_DIR="${{ github.workspace }}\sdl3uwp" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET `
+            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}\vcpkg_installed" `
+            -DVCPKG_MANIFEST_INSTALL=OFF 2>&1 | Tee-Object -FilePath configure.log
+          exit $LASTEXITCODE
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel -- /v:minimal /clp:NoSummary 2>&1 | Tee-Object -FilePath build.log
+          exit $LASTEXITCODE
+
+      # -------------------------------------------------------------- package
+      - name: Package and sign
+        shell: pwsh
+        run: |
+          $pkg = "$env:RUNNER_TEMP\pkg"
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          Copy-Item -Recurse build\out\* $pkg
+          Copy-Item mesa\*.dll $pkg
+          Copy-Item -Recurse misc\uwp\Assets "$pkg\Assets"
+          $version = "1.0.${{ github.run_number }}.0"
+          (Get-Content misc\uwp\AppxManifest.xml -Raw).Replace('__VERSION__', $version) |
+            Set-Content "$pkg\AppxManifest.xml" -Encoding utf8
+          $contents = Get-ChildItem -Recurse $pkg -File | ForEach-Object { "$($_.FullName.Substring($pkg.Length)) ($([math]::Round($_.Length/1KB)) KB)" }
+          Write-Output ("::notice title=Package contents::" + ($contents -join '%0A'))
+
+          $kit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory |
+            Where-Object { $_.Name -like '10.*' -and (Test-Path "$($_.FullName)\x64\makeappx.exe") } |
+            Sort-Object Name -Descending | Select-Object -First 1
+          $makeappx = "$($kit.FullName)\x64\makeappx.exe"
+          $signtool = "$($kit.FullName)\x64\signtool.exe"
+
+          $dist = "${{ github.workspace }}\dist"
+          New-Item -ItemType Directory -Force "$dist\Dependencies" | Out-Null
+          $msix = "$dist\RealRTCW_$version`_x64.msix"
+          & $makeappx pack /o /d $pkg /p $msix
+          if ($LASTEXITCODE -ne 0) { throw "makeappx failed" }
+
+          # Self-signed test certificate; subject must equal the manifest Publisher.
+          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=RealRTCWX" `
+            -KeyUsage DigitalSignature -FriendlyName "RealRTCWX test signing" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $pw = ConvertTo-SecureString -String "realrtcwx" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "$env:RUNNER_TEMP\sign.pfx" -Password $pw | Out-Null
+          Export-Certificate -Cert $cert -FilePath "$dist\RealRTCWX.cer" | Out-Null
+          & $signtool sign /fd SHA256 /f "$env:RUNNER_TEMP\sign.pfx" /p realrtcwx $msix
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed" }
+
+          # The VCLibs framework package the manifest depends on.
+          $vclibs = Get-ChildItem -Recurse "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows Kits\10\ExtensionSDKs\Microsoft.VCLibs" `
+            -Filter "Microsoft.VCLibs.x64.14.00.appx" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\Retail\\' } | Select-Object -First 1
+          if ($vclibs) { Copy-Item $vclibs.FullName "$dist\Dependencies\" ; "VCLibs: $($vclibs.FullName)" }
+          else { "::warning::Microsoft.VCLibs.x64.14.00.appx not found on runner" }
+
+          @"
+          RealRTCW for Xbox (Dev Mode) - build $version
+
+          Install (Device Portal, https://<xbox-ip>:11443):
+            1. Apps > Add > choose RealRTCW_$version`_x64.msix
+            2. When asked for dependencies, add Dependencies\Microsoft.VCLibs.x64.14.00.appx
+            3. Install.
+
+          Game data is not included. Copy your own RealRTCW/RTCW 'main' folder
+          (pak files) into the app's LocalState folder with Device Portal's
+          File Explorer: LocalAppData > RealRTCWX_... > LocalState > main
+          "@ | Set-Content "$dist\INSTALL.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RealRTCW-Xbox
+          path: dist/
+          if-no-files-found: error
+
+      # Raw logs can't always be fetched remotely, so surface the first
+      # errors as a run annotation (visible in the run summary).
+      - name: Summarize errors
+        if: failure()
+        shell: pwsh
+        run: |
+          $lines = @()
+          foreach ($f in 'build.log','sdl.log') {
+            if (Test-Path $f) {
+              $lines += Select-String -Path $f -Pattern ': (fatal )?error' |
+                ForEach-Object { $_.Line.Trim() } | Select-Object -Unique -First 50
+            }
+          }
+          if ($lines.Count -eq 0) {
+            foreach ($f in 'configure.log','vcpkg.log','sdl.log') {
+              if (Test-Path $f) { $lines += "== $f"; $lines += Get-Content $f -Tail 40; break }
+            }
+          }
+          $msg = ($lines | ForEach-Object { $_ -replace '%','%25' -replace "`r",'' }) -join '%0A'
+          Write-Output "::error title=Build errors::$msg"

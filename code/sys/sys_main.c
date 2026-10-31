@@ -696,7 +696,12 @@ void Sys_SigHandler( int signal )
 main
 =================
 */
+#ifdef RTCW_UWP
+// On Xbox the real entry point is WinMain in sys_uwp.c, which calls this.
+int Sys_Main( int argc, char **argv )
+#else
 int main( int argc, char **argv )
+#endif
 {
 	int   i;
 	char  commandLine[ MAX_STRING_CHARS ] = { 0 };

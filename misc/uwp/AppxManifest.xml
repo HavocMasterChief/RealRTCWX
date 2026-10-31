@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Package manifest for the Xbox (UWP Dev Mode) build of RealRTCW.
+  Publisher must match the subject of the certificate the package is signed
+  with (see .github/workflows/xbox-uwp.yml). Version is filled in by CI.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="RealRTCWX"
+    Publisher="CN=RealRTCWX"
+    Version="__VERSION__"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>RealRTCW</DisplayName>
+    <PublisherDisplayName>RealRTCWX</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+    <!-- SDL3-uwp and Mesa are built against the UWP C++ runtime. -->
+    <PackageDependency Name="Microsoft.VCLibs.140.00"
+      Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+      MinVersion="14.0.0.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="RealRTCW.x64.exe" EntryPoint="RealRTCW.App">
+      <uap:VisualElements
+        DisplayName="RealRTCW"
+        Description="Return to Castle Wolfenstein (RealRTCW) for Xbox"
+        BackgroundColor="#141414"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#141414" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <Capability Name="internetClientServer" />
+    <Capability Name="privateNetworkClientServer" />
+    <Capability Name="codeGeneration" />
+    <uap:Capability Name="removableStorage" />
+    <rescap:Capability Name="expandedResources" />
+    <rescap:Capability Name="broadFileSystemAccess" />
+  </Capabilities>
+</Package>

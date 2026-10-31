@@ -127,7 +127,14 @@ jobs:
             -DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET `
             -DVCPKG_INSTALLED_DIR="${{ github.workspace }}\vcpkg_installed" `
             -DVCPKG_MANIFEST_INSTALL=OFF 2>&1 | Tee-Object -FilePath configure.log
-          exit $LASTEXITCODE
+          $rc = $LASTEXITCODE
+          if ($rc -ne 0) {
+            $vi = "${{ github.workspace }}\vcpkg_installed"
+            $info = @("vcpkg_installed:") + (Get-ChildItem $vi -Directory | ForEach-Object Name)
+            $info += Get-ChildItem -Recurse $vi -Filter "*ffmpeg*" -Depth 3 | ForEach-Object { $_.FullName.Substring($vi.Length) } | Select-Object -First 20
+            Write-Output ("::warning title=vcpkg layout::" + ($info -join '%0A'))
+          }
+          exit $rc
 
       - name: Build
         shell: pwsh

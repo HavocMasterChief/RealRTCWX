@@ -1,0 +1,11 @@
+{
+  "name": "realrtcw",
+  "version-string": "5.4",
+  "dependencies": [
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": [ "avcodec", "avformat", "swscale", "swresample" ]
+    }
+  ]
+}

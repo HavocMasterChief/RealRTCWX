@@ -1599,6 +1599,7 @@ qhandle_t   RE_GetShaderFromModel( qhandle_t modelid, int surfnum, int withlight
 model_t     *R_AllocModel( void );
 
 void        R_Init( void );
+extern const char *r_imageNameSuffix;
 image_t     *R_FindImageFile( const char *name, imgType_t type, imgFlags_t flags );
 image_t     *R_FindImageFileExt( const char *name, imgType_t type, imgFlags_t flags, qboolean characterMip ); //----(SA)	added
 

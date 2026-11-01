@@ -1472,14 +1472,24 @@ Returns NULL if it fails, not a default image.
 */
 
 
+// While set, every image looked up gets this suffix (used to build colour
+// variants of whole shaders, e.g. "#green" for green blood).
+const char *r_imageNameSuffix = NULL;
+
 image_t *R_FindImageFileExt( const char *name, imgType_t type, imgFlags_t flags, qboolean characterMIP ) {
 	image_t *image;
 	int width, height;
 	byte    *pic;
 	long hash;
+	char suffixedName[MAX_QPATH];
 
 	if ( !name ) {
 		return NULL;
+	}
+
+	if ( r_imageNameSuffix && name[0] != '*' && name[0] != '$' && !strstr( name, r_imageNameSuffix ) ) {
+		Com_sprintf( suffixedName, sizeof( suffixedName ), "%s%s", name, r_imageNameSuffix );
+		name = suffixedName;
 	}
 
 	hash = generateHashValue( name );
@@ -1505,7 +1515,29 @@ image_t *R_FindImageFileExt( const char *name, imgType_t type, imgFlags_t flags,
 	//
 	// load the pic from disk
 	//
-	R_LoadImage( name, &pic, &width, &height );
+	{
+		// "<image>#green": the same image with red and green swapped, used
+		// for the green blood option (red blood art becomes green).
+		const char *suffix = strstr( name, "#green" );
+		if ( suffix && suffix[6] == '\0' ) {
+			char baseName[MAX_QPATH];
+			int i, n;
+			Q_strncpyz( baseName, name, sizeof( baseName ) );
+			baseName[suffix - name] = '\0';
+			R_LoadImage( baseName, &pic, &width, &height );
+			if ( pic == NULL ) {
+				return NULL;
+			}
+			n = width * height;
+			for ( i = 0; i < n; i++ ) {
+				byte r = pic[i * 4 + 0];
+				pic[i * 4 + 0] = pic[i * 4 + 1] / 2;	// keep it a deep, slimy green
+				pic[i * 4 + 1] = r;
+			}
+		} else {
+			R_LoadImage( name, &pic, &width, &height );
+		}
+	}
 	if ( pic == NULL ) {
 		return NULL;
 	}

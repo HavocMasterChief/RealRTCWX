@@ -2878,6 +2878,27 @@ shader_t *R_FindShader( const char *name, int lightmapIndex, qboolean mipRawImag
 
 	// attempt to define shader from an explicit parameter file
 	shaderText = FindShaderInShaderText( strippedName );
+	{
+		// "<shader>#green": parse the base shader, but load every image as
+		// its red/green-swapped variant (green blood option).
+		size_t len = strlen( strippedName );
+		if ( !shaderText && len > 6 && !Q_stricmp( strippedName + len - 6, "#green" ) ) {
+			char baseName[MAX_QPATH];
+			Q_strncpyz( baseName, strippedName, sizeof( baseName ) );
+			baseName[len - 6] = '\0';
+			shaderText = FindShaderInShaderText( baseName );
+			if ( shaderText ) {
+				qboolean ok;
+				r_imageNameSuffix = "#green";
+				ok = ParseShader( &shaderText );
+				r_imageNameSuffix = NULL;
+				if ( !ok ) {
+					shader.defaultShader = qtrue;
+				}
+				return FinishShader();
+			}
+		}
+	}
 	if ( shaderText ) {
 		// enable this when building a pak file to get a global list
 		// of all explicit shaders

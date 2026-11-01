@@ -183,6 +183,8 @@ jobs:
           # RealRTCW's loose data (configs, menus, scripts) from the repo's main/ folder.
           Copy-Item -Recurse -Force main\* "$pkg\main\"
           Copy-Item -Recurse misc\uwp\Assets "$pkg\Assets"
+          # Console overrides for menus/configs (searched before the paks).
+          Copy-Item -Recurse misc\uwp\xbox "$pkg\xbox"
           $version = "1.0.${{ github.run_number }}.0"
           (Get-Content misc\uwp\AppxManifest.xml -Raw).Replace('__VERSION__', $version) |
             Set-Content "$pkg\AppxManifest.xml" -Encoding utf8

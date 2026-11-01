@@ -311,6 +311,8 @@ void CG_AddBloodTrails( vec3_t origin, vec3_t dir, int speed, int duration, int 
 		le->pos.trTime = cg.time;
 
 		le->bounceFactor = 0.9;
+		// Extreme blood: each droplet paints a decal where it lands
+		le->leMarkType = CG_BloodExtreme() ? LEMT_BLOOD : LEMT_NONE;
 	}
 }
 
@@ -382,6 +384,21 @@ void CG_Bleed( vec3_t origin, int entityNum ) {
 		}
 
 
+		if ( CG_BloodExtreme() ) {
+			// arterial spray: more, faster, longer-lived droplets that
+			// reach nearby walls and floors and paint them
+			for ( i = 0; i < BLOOD_SPURT_COUNT * 3; i++ ) {
+				VectorCopy( dir, ndir );
+				for ( j = 0; j < 3; j++ ) ndir[j] += crandom() * 0.5;
+				ndir[2] += 0.25f;
+				VectorNormalize( ndir );
+				CG_AddBloodTrails( bOrigin, ndir,
+								   160 + rand() % 140,
+								   700 + (int)( crandom() * 200 ),
+								   3 + rand() % 3,
+								   0.2 );
+			}
+		} else
 		for ( i = 0; i < BLOOD_SPURT_COUNT; i++ ) {
 			VectorCopy( dir, ndir );
 			for ( j = 0; j < 3; j++ ) ndir[j] += crandom() * 0.3;
@@ -948,8 +965,8 @@ void CG_GibPlayer( centity_t *cent, vec3_t playerOrigin, vec3_t gdir ) {
 		CG_Trace( &trace, playerOrigin, NULL, NULL, origin, -1, CONTENTS_SOLID );
 		if ( trace.fraction < 1.0 ) {
 			BG_GetMarkDir( velocity, trace.plane.normal, velocity );
-			CG_ImpactMark( cgs.media.bloodDotShaders[rand() % 5], trace.endpos, velocity, random() * 360,
-						   1,1,1,1, qtrue, 30, qfalse, cg_bloodTime.integer * 1000 );
+			CG_ImpactMark( CG_BloodDot(), trace.endpos, velocity, random() * 360,
+						   1,1,1,1, qtrue, 30, qfalse, CG_BloodMarkTime() );
 			if ( count++ > GIB_BLOOD_DOTS ) {
 				break;
 			}
@@ -1262,8 +1279,8 @@ void CG_GibVampirism( centity_t *cent, vec3_t playerOrigin, vec3_t gdir ) {
 		CG_Trace( &trace, playerOrigin, NULL, NULL, origin, -1, CONTENTS_SOLID );
 		if ( trace.fraction < 1.0 ) {
 			BG_GetMarkDir( velocity, trace.plane.normal, velocity );
-			CG_ImpactMark( cgs.media.bloodDotShaders[rand() % 5], trace.endpos, velocity, random() * 360,
-						   1,1,1,1, qtrue, 30, qfalse, cg_bloodTime.integer * 1000 );
+			CG_ImpactMark( CG_BloodDot(), trace.endpos, velocity, random() * 360,
+						   1,1,1,1, qtrue, 30, qfalse, CG_BloodMarkTime() );
 			if ( count++ > GIB_BLOOD_DOTS_VAMP ) {
 				break;
 			}

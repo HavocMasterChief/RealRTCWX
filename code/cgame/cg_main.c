@@ -237,6 +237,7 @@ vmCvar_t cg_gameType;
 vmCvar_t cg_newinventory;
 vmCvar_t cg_overheal;
 vmCvar_t cg_bloodTime;
+vmCvar_t cg_bloodMode;
 vmCvar_t cg_norender;
 vmCvar_t cg_skybox;
 
@@ -439,6 +440,7 @@ cvarTable_t cvarTable[] = {
 	// Ridah, more fluid rotations
 	{&cg_swingSpeed, "cg_swingSpeed", "0.1", CVAR_CHEAT}, // was 0.3 for Q3
 	{&cg_bloodTime, "cg_bloodTime", "120", CVAR_ARCHIVE},
+	{&cg_bloodMode, "cg_bloodMode", "0", CVAR_ARCHIVE},	// 0 default, 1 green, 2 off, 3 extreme
 	{&cg_hunkUsed, "com_hunkUsed", "0", 0},
 	{&cg_soundAdjust, "hunk_soundadjust", "0", 0},
 
@@ -1566,6 +1568,7 @@ static void CG_RegisterGraphics( void ) {
 
 	// RF, blood cloud
 	cgs.media.bloodCloudShader = trap_R_RegisterShader( "bloodCloud" );
+	cgs.media.bloodCloudShaderGreen = trap_R_RegisterShader( "bloodCloud#green" );
 
 	// Rafael - cannon
 	cgs.media.smokePuffShaderdirty = trap_R_RegisterShader( "smokePuffdirty" );
@@ -1579,8 +1582,10 @@ static void CG_RegisterGraphics( void ) {
 	// Rafael - bleedanim
 	for ( i = 0; i < 5; i++ ) {
 		cgs.media.viewBloodAni[i] = trap_R_RegisterShader( va( "viewBloodBlend%i", i + 1 ) );
+		cgs.media.viewBloodAniGreen[i] = trap_R_RegisterShader( va( "viewBloodBlend%i#green", i + 1 ) );
 	}
 	cgs.media.viewFlashBlood = trap_R_RegisterShader( "viewFlashBlood" );
+	cgs.media.viewFlashBloodGreen = trap_R_RegisterShader( "viewFlashBlood#green" );
 	for ( i = 0; i < 16; i++ ) {
 		cgs.media.viewFlashFire[i] = trap_R_RegisterShader( va( "viewFlashFire%i", i + 1 ) );
 	}
@@ -1596,6 +1601,7 @@ static void CG_RegisterGraphics( void ) {
 	cgs.media.shotgunSmokePuffShader = trap_R_RegisterShader( "shotgunSmokePuff" );
 
 	cgs.media.bloodTrailShader = trap_R_RegisterShader( "bloodTrail" );
+	cgs.media.bloodTrailShaderGreen = trap_R_RegisterShader( "bloodTrail#green" );
 	cgs.media.lagometerShader = trap_R_RegisterShader( "lagometer" );
 	cgs.media.connectionShader = trap_R_RegisterShader( "disconnected" );
 
@@ -1824,6 +1830,7 @@ static void CG_RegisterGraphics( void ) {
 		//cgs.media.bloodMarkShaders[i] = trap_R_RegisterShader( name );
 		Com_sprintf( name, sizeof( name ), "blood_dot%i", i + 1 );
 		cgs.media.bloodDotShaders[i] = trap_R_RegisterShader( name );
+		cgs.media.bloodDotShadersGreen[i] = trap_R_RegisterShader( va( "%s#green", name ) );
 	}
 
 	CG_LoadingString( " - inline models" );

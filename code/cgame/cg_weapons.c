@@ -7184,6 +7184,28 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 			}
 		}
 
+		// Extreme blood: exit wound spray that paints the wall behind the target
+		if ( CG_BloodExtreme() && cg_blood.integer && CG_CalcMuzzlePoint( sourceEntityNum, start ) ) {
+			int k;
+			VectorSubtract( end, start, dir );
+			VectorNormalize( dir );
+			VectorMA( end, 256, dir, trend );
+			trap_CM_BoxTrace( &trace, end, trend, NULL, NULL, 0, MASK_SHOT & ~CONTENTS_BODY );
+			if ( trace.fraction < 1 ) {
+				// big splat, plus a few smaller ones around it
+				CG_ImpactMark( CG_BloodDot(), trace.endpos, trace.plane.normal, random() * 360,
+							   1,1,1,1, qtrue, 30 + random() * 30, qfalse, CG_BloodMarkTime() );
+				for ( k = 0; k < 3; k++ ) {
+					vec3_t p;
+					VectorCopy( trace.endpos, p );
+					p[0] += crandom() * 24; p[1] += crandom() * 24; p[2] += crandom() * 24;
+					CG_ImpactMark( CG_BloodDot(), p, trace.plane.normal, random() * 360,
+								   1,1,1,1, qtrue, 8 + random() * 14, qfalse, CG_BloodMarkTime() );
+				}
+			}
+			CG_AddBloodTrails( end, dir, 260 + rand() % 120, 600, 6 + rand() % 4, 0.35 );
+		}
+
 		// if we haven't dropped a blood spat in a while, check if this is a good scenario
 		if ( lastBloodSpat > cg.time || lastBloodSpat < cg.time - 500 ) {
 			if ( CG_CalcMuzzlePoint( sourceEntityNum, start ) ) {
@@ -7193,8 +7215,8 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 				trap_CM_BoxTrace( &trace, end, trend, NULL, NULL, 0, MASK_SHOT & ~CONTENTS_BODY );
 
 				if ( trace.fraction < 1 ) {
-					CG_ImpactMark( cgs.media.bloodDotShaders[rand() % 5], trace.endpos, trace.plane.normal, random() * 360,
-								   1,1,1,1, qtrue, 15 + random() * 20, qfalse, cg_bloodTime.integer * 1000 );
+					CG_ImpactMark( CG_BloodDot(), trace.endpos, trace.plane.normal, random() * 360,
+								   1,1,1,1, qtrue, 15 + random() * 20, qfalse, CG_BloodMarkTime() );
 					lastBloodSpat = cg.time;
 				} else if ( lastBloodSpat < cg.time - 1000 ) {
 					// drop one on the ground?
@@ -7203,8 +7225,8 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 					trap_CM_BoxTrace( &trace, end, trend, NULL, NULL, 0, MASK_SHOT & ~CONTENTS_BODY );
 
 					if ( trace.fraction < 1 ) {
-						CG_ImpactMark( cgs.media.bloodDotShaders[rand() % 5], trace.endpos, trace.plane.normal, random() * 360,
-									   1,1,1,1, qtrue, 15 + random() * 10, qfalse, cg_bloodTime.integer * 1000 );
+						CG_ImpactMark( CG_BloodDot(), trace.endpos, trace.plane.normal, random() * 360,
+									   1,1,1,1, qtrue, 15 + random() * 10, qfalse, CG_BloodMarkTime() );
 						lastBloodSpat = cg.time;
 					}
 				}

@@ -4399,6 +4399,14 @@ static void FS_Startup( const char *gameName )
 		}
 	}
 
+#ifdef RTCW_UWP
+	// Xbox: console-specific menu and config overrides ship in the package's
+	// xbox/ folder; added last so they win over everything in the paks.
+	if ( fs_basepath->string[0] ) {
+		FS_AddGameDirectory( fs_basepath->string, "xbox" );
+	}
+#endif
+
 #ifndef STANDALONE
 
 	if (!com_standalone->integer) {

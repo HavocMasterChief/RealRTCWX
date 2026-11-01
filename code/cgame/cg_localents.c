@@ -243,7 +243,7 @@ void CG_BloodTrail( localEntity_t *le ) {
 		} else {
 			// Ridah, blood trail using trail code (should be faster since we don't have to spawn as many)
 			le->headJuncIndex = CG_AddTrailJunc( le->headJuncIndex,
-												 cgs.media.bloodTrailShader,
+												 CG_BloodShader( cgs.media.bloodTrailShader, cgs.media.bloodTrailShaderGreen ),
 												 t,
 												 STYPE_STRETCH,
 												 newOrigin,
@@ -274,10 +274,10 @@ void CG_FragmentBounceMark( localEntity_t *le, trace_t *trace ) {
 		static int lastBloodMark;
 
 		// don't drop too many blood marks
-		if ( !( lastBloodMark > cg.time || lastBloodMark > cg.time - 100 ) ) {
+		if ( !( lastBloodMark > cg.time || lastBloodMark > cg.time - ( CG_BloodExtreme() ? 15 : 100 ) ) ) {
 			radius = 16 + ( rand() & 31 );
-			CG_ImpactMark( cgs.media.bloodDotShaders[rand() % 5], trace->endpos, trace->plane.normal, random() * 360,
-						   1,1,1,1, qtrue, radius, qfalse, cg_bloodTime.integer * 1000 );
+			CG_ImpactMark( CG_BloodDot(), trace->endpos, trace->plane.normal, random() * 360,
+						   1,1,1,1, qtrue, radius, qfalse, CG_BloodMarkTime() );
 
 			lastBloodMark = cg.time;
 		}
@@ -948,7 +948,7 @@ void CG_AddBloodElements( localEntity_t *le ) {
 
 		// add a trail
 		le->headJuncIndex = CG_AddSparkJunc( le->headJuncIndex,
-											 cgs.media.bloodTrailShader,
+											 CG_BloodShader( cgs.media.bloodTrailShader, cgs.media.bloodTrailShaderGreen ),
 											 le->refEntity.origin,
 											 200,
 											 1.0 - lifeFrac, // start alpha
@@ -960,7 +960,13 @@ void CG_AddBloodElements( localEntity_t *le ) {
 			// reflect the velocity on the trace plane
 			CG_ReflectVelocity( le, &trace );
 
-			// TODO: spawn a blood decal here?
+			// Extreme blood: the droplet splats onto whatever it hit
+			if ( le->leMarkType == LEMT_BLOOD ) {
+				CG_ImpactMark( CG_BloodDot(), trace.endpos, trace.plane.normal, random() * 360,
+							   1,1,1,1, qtrue, 4 + random() * 9, qfalse, CG_BloodMarkTime() );
+				le->leMarkType = LEMT_NONE;
+				le->endTime = cg.time;      // soaked in; stop bouncing
+			}
 
 			// the intersection is a fraction of the frametime
 			le->pos.trTime = (int)time;

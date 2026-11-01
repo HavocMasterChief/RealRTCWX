@@ -1221,6 +1221,7 @@ typedef struct {
 	qhandle_t shotgunSmokePuffShader;
 	qhandle_t waterBubbleShader;
 	qhandle_t bloodTrailShader;
+	qhandle_t bloodTrailShaderGreen;
 
 	qhandle_t nailPuffShader;
 
@@ -1253,6 +1254,8 @@ typedef struct {
 	// Ridah, viewscreen blood animation
 	qhandle_t viewBloodAni[5];
 	qhandle_t viewFlashBlood;
+	qhandle_t viewBloodAniGreen[5];
+	qhandle_t viewFlashBloodGreen;
 	qhandle_t viewFlashFire[16];
 	// done
 
@@ -1291,6 +1294,7 @@ typedef struct {
 	qhandle_t wakeMarkShaderAnim;
 	qhandle_t bloodMarkShaders[5];
 	qhandle_t bloodDotShaders[5];
+	qhandle_t bloodDotShadersGreen[5];
 	qhandle_t bulletMarkShader;
 	qhandle_t bulletMarkShaderMetal;
 	qhandle_t bulletMarkShaderWood;
@@ -1358,6 +1362,7 @@ typedef struct {
 	qhandle_t scoreboardTime;
 	// Ridah
 	qhandle_t bloodCloudShader;
+	qhandle_t bloodCloudShaderGreen;
 	qhandle_t sparkParticleShader;
 	qhandle_t smokeTrailShader;
 	qhandle_t fireTrailShader;
@@ -1963,6 +1968,19 @@ extern vmCvar_t cg_gameType;
 extern vmCvar_t cg_newinventory;
 extern vmCvar_t cg_overheal;
 extern vmCvar_t cg_bloodTime;
+extern vmCvar_t cg_bloodMode;
+
+// cg_bloodMode values (Options > Game > Blood)
+#define BLOODMODE_DEFAULT   0
+#define BLOODMODE_GREEN     1
+#define BLOODMODE_OFF       2
+#define BLOODMODE_EXTREME   3
+#define CG_BloodDot()       ( ( cg_bloodMode.integer == BLOODMODE_GREEN ) ? cgs.media.bloodDotShadersGreen[rand() % 5] : cgs.media.bloodDotShaders[rand() % 5] )
+#define CG_BloodExtreme()   ( cg_bloodMode.integer == BLOODMODE_EXTREME )
+// pick the red or green version of a blood shader
+#define CG_BloodShader( normal, green ) ( ( cg_bloodMode.integer == BLOODMODE_GREEN && ( green ) ) ? ( green ) : ( normal ) )
+// how long blood decals stay; Extreme keeps them around 10x longer
+#define CG_BloodMarkTime()  ( cg_bloodTime.integer * 1000 * ( CG_BloodExtreme() ? 10 : 1 ) )
 extern vmCvar_t cg_norender;
 extern vmCvar_t cg_skybox;
 

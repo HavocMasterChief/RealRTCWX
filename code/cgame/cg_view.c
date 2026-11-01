@@ -1120,7 +1120,7 @@ static void CG_DamageBlendBlob( void ) {
 
 		ent.radius = vd->damageValue * 0.4 * ( 0.5 + 0.5 * (float)t / maxTime ) * ( 0.75 + 0.5 * fabs( sin( vd->damageTime ) ) );
 
-		ent.customShader = cgs.media.viewBloodAni[(int)( floor( ( (float)t / maxTime ) * 4.9 ) )]; //cgs.media.viewBloodShader;
+		{ int bi = (int)( floor( ( (float)t / maxTime ) * 4.9 ) ); ent.customShader = CG_BloodShader( cgs.media.viewBloodAni[bi], cgs.media.viewBloodAniGreen[bi] ); } //cgs.media.viewBloodShader;
 		ent.shaderRGBA[0] = 255;
 		ent.shaderRGBA[1] = 255;
 		ent.shaderRGBA[2] = 255;
@@ -1144,7 +1144,7 @@ static void CG_DamageBlendBlob( void ) {
 
 		VectorMA( cg.refdef.vieworg, 8, cg.refdef.viewaxis[0], ent.origin );
 		ent.radius = 80;	// occupy entire screen
-		ent.customShader = cgs.media.viewFlashBlood;
+		ent.customShader = CG_BloodShader( cgs.media.viewFlashBlood, cgs.media.viewFlashBloodGreen );
 		ent.shaderRGBA[3] = (int)(180.0 * redFlash/5.0);
 
 		trap_R_AddRefEntityToScene( &ent );
@@ -1555,8 +1555,34 @@ CG_DrawActiveFrame
 Generates and draws a game scene and status information at the given time.
 =================
 */
+/*
+=================
+CG_SyncBloodMode
+
+"Disabled" in the blood option maps onto the engine's existing com_blood
+switch, which already turns off blood and gibs everywhere.
+=================
+*/
+static void CG_SyncBloodMode( void ) {
+	static int lastMod = -1;
+	if ( cg_bloodMode.modificationCount == lastMod ) {
+		return;
+	}
+	if ( lastMod == -1 ) {
+		// first frame: only enforce "off"; leave com_blood alone otherwise
+		if ( cg_bloodMode.integer == BLOODMODE_OFF ) {
+			trap_Cvar_Set( "com_blood", "0" );
+		}
+	} else {
+		trap_Cvar_Set( "com_blood", cg_bloodMode.integer == BLOODMODE_OFF ? "0" : "1" );
+	}
+	lastMod = cg_bloodMode.modificationCount;
+}
+
 void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demoPlayback ) {
 	int inwater;
+
+	CG_SyncBloodMode();
 
 	cg.cld = 0;         // NERVE - SMF - reset clientDamage
 

@@ -2326,7 +2326,7 @@ void CG_ParticleBloodCloudZombie( centity_t *cent, vec3_t origin, vec3_t dir ) {
 		p->alphavel = 0;
 		p->roll = 0;
 
-		p->pshader = cgs.media.bloodCloudShader;
+		p->pshader = CG_BloodShader( cgs.media.bloodCloudShader, cgs.media.bloodCloudShaderGreen );
 
 		// RF, stay around for long enough to expand and dissipate naturally
 		if ( length ) {
@@ -2491,7 +2491,7 @@ void CG_ParticleDust( centity_t *cent, vec3_t origin, vec3_t dir ) {
 		p->alphavel = 0;
 		p->roll = 0;
 
-		p->pshader = cgs.media.bloodCloudShader;
+		p->pshader = CG_BloodShader( cgs.media.bloodCloudShader, cgs.media.bloodCloudShaderGreen );
 
 		// RF, stay around for long enough to expand and dissipate naturally
 		if ( length ) {

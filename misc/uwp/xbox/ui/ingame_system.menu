@@ -1,0 +1,63 @@
+#include "ui/menudef.h"
+
+{
+\\ SYSTEM MENU \\
+
+menuDef {
+    	name "ingame_system"
+    	visible 0
+    	fullscreen 0
+		outOfBoundsClick			// this closes the window if it gets a click out of the rectangle
+	rect 200 100 443 340
+    	focusColor 1 1 1 1
+    	style 1
+    	border 1
+
+		onopen { hide grpsystem ; hide grpapplysystem ; show graphics ; show graphicsapply }
+
+
+itemDef {
+	name window
+	group ingamebox
+//	rect 0 46 300 340	
+	rect 0 2 443 300
+	style WINDOW_STYLE_FILLED
+	border 1
+	bordercolor .5 .5 .5 .5
+	forecolor 1 1 1 1
+	backcolor 0 0 0 .85
+	visible 1
+	decoration
+}
+
+
+
+
+
+
+	itemDef 
+	{
+		name window
+		group ingamebox2
+		rect 2 4 439 20	
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .1 .1 .1 .2
+		forecolor 1 1 1 1
+		backcolor .3 0.6 0.2 .25 
+		visible 1
+		decoration
+	}
+
+
+
+
+#include "ui/ingame_system_graphics.menu"
+#include "ui/ingame_system_iortcw.menu"
+#include "ui/ingame_system_performance.menu"
+#include "ui/ingame_system_sound.menu"
+
+}
+
+
+}

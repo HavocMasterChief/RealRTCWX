@@ -1,0 +1,105 @@
+S#include "ui/menudef.h"
+
+{
+	assetGlobalDef {
+		font "fonts/normal" 16			
+		smallFont "fonts/smallFont" 12			
+		bigFont "fonts/bigFont" 24			
+		cursor "ui/assets/3_cursor3"			
+		gradientBar "ui/assets/gradientbar2.tga"	
+		itemFocusSound "sound/misc/menu2.wav"
+		fadeClamp 1.0				
+		fadeCycle 1				
+		fadeAmount 0.1				
+		shadowColor 0.1 0.1 0.1 0.25			
+		}
+		
+	menuDef
+	{
+		name "backgroundmusic"
+		fullScreen 0
+		visible 0
+		onOpen 
+		{
+			playlooped "sound/music/l_theme.wav"
+		}
+    }
+		
+	menuDef {
+	name "main"
+	fullScreen MENU_TRUE				
+	rect -120 0 900 480			    // Size and position of the menu
+	visible MENU_TRUE				// Visible on open
+	focusColor .9 .85 1 .8			// Menu focus color for text and items
+	
+	onOpen { 
+		setitemcolor fadebox backcolor 0 0 0 1 ;   
+		uiScript stopRefresh ;
+		
+		hide realrtcw_main_newgame;
+		hide realrtcw_main_loadgame;
+		hide realrtcw_main_options;
+		hide realrtcw_main_addons;
+		hide realrtcw_main_discord;
+		hide realrtcw_main_credits;
+		hide realrtcw_main_quit;
+		
+		hide realrtcw_load;
+		hide realrtcw_load_load;
+		hide realrtcw_load_back;
+		
+		hide realrtcw_options;
+		hide realrtcw_options_controls;
+		hide realrtcw_options_system;
+		hide realrtcw_options_game;
+		hide realrtcw_options_defaults;
+		hide realrtcw_options_back;
+		
+		show realrtcw_main;
+		
+		setitemcolor ee forecolor .8 .8 .8 1; setitemcolor ee_check forecolor .6 .6 .6 1
+	}
+
+itemDef
+	{
+		name realrtcw_background
+		style WINDOW_STYLE_SHADER
+		rect -120 -9.25 917 500
+		background "realrtcw_background"
+		visible 1
+		decoration
+	}
+	
+
+#include "ui/main_images.menu"
+#include "ui/main_buttons.menu"
+#include "ui/main_options_nav.menu"
+#include "ui/main_controls_shared.menu"
+#include "ui/main_controls_look.menu"
+#include "ui/main_controls_move.menu"
+#include "ui/main_controls_shoot.menu"
+#include "ui/main_controls_shoot_advanced.menu"
+#include "ui/main_controls_misc.menu"
+#include "ui/main_system_shared.menu"
+#include "ui/main_system_display.menu"
+#include "ui/main_system_graphics.menu"
+#include "ui/main_system_performance.menu"
+#include "ui/main_system_sound_steam.menu"
+#include "ui/main_game_shared.menu"
+#include "ui/main_game_content_packs.menu"
+#include "ui/main_game_crosshair.menu"
+#include "ui/main_game_gameplay.menu"
+#include "ui/main_game_view.menu"
+#include "ui/main_addons.menu"
+#include "ui/main_credits.menu"
+#include "ui/main_cursed_sands_dlc.menu"
+
+}
+
+
+
+}
+
+		
+		
+		

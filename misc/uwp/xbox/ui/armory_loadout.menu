@@ -1,0 +1,555 @@
+#include "ui/menudef.h"
+{
+
+menuDef {
+	name "armory_loadout"
+	visible 0
+	fullscreen 0
+	rect 0 0 640 480
+	focusColor 1 .75 0 1
+	style 1
+	border 1
+
+	onOpen { play "sound/misc/kcaction.wav" ; uiScript loadArmoryRoster }
+
+	itemDef {
+		name background
+		rect 20 20 600 440
+		style WINDOW_STYLE_FILLED
+		backcolor 0 0 0 .96
+		border 1
+		bordercolor .5 .5 .5 .6
+		forecolor 1 1 1 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name backgroundGradientTrim
+		rect 20 20 600 440
+		style WINDOW_STYLE_EMPTY
+		border WINDOW_BORDER_KCGRADIENT
+		bordersize 4
+		bordercolor .8 .65 .3 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name title
+		text "@ARMORY_TITLE"
+		type ITEM_TYPE_TEXT
+		textfont UI_FONT_BIG
+		textscale .3
+		textstyle 6
+		rect 20 32 600 20
+		textalign ITEM_ALIGN_CENTER
+		textalignx 300
+		textaligny 14
+		forecolor 1 1 1 1
+		style WINDOW_STYLE_FILLED
+		backcolor .15 .13 .08 .55
+		border 1
+		bordercolor .6 .55 .35 .5
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name pointsLabel
+		text "@ARMORY_POINTS_LABEL"
+		type ITEM_TYPE_TEXT
+		textfont UI_FONT_BIG
+		textscale .28
+		textstyle 6
+		rect 185 54 165 20
+		textalign ITEM_ALIGN_RIGHT
+		textalignx 165
+		textaligny 15
+		forecolor .85 .85 .85 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name pointsValue
+		type ITEM_TYPE_OWNERDRAW
+		ownerdraw UI_ARMORY_POINTS
+		textfont UI_FONT_BIG
+		textscale .28
+		textstyle 6
+		rect 355 54 90 20
+		textaligny 15
+		forecolor 1 .85 .3 1
+		visible 1
+		decoration
+	}
+
+	//////////////// column outlines (equal for all three) ////////////////
+
+	itemDef {
+		name weaponsColumnFrame
+		rect 37 79 176 344
+		style WINDOW_STYLE_FILLED
+		backcolor 0 0 0 .85
+		border 1
+		bordercolor .5 .45 .3 .25
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name weaponsColumnOutline
+		rect 40 82 170 338
+		style WINDOW_STYLE_EMPTY
+		border 1
+		bordercolor .6 .55 .35 .6
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name buildColumnFrame
+		rect 232 79 176 344
+		style WINDOW_STYLE_FILLED
+		backcolor 0 0 0 .85
+		border 1
+		bordercolor .5 .45 .3 .25
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name buildColumnOutline
+		rect 235 82 170 338
+		style WINDOW_STYLE_EMPTY
+		border 1
+		bordercolor .6 .55 .35 .6
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name flowArrowLeft
+		text ">"
+		type ITEM_TYPE_TEXT
+		textfont UI_FONT_BIG
+		textscale .4
+		textstyle 6
+		rect 208 240 24 20
+		textalign ITEM_ALIGN_CENTER
+		textalignx 12
+		textaligny 14
+		forecolor 1 .8 .3 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name flowArrowRight
+		text "<"
+		type ITEM_TYPE_TEXT
+		textfont UI_FONT_BIG
+		textscale .4
+		textstyle 6
+		rect 405 240 24 20
+		textalign ITEM_ALIGN_CENTER
+		textalignx 12
+		textaligny 14
+		forecolor 1 .8 .3 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name equipColumnFrame
+		rect 427 79 176 344
+		style WINDOW_STYLE_FILLED
+		backcolor 0 0 0 .85
+		border 1
+		bordercolor .5 .45 .3 .25
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name equipColumnOutline
+		rect 430 82 170 338
+		style WINDOW_STYLE_EMPTY
+		border 1
+		bordercolor .6 .55 .35 .6
+		visible 1
+		decoration
+	}
+
+	//////////////// weapons (left) ////////////////
+
+	itemDef {
+		name weaponsDescBg
+		rect 43 138 167 46
+		style WINDOW_STYLE_FILLED
+		backcolor .1 .1 .1 .85
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name weaponsDescPanel
+		type ITEM_TYPE_OWNERDRAW
+		ownerdraw UI_ARMORY_WEAPON_DESC
+		rect 43 82 167 86
+		textfont UI_FONT_BIG
+		textscale .19
+		forecolor .85 .85 .85 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name weaponsPricePanel
+		type ITEM_TYPE_OWNERDRAW
+		ownerdraw UI_ARMORY_WEAPON_PRICE
+		rect 45 169 70 16
+		textfont UI_FONT_BIG
+		textscale .22
+		textaligny 12
+		forecolor .85 .85 .85 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name weaponsHeaderBg
+		rect 43 186 167 22
+		style WINDOW_STYLE_FILLED
+		backcolor .22 .2 .1 .85
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name weaponsLabel
+		text "@ARMORY_WEAPONS"
+		type ITEM_TYPE_TEXT
+		textfont UI_FONT_BIG
+		textscale .24
+		rect 43 186 167 22
+		textalign ITEM_ALIGN_CENTER
+		textalignx 84
+		textaligny 16
+		forecolor 1 .9 .6 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name weaponList
+		rect 43 210 167 198
+		type ITEM_TYPE_LISTBOX
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		elementwidth 167
+		elementheight 22
+		textscale .2
+		elementtype LISTBOX_TEXT
+		feeder FEEDER_ARMORY_WEAPONS
+		columns 2 2 20 1 26 140 24
+		textalign ITEM_ALIGN_LEFT
+		textaligny 14
+		forecolor .9 .9 .9 1
+		backcolor .12 .12 .12 .88
+		outlinecolor 1 .75 0 .22
+		visible 1
+		mouseEnter { setitemcolor weaponsColumnOutline bordercolor 1 .8 .3 .9 }
+		mouseExit { setitemcolor weaponsColumnOutline bordercolor .6 .55 .35 .6 }
+	}
+
+	itemDef {
+		name weaponsAddTag
+		text "@ARMORY_ADD"
+		type ITEM_TYPE_BUTTON
+		rect 90 412 70 16
+		textscale .16
+		style WINDOW_STYLE_FILLED
+		backcolor .1 .3 .4 .9
+		border 1
+		bordercolor .5 .7 .8 .8
+		textaligny 11
+		textfont UI_FONT_BIG
+		textalign ITEM_ALIGN_CENTER
+		textalignx 35
+		forecolor 1 1 1 1
+		mouseEnter { setitemcolor weaponsAddTag backcolor .15 .45 .6 .95 }
+		mouseExit { setitemcolor weaponsAddTag backcolor .1 .3 .4 .9 }
+		action { play "sound/misc/kcswish.wav" ; uiScript armoryAddWeapon }
+		visible 1
+	}
+
+	itemDef {
+		name weaponsCamoTag
+		text "@ARMORY_CAMO"
+		type ITEM_TYPE_BUTTON
+		rect 138 170 64 14
+		textscale .2
+		style WINDOW_STYLE_FILLED
+		backcolor .1 .3 .4 .9
+		border 1
+		bordercolor .5 .7 .8 .8
+		textaligny 10
+		textfont UI_FONT_BIG
+		textalign ITEM_ALIGN_CENTER
+		textalignx 32
+		forecolor 1 1 1 1
+		mouseEnter { setitemcolor weaponsCamoTag backcolor .15 .45 .6 .95 }
+		mouseExit { setitemcolor weaponsCamoTag backcolor .1 .3 .4 .9 }
+		action { play "sound/misc/kcswish.wav" ; uiScript armoryCycleCamo }
+		cvarTest "ui_armoryCamoAvailable"
+		showCvar { "1" }
+		visible 1
+	}
+
+	//////////////// current build (middle) ////////////////
+
+	itemDef {
+		name confirmButton
+		text "@ARMORY_CONFIRM"
+		type ITEM_TYPE_BUTTON
+		rect 235 131 170 47
+		textscale .28
+		style 1
+		border 1
+		bordercolor .5 .5 .5 .5
+		backcolor 0 .3 0 .35
+		textaligny 31
+		textfont UI_FONT_BIG
+		textalign ITEM_ALIGN_CENTER
+		textalignx 85
+		forecolor 1 1 1 1
+		mouseEnter { setitemcolor confirmButton backcolor 0 .5 0 .45 }
+		mouseExit { setitemcolor confirmButton backcolor 0 .3 0 .35 }
+		action { play "sound/pickup/armor/body_pickup.wav" ; uiScript armoryConfirm }
+		visible 1
+	}
+
+	itemDef {
+		name buildHeaderBg
+		rect 238 186 167 22
+		style WINDOW_STYLE_FILLED
+		backcolor .22 .2 .1 .85
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name buildLabel
+		text "@ARMORY_BUILD"
+		type ITEM_TYPE_TEXT
+		textfont UI_FONT_BIG
+		textscale .24
+		rect 238 186 167 22
+		textalign ITEM_ALIGN_CENTER
+		textalignx 84
+		textaligny 16
+		forecolor 1 .9 .6 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name buildList
+		rect 238 210 167 198
+		type ITEM_TYPE_LISTBOX
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		elementwidth 167
+		elementheight 22
+		textscale .2
+		elementtype LISTBOX_TEXT
+		feeder FEEDER_ARMORY_BUILD
+		columns 2 2 20 1 26 140 24
+		textalign ITEM_ALIGN_LEFT
+		textaligny 14
+		forecolor 1 .9 .6 1
+		backcolor .12 .12 .12 .88
+		outlinecolor 1 .75 0 .22
+		visible 1
+		mouseEnter { setitemcolor buildColumnOutline bordercolor 1 .8 .3 .9 }
+		mouseExit { setitemcolor buildColumnOutline bordercolor .6 .55 .35 .6 }
+	}
+
+	itemDef {
+		name buildRemoveTag
+		text "@ARMORY_REMOVE"
+		type ITEM_TYPE_BUTTON
+		rect 285 412 70 16
+		textscale .16
+		style WINDOW_STYLE_FILLED
+		backcolor .4 .1 .1 .9
+		border 1
+		bordercolor .8 .5 .5 .8
+		textaligny 11
+		textfont UI_FONT_BIG
+		textalign ITEM_ALIGN_CENTER
+		textalignx 35
+		forecolor 1 1 1 1
+		mouseEnter { setitemcolor buildRemoveTag backcolor .6 .15 .15 .95 }
+		mouseExit { setitemcolor buildRemoveTag backcolor .4 .1 .1 .9 }
+		action { play "sound/misc/kcswish.wav" ; uiScript armoryRemoveSelected }
+		visible 1
+	}
+
+	itemDef {
+		name clearAllButton
+		text "@ARMORY_CLEARALL"
+		type ITEM_TYPE_BUTTON
+		rect 285 432 70 16
+		textscale .16
+		style WINDOW_STYLE_FILLED
+		backcolor .4 .1 .1 .9
+		border 1
+		bordercolor .8 .5 .5 .8
+		textaligny 11
+		textfont UI_FONT_BIG
+		textalign ITEM_ALIGN_CENTER
+		textalignx 35
+		forecolor 1 1 1 1
+		mouseEnter { setitemcolor clearAllButton backcolor .6 .15 .15 .95 }
+		mouseExit { setitemcolor clearAllButton backcolor .4 .1 .1 .9 }
+		action { play "sound/misc/kcswish.wav" ; uiScript armoryClearAll }
+		visible 1
+	}
+
+	itemDef {
+		name randomizeButton
+		text "@ARMORY_RANDOMIZE"
+		type ITEM_TYPE_BUTTON
+		rect 235 85 170 20
+		textscale .2
+		style 1
+		border 1
+		bordercolor .5 .5 .5 .5
+		backcolor 0 0 .3 .35
+		textaligny 13
+		textfont UI_FONT_BIG
+		textalign ITEM_ALIGN_CENTER
+		textalignx 85
+		forecolor 1 1 1 1
+		mouseEnter { setitemcolor randomizeButton backcolor 0 0 .5 .45 }
+		mouseExit { setitemcolor randomizeButton backcolor 0 0 .3 .35 }
+		action { play "sound/misc/kcswish.wav" ; uiScript armoryRandomize }
+		visible 1
+	}
+
+	itemDef {
+		name recommendedButton
+		text "@ARMORY_RECOMMENDED"
+		type ITEM_TYPE_BUTTON
+		rect 235 108 170 20
+		textscale .2
+		style 1
+		border 1
+		bordercolor .5 .5 .5 .5
+		backcolor .25 .2 0 .35
+		textaligny 13
+		textfont UI_FONT_BIG
+		textalign ITEM_ALIGN_CENTER
+		textalignx 85
+		forecolor 1 1 1 1
+		mouseEnter { setitemcolor recommendedButton backcolor .4 .35 0 .45 }
+		mouseExit { setitemcolor recommendedButton backcolor .25 .2 0 .35 }
+		action { play "sound/misc/kcswish.wav" ; uiScript armoryRecommended }
+		visible 1
+	}
+
+	//////////////// equipment (right) ////////////////
+
+	itemDef {
+		name equipDescBg
+		rect 433 138 167 44
+		style WINDOW_STYLE_FILLED
+		backcolor .1 .1 .1 .85
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name equipDescPanel
+		type ITEM_TYPE_OWNERDRAW
+		ownerdraw UI_ARMORY_EQUIP_DESC
+		rect 433 82 167 100
+		textfont UI_FONT_BIG
+		textscale .19
+		forecolor .85 .85 .85 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name equipHeaderBg
+		rect 433 186 167 22
+		style WINDOW_STYLE_FILLED
+		backcolor .22 .2 .1 .85
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name equipLabel
+		text "@ARMORY_EQUIPMENT"
+		type ITEM_TYPE_TEXT
+		textfont UI_FONT_BIG
+		textscale .24
+		rect 433 186 167 22
+		textalign ITEM_ALIGN_CENTER
+		textalignx 84
+		textaligny 16
+		forecolor 1 .9 .6 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name equipList
+		rect 433 210 167 198
+		type ITEM_TYPE_LISTBOX
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		elementwidth 167
+		elementheight 22
+		textscale .2
+		elementtype LISTBOX_TEXT
+		feeder FEEDER_ARMORY_EQUIP
+		columns 2 2 20 1 26 140 24
+		textalign ITEM_ALIGN_LEFT
+		textaligny 14
+		forecolor .9 .9 .9 1
+		backcolor .12 .12 .12 .88
+		outlinecolor 1 .75 0 .22
+		visible 1
+		mouseEnter { setitemcolor equipColumnOutline bordercolor 1 .8 .3 .9 }
+		mouseExit { setitemcolor equipColumnOutline bordercolor .6 .55 .35 .6 }
+	}
+
+	itemDef {
+		name equipAddTag
+		text "@ARMORY_ADD"
+		type ITEM_TYPE_BUTTON
+		rect 480 412 70 16
+		textscale .16
+		style WINDOW_STYLE_FILLED
+		backcolor .1 .3 .4 .9
+		border 1
+		bordercolor .5 .7 .8 .8
+		textaligny 11
+		textfont UI_FONT_BIG
+		textalign ITEM_ALIGN_CENTER
+		textalignx 35
+		forecolor 1 1 1 1
+		mouseEnter { setitemcolor equipAddTag backcolor .15 .45 .6 .95 }
+		mouseExit { setitemcolor equipAddTag backcolor .1 .3 .4 .9 }
+		action { play "sound/misc/kcswish.wav" ; uiScript armoryAddEquip }
+		visible 1
+	}
+
+}
+}

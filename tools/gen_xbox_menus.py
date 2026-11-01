@@ -6,7 +6,8 @@ in main/ui/. Run it again after the stock menus change upstream.
 The Xbox package ships these files in its xbox/ folder, which the engine
 searches before the game's paks, so they replace the stock versions.
 
-What it changes:
+It first copies the repo's complete menu set (the Steam paks contain an older
+layout that the current UI code and these edits don't match), then changes:
   - Display: removes PC-only options (resolution, aspect ratio, fullscreen,
     v-sync, max FPS). Brightness, black & white, gothic and Show FPS stay.
   - Graphics: the PC presets and the low-level renderer options are replaced
@@ -150,7 +151,21 @@ def gen(name, transform):
     print("wrote", name)
 
 
+def copy_stock_ui():
+    """The installed Steam paks carry an older, monolithic set of menus that
+    don't match this source tree (or its compiled UI module). Ship the repo's
+    whole menu set in the overlay so menus and code always match."""
+    os.makedirs(DST, exist_ok=True)
+    for name in sorted(os.listdir(SRC)):
+        if name.endswith(".menu") or name in ("menus.txt", "menudef.h"):
+            with open(os.path.join(SRC, name), "rb") as f:
+                data = f.read()
+            with open(os.path.join(DST, name), "wb") as f:
+                f.write(data)
+
+
 def main():
+    copy_stock_ui()
     # Display
     for n in ("main_system_display.menu", "ingame_system_graphics.menu"):
         gen(n, lambda t: drop_items(t, lambda it: field(it, "cvar") in DISPLAY_DROP))

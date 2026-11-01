@@ -146,12 +146,37 @@ def blood_option(text):
     if not m:
         raise SystemExit("blood item not found")
     ind = m.group(1)
-    return text[:m.start()] + ('type ITEM_TYPE_MULTI\n' + ind + 'text "Blood"\n' + ind +
+    text = drop_items(text, lambda it: field(it, "text") in DROP_TEXT)
+    m = pat.search(text)
+    return text[:m.start()] + ('type ITEM_TYPE_MULTI\n' + ind + 'text "Blood:"\n' + ind +
                                'cvar "cg_bloodMode"\n' + ind +
                                'cvarFloatList { "Default" 0 "Green" 1 "Disabled" 2 "Extreme" 3 }') + text[m.end():]
 
 
 DISPLAY_DROP = {"r_mode", "cg_fixedaspect", "r_fullscreen", "r_swapinterval", "com_maxfps"}
+DROP_TEXT = {"@SYSTEM_SOCIALS", "@SYSTEM_APPLY"}   # PC social links; Apply (Xbox applies settings itself)
+
+
+def repack_rows(text):
+    """Close the gaps left by removed options: option rows (290x12) are
+    re-spaced in order, headings get a little extra room."""
+    out, newy, mapping, last_dec = [], None, {}, None
+    for kind, chunk in split_items(text):
+        m = re.search(r'\brect\s+([\d.]+)\s+([\d.]+)\s+290\s+12', chunk) if kind == 'item' else None
+        if m:
+            oldy = m.group(2)
+            dec = 'decoration' in chunk and 'cvar' not in chunk
+            if oldy not in mapping:
+                if newy is None:
+                    newy = float(oldy)
+                else:
+                    newy += 22 if (dec or last_dec) else 16
+                mapping[oldy] = newy
+                last_dec = dec
+            y = mapping[oldy]
+            chunk = chunk[:m.start(2)] + ('%g' % y) + chunk[m.end(2):]
+        out.append(chunk)
+    return ''.join(out)
 SOUND_DROP = {"s_useOpenAL", "s_muteWhenMinimized", "s_muteWhenUnfocused"}
 
 
@@ -255,7 +280,8 @@ def main():
     copy_stock_ui()
     # Display
     for n in ("main_system_display.menu", "ingame_system_graphics.menu"):
-        gen(n, lambda t: drop_items(t, lambda it: field(it, "cvar") in DISPLAY_DROP))
+        gen(n, lambda t: repack_rows(drop_items(t, lambda it: field(it, "cvar") in DISPLAY_DROP
+                                                or field(it, "text") in DROP_TEXT)))
     # Graphics -> Mode
     gen("main_system_graphics.menu",
         lambda t: keep_first_item_only(t) + mode_items("iortcwgraphics", "system", 300, 140))

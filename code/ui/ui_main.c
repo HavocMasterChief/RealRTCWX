@@ -7650,6 +7650,27 @@ void _UI_KeyEvent( int key, qboolean down ) {
         }
     }
 
+	// Controller: B backs out one level (ui_padNav)
+	if ( key == K_PAD0_B && down && Menu_Count() > 0 && trap_Cvar_VariableValue( "ui_padNav" ) ) {
+		menuDef_t *menu = Menu_GetFocused();
+		if ( menu ) {
+			if ( !Q_stricmp( menu->window.name, "ingame" ) ) {
+				key = K_ESCAPE;         // pause menu itself: resume, like Esc
+			} else if ( !Q_stricmp( menu->window.name, "main" ) ) {
+				UI_PadNavBackMain( menu );
+				return;
+			} else if ( !menu->onESC && !Q_stricmpn( menu->window.name, "ingame_", 7 ) ) {
+				// an options window over the pause menu: close it, back to the list
+				menuDef_t *root = Menus_FindByName( "ingame" );
+				Menus_CloseByName( menu->window.name );
+				if ( root && ( root->window.flags & WINDOW_VISIBLE ) ) {
+					root->window.flags |= WINDOW_HASFOCUS;
+				}
+				return;
+			}
+		}
+	}
+
 	if ( Menu_Count() > 0 ) {
 		menuDef_t *menu = Menu_GetFocused();
 		if ( menu ) {

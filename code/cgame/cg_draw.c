@@ -2169,6 +2169,10 @@ static void CG_DrawSubtitleString( void ) {
 	int x, y, w;
 	float   *color;
 
+	// hidden while a menu is open (they'd show through the menu panels)
+	if ( trap_Key_GetCatcher() & KEYCATCH_UI ) {
+		return;
+	}
 	if ( !cg.subtitlePrintTime ) {
 		return;
 	}

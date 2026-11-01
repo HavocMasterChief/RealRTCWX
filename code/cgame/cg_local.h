@@ -74,7 +74,7 @@ If you have questions concerning this license or the applicable additional terms
 #define MAX_STEP_CHANGE     32
 
 #define MAX_VERTS_ON_POLY   64
-#define MAX_MARK_POLYS      1024
+#define MAX_MARK_POLYS      4096    // RealRTCWX: Extreme blood keeps far more decals
 
 #define STAT_MINUS          10  // num frame for '-' stats digit
 
@@ -2356,6 +2356,8 @@ void CG_AddBulletParticles( vec3_t origin, vec3_t dir, int speed, int duration, 
 //
 void    CG_InitMarkPolys( void );
 void CG_FreeOldestMark( void );
+qboolean CG_IsBloodMark( qhandle_t shader );
+void CG_ClearBloodMarks( void );
 // cg_gore.c
 void CG_AddGore( void );
 void CG_GoreReset( void );

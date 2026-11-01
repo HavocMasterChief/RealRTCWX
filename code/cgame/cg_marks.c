@@ -99,6 +99,37 @@ CG_FreeOldestMark
 Used by the gore frame-rate governor.
 ===================
 */
+qboolean CG_IsBloodMark( qhandle_t shader ) {
+	int i;
+	for ( i = 0; i < 5; i++ ) {
+		if ( shader == cgs.media.bloodDotShaders[i] || shader == cgs.media.bloodDotShadersGreen[i] ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+/*
+===================
+CG_ClearBloodMarks
+
+Blood switched off: remove the blood decals already on the walls.
+===================
+*/
+void CG_ClearBloodMarks( void ) {
+	markPoly_t *mp, *next;
+
+	if ( !cg_activeMarkPolys.nextMark ) {
+		return;
+	}
+	for ( mp = cg_activeMarkPolys.nextMark; mp != &cg_activeMarkPolys; mp = next ) {
+		next = mp->nextMark;
+		if ( CG_IsBloodMark( mp->markShader ) ) {
+			CG_FreeMarkPoly( mp );
+		}
+	}
+}
+
 void CG_FreeOldestMark( void ) {
 	if ( cg_activeMarkPolys.prevMark && cg_activeMarkPolys.prevMark != &cg_activeMarkPolys ) {
 		CG_FreeMarkPoly( cg_activeMarkPolys.prevMark );
@@ -174,7 +205,12 @@ void CG_ImpactMark( qhandle_t markShader, const vec3_t origin, const vec3_t dir,
 	vec3_t projection;
 	int multMaxFragments = 1;
 
-	if ( !cg_markTime.integer ) {
+	if ( !cg_markTime.integer || !markShader ) {
+		return;
+	}
+
+	// blood off: no blood decals from any code path
+	if ( CG_IsBloodMark( markShader ) && ( !cg_blood.integer || cg_bloodMode.integer == BLOODMODE_OFF ) ) {
 		return;
 	}
 

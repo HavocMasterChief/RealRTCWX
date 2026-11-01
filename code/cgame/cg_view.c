@@ -1576,6 +1576,11 @@ static void CG_SyncBloodMode( void ) {
 	} else {
 		trap_Cvar_Set( "com_blood", cg_bloodMode.integer == BLOODMODE_OFF ? "0" : "1" );
 	}
+	if ( cg_bloodMode.integer == BLOODMODE_OFF ) {
+		// clear what's already there: decals, pools, runs, screen blood
+		CG_ClearBloodMarks();
+		CG_GoreReset();
+	}
 	lastMod = cg_bloodMode.modificationCount;
 }
 

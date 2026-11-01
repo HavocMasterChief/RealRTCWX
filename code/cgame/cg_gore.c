@@ -51,19 +51,24 @@ typedef struct {
 	vec3_t origin;
 } goreDrip_t;
 
+#define GORE_RUN_MAX_POINTS     96
+#define GORE_RUN_MAX_FRAGS      12
+
 typedef struct {
 	qboolean active;
 	int startTime;
 	int runTime;            // ms to reach full length
 	vec3_t start;
-	vec3_t down;            // along the wall, downward
-	vec3_t side;            // along the wall, horizontal
-	vec3_t normal;
+	vec3_t end;             // where it stops (on the floor if 'pools')
 	float length;
-	float width;
 	qboolean pools;         // ends on a floor: start a small pool there
 	qboolean pooled;
-	vec3_t end;
+	// projected onto the wall once at full length; revealed top-down over time
+	int numFragments;
+	int fragFirst[GORE_RUN_MAX_FRAGS];
+	int fragCount[GORE_RUN_MAX_FRAGS];
+	vec3_t xyz[GORE_RUN_MAX_POINTS];
+	float st[GORE_RUN_MAX_POINTS][2];
 } goreRun_t;
 
 static gorePool_t goPools[GORE_MAX_POOLS];
@@ -88,10 +93,10 @@ static void CG_GoreRegister( void ) {
 	}
 	goPoolShader[0] = trap_R_RegisterShader( "gore/bloodpool1" );
 	goPoolShader[1] = trap_R_RegisterShader( "gore/bloodpool2" );
-	goPoolShaderGreen[0] = trap_R_RegisterShader( "gore/bloodpool1#green" );
-	goPoolShaderGreen[1] = trap_R_RegisterShader( "gore/bloodpool2#green" );
+	goPoolShaderGreen[0] = trap_R_RegisterShader( "gore/bloodpool1_green" );
+	goPoolShaderGreen[1] = trap_R_RegisterShader( "gore/bloodpool2_green" );
 	goRunShader = trap_R_RegisterShader( "gore/bloodrun" );
-	goRunShaderGreen = trap_R_RegisterShader( "gore/bloodrun#green" );
+	goRunShaderGreen = trap_R_RegisterShader( "gore/bloodrun_green" );
 	goRegistered = qtrue;
 }
 
@@ -102,7 +107,10 @@ CG_GoreReset
 Called on level load; everything client-side starts clean.
 ===============
 */
+static void CG_GoreScreenReset( void );
+
 void CG_GoreReset( void ) {
+	CG_GoreScreenReset();
 	memset( goPools, 0, sizeof( goPools ) );
 	memset( goDrips, 0, sizeof( goDrips ) );
 	memset( goRuns, 0, sizeof( goRuns ) );
@@ -224,6 +232,121 @@ static void CG_GorePoolAt( const vec3_t point, float radius, int growTime ) {
 
 /*
 ===============
+CG_GoreStartRun
+
+A splat on a wall starts a run of blood down it. The path is walked in
+small steps so the run stops at the wall's edge (it never hangs in the air)
+or at the floor, where it pools. The run is then projected onto the wall
+like a decal, so it follows the real surface.
+===============
+*/
+static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
+	goreRun_t *r;
+	trace_t tr;
+	vec3_t down = { 0, 0, -1 }, rdown, side, prev, cur, a, b, delta;
+	vec3_t quad[4], projection, top;
+	markFragment_t frags[GORE_RUN_MAX_FRAGS], *mf;
+	vec5_t markPoints[GORE_RUN_MAX_POINTS];
+	float d, maxLen, len, width;
+	int i, j, n, numFrags, outPoints = 0;
+	qboolean pools = qfalse;
+
+	// only on the world, and not right next to another run
+	for ( i = 0; i < GORE_MAX_RUNS; i++ ) {
+		if ( goRuns[i].active && Distance( goRuns[i].start, point ) < 28 ) {
+			return;
+		}
+	}
+	d = DotProduct( down, normal );
+	VectorMA( down, -d, normal, rdown );
+	if ( VectorNormalize( rdown ) < 0.1f ) {
+		return;
+	}
+	CrossProduct( normal, rdown, side );
+
+	maxLen = 32 + random() * 72;
+	VectorMA( point, 1.0f, normal, prev );
+	len = 0;
+	while ( len < maxLen ) {
+		VectorMA( prev, 3.0f, rdown, cur );
+		// anything in the way (usually the floor)?
+		CG_Trace( &tr, prev, NULL, NULL, cur, -1, MASK_SOLID );
+		if ( tr.fraction < 1.0f || tr.startsolid ) {
+			if ( !tr.startsolid && tr.plane.normal[2] > 0.7f ) {
+				pools = qtrue;
+				len += 3.0f * tr.fraction;
+			}
+			break;
+		}
+		// is the wall still there, facing the same way?
+		VectorMA( cur, 1.0f, normal, a );
+		VectorMA( cur, -4.0f, normal, b );
+		CG_Trace( &tr, a, NULL, NULL, b, -1, MASK_SOLID );
+		if ( tr.fraction >= 1.0f || tr.entityNum != ENTITYNUM_WORLD ||
+			 DotProduct( tr.plane.normal, normal ) < 0.95f ) {
+			break;
+		}
+		VectorCopy( cur, prev );
+		len += 3.0f;
+	}
+	if ( len < 10 ) {
+		return;
+	}
+
+	width = 2.5f + random() * 2.0f;
+	VectorMA( point, 2.0f, normal, top );
+	VectorMA( top, -2.0f, rdown, top );     // start a little above the splat
+	len += 2.0f;
+	for ( i = 0; i < 3; i++ ) {
+		quad[0][i] = top[i] - width * side[i];
+		quad[1][i] = top[i] + width * side[i];
+		quad[2][i] = top[i] + width * side[i] + len * rdown[i];
+		quad[3][i] = top[i] - width * side[i] + len * rdown[i];
+	}
+	VectorScale( normal, -6.0f, projection );
+	numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_RUN_MAX_POINTS,
+									  (float *)&markPoints[0], GORE_RUN_MAX_FRAGS, frags );
+	if ( numFrags <= 0 ) {
+		return;
+	}
+
+	GORE_ALLOC( goRuns, GORE_MAX_RUNS, r );
+	for ( i = 0, mf = frags; i < numFrags; i++, mf++ ) {
+		n = mf->numPoints < 0 ? -mf->numPoints : mf->numPoints;
+		if ( n > MAX_VERTS_ON_POLY ) {
+			n = MAX_VERTS_ON_POLY;
+		}
+		if ( outPoints + n > GORE_RUN_MAX_POINTS ) {
+			break;
+		}
+		r->fragFirst[r->numFragments] = outPoints;
+		r->fragCount[r->numFragments] = n;
+		for ( j = 0; j < n; j++ ) {
+			VectorCopy( markPoints[mf->firstPoint + j], r->xyz[outPoints] );
+			VectorMA( r->xyz[outPoints], 0.1f, normal, r->xyz[outPoints] );
+			VectorSubtract( r->xyz[outPoints], top, delta );
+			r->st[outPoints][0] = 0.5f + DotProduct( delta, side ) / ( 2.0f * width );
+			r->st[outPoints][1] = DotProduct( delta, rdown ) / len;
+			outPoints++;
+		}
+		r->numFragments++;
+	}
+	if ( !r->numFragments ) {
+		return;
+	}
+	r->active = qtrue;
+	r->startTime = cg.time;
+	r->length = len;
+	r->pools = pools;
+	VectorCopy( point, r->start );
+	VectorMA( top, len, rdown, r->end );
+	VectorMA( r->end, 3.0f, normal, r->end );   // out from the wall, over the floor
+	// creeps down: 10-20 s for the full length
+	r->runTime = 10000 + rand() % 10000;
+}
+
+/*
+===============
 CG_GoreSurfaceHit
 
 Called (Extreme only) where blood lands. Ceilings start drips; some wall
@@ -249,39 +372,8 @@ void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal ) {
 		d->startTime = cg.time;
 		d->nextDrip = cg.time + 300 + rand() % 700;
 		VectorMA( point, 1.0f, normal, d->origin );
-	} else if ( fabs( normal[2] ) < 0.35f && random() < 0.35f ) {
-		goreRun_t *r;
-		trace_t tr;
-		vec3_t down = { 0, 0, -1 }, from, to;
-		float d;
-
-		GORE_ALLOC( goRuns, GORE_MAX_RUNS, r );
-		VectorCopy( normal, r->normal );
-		d = DotProduct( down, normal );
-		VectorMA( down, -d, normal, r->down );
-		if ( VectorNormalize( r->down ) < 0.1f ) {
-			r->active = qfalse;
-			return;
-		}
-		CrossProduct( r->normal, r->down, r->side );
-		VectorMA( point, 0.3f, normal, r->start );
-
-		// how far can it run before something stops it?
-		r->length = 24 + random() * 56;
-		VectorMA( r->start, 1.0f, normal, from );
-		VectorMA( from, r->length, r->down, to );
-		CG_Trace( &tr, from, NULL, NULL, to, -1, MASK_SOLID );
-		r->length *= tr.fraction;
-		if ( r->length < 6 ) {
-			r->active = qfalse;
-			return;
-		}
-		r->pools = ( tr.fraction < 1.0f && tr.plane.normal[2] > 0.7f ) ? qtrue : qfalse;
-		VectorCopy( tr.endpos, r->end );
-		r->width = 3 + random() * 3;
-		r->runTime = (int)( r->length * ( 60 + random() * 60 ) );   // ~1 unit per 60-120 ms
-		r->startTime = cg.time;
-		r->active = qtrue;
+	} else if ( fabs( normal[2] ) < 0.35f && random() < 0.15f ) {
+		CG_GoreStartRun( point, normal );
 	}
 }
 
@@ -312,7 +404,7 @@ static void CG_GoreDrawPool( gorePool_t *p, qhandle_t shader ) {
 			VectorCopy( p->xyz[first + j], verts[j].xyz );
 			verts[j].st[0] = 0.5f + ( p->st[first + j][0] - 0.5f ) * inv;
 			verts[j].st[1] = 0.5f + ( p->st[first + j][1] - 0.5f ) * inv;
-			verts[j].modulate[0] = verts[j].modulate[1] = verts[j].modulate[2] = 215;
+			verts[j].modulate[0] = verts[j].modulate[1] = verts[j].modulate[2] = 255;
 			verts[j].modulate[3] = 255;
 		}
 		trap_R_AddPolyToScene( shader, n, verts );
@@ -320,35 +412,37 @@ static void CG_GoreDrawPool( gorePool_t *p, qhandle_t shader ) {
 }
 
 static void CG_GoreDrawRun( goreRun_t *r, qhandle_t shader ) {
-	polyVert_t verts[4];
-	float frac, len;
-	vec3_t bottom;
-	int i;
+	polyVert_t verts[MAX_VERTS_ON_POLY];
+	float frac, inv;
+	int i, j;
 
 	frac = (float)( cg.time - r->startTime ) / (float)r->runTime;
 	if ( frac > 1.0f ) {
 		frac = 1.0f;
 	}
-	len = 4 + ( r->length - 4 ) * frac;
-	VectorMA( r->start, len, r->down, bottom );
-
-	VectorMA( r->start, -r->width, r->side, verts[0].xyz );
-	VectorMA( r->start, r->width, r->side, verts[1].xyz );
-	VectorMA( bottom, r->width, r->side, verts[2].xyz );
-	VectorMA( bottom, -r->width, r->side, verts[3].xyz );
-	verts[0].st[0] = 0; verts[0].st[1] = 0;
-	verts[1].st[0] = 1; verts[1].st[1] = 0;
-	verts[2].st[0] = 1; verts[2].st[1] = 1;
-	verts[3].st[0] = 0; verts[3].st[1] = 1;
-	for ( i = 0; i < 4; i++ ) {
-		verts[i].modulate[0] = verts[i].modulate[1] = verts[i].modulate[2] = 215;
-		verts[i].modulate[3] = 255;
+	// fast at first, then slowing as it thins out
+	frac = 1.0f - ( 1.0f - frac ) * ( 1.0f - frac );
+	if ( frac < 0.06f ) {
+		frac = 0.06f;
 	}
-	trap_R_AddPolyToScene( shader, 4, verts );
+	// stretch the drip texture over the part that has run so far; the
+	// texture's last rows are empty, so everything below the tip is clear
+	inv = 1.0f / frac;
+	for ( i = 0; i < r->numFragments; i++ ) {
+		int first = r->fragFirst[i], n = r->fragCount[i];
+		for ( j = 0; j < n; j++ ) {
+			VectorCopy( r->xyz[first + j], verts[j].xyz );
+			verts[j].st[0] = r->st[first + j][0];
+			verts[j].st[1] = r->st[first + j][1] * inv;
+			verts[j].modulate[0] = verts[j].modulate[1] = verts[j].modulate[2] = 255;
+			verts[j].modulate[3] = 255;
+		}
+		trap_R_AddPolyToScene( shader, n, verts );
+	}
 
-	if ( frac >= 1.0f && r->pools && !r->pooled ) {
+	if ( frac >= 0.98f && r->pools && !r->pooled ) {
 		r->pooled = qtrue;
-		CG_GoreSpawnPool( r->end, 6 + random() * 8, 6000 );
+		CG_GorePoolAt( r->end, 9 + random() * 7, 9000 );
 	}
 }
 
@@ -435,15 +529,16 @@ until it recovers.
 ===============
 */
 static void CG_GoreGovernor( void ) {
-	static float avgMs = 0;
-	static int lowSince = 0, lastTrim = 0;
-	float target, fps;
+	static float avgMs = 0, baseline = 0;
+	static int lowSince = 0, lastTrim = 0, lastDecay = 0;
+	float target, fps, limit;
 	int i, oldest;
 
 	if ( cg.frametime <= 0 || cg.frametime > 250 ) {
 		return;     // pauses, loads and hitches don't count
 	}
 	avgMs = avgMs ? avgMs * 0.95f + cg.frametime * 0.05f : (float)cg.frametime;
+	fps = 1000.0f / avgMs;
 
 	{
 		char buf[32];
@@ -453,16 +548,29 @@ static void CG_GoreGovernor( void ) {
 	if ( target <= 0 ) {
 		target = 60;
 	}
-	fps = 1000.0f / avgMs;
-	if ( fps >= target - 10 ) {
+	// what this scene normally runs at: follows the frame rate up at once,
+	// and only drifts down slowly (1 FPS every 5 s)
+	if ( fps > baseline ) {
+		baseline = fps;
+	} else if ( cg.time - lastDecay > 5000 || lastDecay > cg.time ) {
+		baseline -= 1.0f;
+		lastDecay = cg.time;
+	}
+	if ( baseline > target ) {
+		baseline = target;
+	}
+	limit = baseline - 10.0f;
+
+	if ( fps >= limit ) {
 		lowSince = 0;
 		return;
 	}
-	if ( !lowSince ) {
+	if ( !lowSince || lowSince > cg.time ) {
 		lowSince = cg.time;
 		return;
 	}
-	if ( cg.time - lowSince < 1000 || cg.time - lastTrim < 200 ) {
+	// a short dip (an explosion, a big fight starting) isn't enough
+	if ( cg.time - lowSince < 2000 || ( cg.time - lastTrim < 200 && lastTrim <= cg.time ) ) {
 		return;
 	}
 	lastTrim = cg.time;
@@ -563,6 +671,11 @@ static goreScreen_t goScreen[GORE_MAX_SCREEN];
 static qhandle_t goScreenShader[3];
 static qboolean goScreenRegistered;
 static int goScreenLast;
+
+static void CG_GoreScreenReset( void ) {
+	memset( goScreen, 0, sizeof( goScreen ) );
+	goScreenRegistered = qfalse;
+}
 
 static void CG_GoreScreenRegister( void ) {
 	if ( goScreenRegistered ) {

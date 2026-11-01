@@ -2599,7 +2599,7 @@ qboolean Item_TextField_HandleKey( itemDef_t *item, int key ) {
 		}
 
 		// NERVE - SMF
-		if ( key == K_ENTER || key == K_KP_ENTER ) {
+		if ( key == K_ENTER || key == K_KP_ENTER || key == K_PAD0_A ) {
 			if ( item->onAccept ) {
 				Item_RunScript( item, item->onAccept );
 			}
@@ -3150,6 +3150,7 @@ int UI_SelectForKey(int key)
 		case K_ENTER:
 		case K_KP_ENTER:
         case K_PAD0_A:
+		case K_PAD0_DPAD_RIGHT:
 		case K_RIGHTARROW:
 		case K_KP_RIGHTARROW:
 		case K_JOY1:
@@ -3159,6 +3160,7 @@ int UI_SelectForKey(int key)
 			return 1; // next
 
 		case K_MOUSE2:
+		case K_PAD0_DPAD_LEFT:
 		case K_LEFTARROW:
 		case K_KP_LEFTARROW:
 			return -1; // previous
@@ -3166,6 +3168,165 @@ int UI_SelectForKey(int key)
 
 	// no change
 	return 0;
+}
+
+/*
+==================
+Console menu helpers: tabs on LB/RB, B to back out (ui_padNav)
+==================
+*/
+static qboolean UI_ItemIsTabCandidate( itemDef_t *it ) {
+	if ( !( it->window.flags & WINDOW_VISIBLE ) || ( it->window.flags & WINDOW_DECORATION ) || !it->action ) {
+		return qfalse;
+	}
+	if ( it->type != ITEM_TYPE_BUTTON && it->type != ITEM_TYPE_TEXT ) {
+		return qfalse;
+	}
+	if ( it->cvarFlags & ( CVAR_ENABLE | CVAR_DISABLE ) && !Item_EnableShowViaCvar( it, CVAR_ENABLE ) ) {
+		return qfalse;
+	}
+	if ( it->cvarFlags & ( CVAR_SHOW | CVAR_HIDE ) && !Item_EnableShowViaCvar( it, CVAR_SHOW ) ) {
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// A menu's tab strip = the topmost row of two or more visible buttons.
+// Returns the number of tabs, sorted left to right.
+static int UI_FindTabs( menuDef_t *menu, itemDef_t **tabs, int max ) {
+	int i, j, n, best = 0;
+	float bestY = 99999;
+
+	for ( i = 0; i < menu->itemCount; i++ ) {
+		itemDef_t *a = menu->items[i];
+		if ( !UI_ItemIsTabCandidate( a ) ) {
+			continue;
+		}
+		n = 0;
+		for ( j = 0; j < menu->itemCount; j++ ) {
+			itemDef_t *b = menu->items[j];
+			if ( UI_ItemIsTabCandidate( b ) && fabs( b->window.rect.y - a->window.rect.y ) < 2.5f &&
+				 b->window.rect.h < 30 ) {
+				n++;
+			}
+		}
+		if ( n >= 2 && a->window.rect.y < bestY ) {
+			bestY = a->window.rect.y;
+			best = n;
+		}
+	}
+	if ( !best ) {
+		return 0;
+	}
+	n = 0;
+	for ( i = 0; i < menu->itemCount && n < max; i++ ) {
+		itemDef_t *a = menu->items[i];
+		if ( UI_ItemIsTabCandidate( a ) && fabs( a->window.rect.y - bestY ) < 2.5f && a->window.rect.h < 30 ) {
+			// insertion sort by x
+			for ( j = n; j > 0 && tabs[j - 1]->window.rect.x > a->window.rect.x; j-- ) {
+				tabs[j] = tabs[j - 1];
+			}
+			tabs[j] = a;
+			n++;
+		}
+	}
+	return n;
+}
+
+static qboolean UI_PadNavTab( menuDef_t *menu, int dir ) {
+	static itemDef_t *lastFirst;
+	static int current;
+	itemDef_t *tabs[16];
+	int n = UI_FindTabs( menu, tabs, 16 );
+
+	if ( n < 2 ) {
+		return qfalse;
+	}
+	if ( tabs[0] != lastFirst ) {   // a different tab strip: starts on its first tab
+		lastFirst = tabs[0];
+		current = 0;
+	}
+	current = ( current + dir + n ) % n;
+	Item_RunScript( tabs[current], tabs[current]->action );
+	DC->startLocalSound( DC->Assets.itemFocusSound, CHAN_LOCAL_SOUND );
+	Menu_ClearFocus( menu );
+	return qtrue;
+}
+
+// LB/RB step a menu's "padCycle" choice (e.g. the chapter filter), if it has one
+static qboolean UI_PadNavCycle( menuDef_t *menu, int dir ) {
+	itemDef_t *it = Menu_FindItemByName( menu, "padCycle" );
+	if ( !it || it->type != ITEM_TYPE_MULTI ) {
+		return qfalse;
+	}
+	Item_Multi_HandleKey( it, dir < 0 ? K_PAD0_DPAD_LEFT : K_PAD0_DPAD_RIGHT );
+	DC->startLocalSound( DC->Assets.itemFocusSound, CHAN_LOCAL_SOUND );
+	return qtrue;
+}
+
+static qboolean Menu_AnyVisibleNamed( menuDef_t *menu, const char *name ) {
+	int i;
+	for ( i = 0; i < menu->itemCount; i++ ) {
+		itemDef_t *it = menu->items[i];
+		if ( ( it->window.flags & WINDOW_VISIBLE ) &&
+			 ( ( it->window.name && !Q_stricmp( it->window.name, name ) ) ||
+			   ( it->window.group && !Q_stricmp( it->window.group, name ) ) ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+/*
+==================
+UI_PadNavBackMain
+
+B on the main menu: close the open options panel; if none is open, leave
+the options list (same as its Back button); otherwise close credits/addons.
+Returns qfalse if there was nothing to back out of.
+==================
+*/
+qboolean UI_PadNavBackMain( menuDef_t *menu ) {
+	static const char *panels[] = {
+		"controlsmenus", "controlbuttons", "look", "shoot", "move", "shoot_advanced", "advancedshootbutton", "misc",
+		"systemmenus", "graphics", "iortcwgraphics", "performancegraphics", "graphicsapply", "applysys", "sounds",
+		"steamsettings", "steamreset_btn", "steamreset_warn",
+		"gomenus", "performance", "gameplay", "crosshair", "content_packs", "realrtcw", "view", NULL
+	};
+	qboolean open = qfalse;
+	int i;
+
+	for ( i = 0; panels[i]; i++ ) {
+		if ( Menu_AnyVisibleNamed( menu, panels[i] ) ) {
+			open = qtrue;
+			break;
+		}
+	}
+	if ( open ) {
+		for ( i = 0; panels[i]; i++ ) {
+			Menu_ShowItemByName( menu, panels[i], qfalse );
+		}
+		Menu_ClearFocus( menu );
+		return qtrue;
+	}
+	if ( Menu_AnyVisibleNamed( menu, "optionsmenugroup" ) ) {
+		itemDef_t *back = Menu_FindItemByName( menu, "backmenu" );
+		if ( back && back->action ) {
+			Item_RunScript( back, back->action );
+			Menu_ClearFocus( menu );
+			return qtrue;
+		}
+	}
+	if ( Menu_AnyVisibleNamed( menu, "modmenus" ) || Menu_AnyVisibleNamed( menu, "credits" ) ) {
+		Menu_ShowItemByName( menu, "modmenus", qfalse );
+		Menu_ShowItemByName( menu, "credits", qfalse );
+		Menu_ShowItemByName( menu, "credits0", qfalse );
+		Menu_ShowItemByName( menu, "credits1", qfalse );
+		Menu_ShowItemByName( menu, "mainmenus", qtrue );
+		Menu_ClearFocus( menu );
+		return qtrue;
+	}
+	return qfalse;
 }
 
 void Menu_HandleKey( menuDef_t *menu, int key, qboolean down ) {
@@ -3253,7 +3414,23 @@ void Menu_HandleKey( menuDef_t *menu, int key, qboolean down ) {
 		}
 		break;
 
+	case K_PAD0_Y:
+		// Y runs the menu's "padY" item (e.g. Campaign Options)
+		if ( UI_PadNavEnabled() ) {
+			itemDef_t *y = Menu_FindItemByName( menu, "padY" );
+			if ( y && y->action ) {
+				Item_RunScript( y, y->action );
+			}
+		}
+		break;
+
 	case K_PAD0_LEFTSHOULDER:
+		if ( UI_PadNavEnabled() && UI_PadNavCycle( menu, -1 ) ) {
+			break;
+		}
+		if ( UI_PadNavEnabled() && Q_stricmp( menu->window.name, "ingame" ) && UI_PadNavTab( menu, -1 ) ) {
+			break;
+		}
 		if ( !Q_stricmp( menu->window.name, "ingame" ) ) {
 			DC->executeText( EXEC_APPEND, "togglemenu\n" );
 			DC->executeText( EXEC_APPEND, "loadgame quicksave\n" );
@@ -3261,6 +3438,12 @@ void Menu_HandleKey( menuDef_t *menu, int key, qboolean down ) {
 		break;
 
 	case K_PAD0_RIGHTSHOULDER:
+		if ( UI_PadNavEnabled() && UI_PadNavCycle( menu, 1 ) ) {
+			break;
+		}
+		if ( UI_PadNavEnabled() && Q_stricmp( menu->window.name, "ingame" ) && UI_PadNavTab( menu, 1 ) ) {
+			break;
+		}
 		if ( !Q_stricmp( menu->window.name, "ingame" ) ) {
 			DC->executeText( EXEC_APPEND, "togglemenu\n" );
 			DC->executeText( EXEC_APPEND, "savegame quicksave\n" );

@@ -482,7 +482,7 @@ void CG_LaunchGib( centity_t *cent, vec3_t origin, vec3_t angles, vec3_t velocit
 		le->angles.trDelta[2] = ( 10 + ( rand() & 50 ) ) - 30;
 		//	le->angles.trDelta[2] = (100 + (rand()&500)) - 300;	// roll
 
-		le->bounceFactor = 0.3;
+		le->bounceFactor = CG_BloodExtreme() ? 0.45 : 0.3;     // Extreme: chunks bounce and skid further
 		break;
 	}
 
@@ -797,6 +797,13 @@ void CG_GibPlayer( centity_t *cent, vec3_t playerOrigin, vec3_t gdir ) {
 					CG_LaunchGib( cent, origin, angles, velocity, ci->gibModels[gibIndex], size, 1 + (int)( 2.0 * ( size - 0.4 ) ) );
 				}
 			} else {
+				if ( CG_BloodExtreme() ) {
+					// Extreme: Quake 3 style burst, every part thrown hard in
+					// its own direction (plus a push from the killing blow)
+					velocity[0] = crandom() * 260 + gdir[0] * GIB_VELOCITY;
+					velocity[1] = crandom() * 260 + gdir[1] * GIB_VELOCITY;
+					velocity[2] = 220 + random() * 260;
+				}
 				CG_LaunchGib( cent, origin, angles, velocity, ci->gibModels[gibIndex], 1.0, 0 );
 				if ( CG_BloodExtreme() ) {
 					// Extreme: two or three extra chunks per body part, smaller
@@ -813,9 +820,9 @@ void CG_GibPlayer( centity_t *cent, vec3_t playerOrigin, vec3_t gdir ) {
 						if ( !model ) {
 							model = ci->gibModels[gibIndex];
 						}
-						v2[0] = velocity[0] + crandom() * GIB_VELOCITY * 1.5f;
-						v2[1] = velocity[1] + crandom() * GIB_VELOCITY * 1.5f;
-						v2[2] = velocity[2] + random() * GIB_VELOCITY;
+						v2[0] = crandom() * 340 + gdir[0] * GIB_VELOCITY;
+						v2[1] = crandom() * 340 + gdir[1] * GIB_VELOCITY;
+						v2[2] = 180 + random() * 380;
 						CG_LaunchGib( cent, origin, angles, v2, model, 0.45f + random() * 0.4f, 0 );
 					}
 				}

@@ -2993,6 +2993,9 @@ static void CL_ApplyConsoleGfxMode( qboolean rendererRunning ) {
 	CL_SetGfxCvar( "cg_wolfparticles", "1", &restart );
 	CL_SetGfxCvar( "r_finish", "0", &restart );
 	CL_SetGfxCvar( "r_vertexlight", "0", &restart );
+	// room for Extreme blood decals (read when the renderer starts)
+	CL_SetGfxCvar( "r_maxpolys", "32768", &restart );
+	CL_SetGfxCvar( "r_maxpolyverts", "131072", &restart );
 
 	if ( performance ) {
 		CL_SetGfxCvar( "com_maxfps", "120", &restart );
@@ -3065,6 +3068,8 @@ unseen, and mute while away.
 ==================
 */
 void CL_UWP_Background( qboolean background ) {
+	Com_Printf( "UWP: %s\n", background ? "entering background (suspend)" : "back in foreground (resume)" );
+	Sys_UWP_LogMemory( background ? "suspend" : "resume" );
 	Cvar_SetValue( "com_minimized", background ? 1 : 0 );
 	if ( background ) {
 		IN_Rumble( 0, 0, 0, 0 );

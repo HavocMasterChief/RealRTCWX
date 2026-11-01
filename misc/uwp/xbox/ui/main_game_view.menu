@@ -132,7 +132,7 @@
 		name view
 		group options
 		type ITEM_TYPE_MULTI
-		text "Blood"
+		text "Blood:"
 		cvar "cg_bloodMode"
 		cvarFloatList { "Default" 0 "Green" 1 "Disabled" 2 "Extreme" 3 }
 		rect 300 225 290 12

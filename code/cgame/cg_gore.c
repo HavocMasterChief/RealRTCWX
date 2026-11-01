@@ -445,7 +445,11 @@ static void CG_GoreGovernor( void ) {
 	}
 	avgMs = avgMs ? avgMs * 0.95f + cg.frametime * 0.05f : (float)cg.frametime;
 
-	target = trap_Cvar_VariableValue( "com_maxfps" );
+	{
+		char buf[32];
+		trap_Cvar_VariableStringBuffer( "com_maxfps", buf, sizeof( buf ) );
+		target = atof( buf );
+	}
 	if ( target <= 0 ) {
 		target = 60;
 	}

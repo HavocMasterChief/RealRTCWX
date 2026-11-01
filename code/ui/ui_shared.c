@@ -2901,6 +2901,56 @@ void Item_Action( itemDef_t *item ) {
 	}
 }
 
+/*
+=================
+UI_PadNavFocusedItem / UI_PadNavHover
+
+Menus show their highlight from mouseEnter/mouseExit scripts. With pad
+navigation there's no mouse, so run those scripts when focus moves.
+=================
+*/
+static itemDef_t *UI_PadNavFocusedItem( menuDef_t *menu ) {
+	int i;
+	for ( i = 0; i < menu->itemCount; i++ ) {
+		if ( menu->items[i]->window.flags & WINDOW_HASFOCUS ) {
+			return menu->items[i];
+		}
+	}
+	return NULL;
+}
+
+static void UI_PadNavHover( itemDef_t *from, itemDef_t *to ) {
+	int i;
+	menuDef_t *menu = to ? (menuDef_t *)to->parent : NULL;
+
+	qboolean fromHovered = ( from && ( from->window.flags & WINDOW_MOUSEOVER ) ) ? qtrue : qfalse;
+
+	if ( from == to ) {
+		return;
+	}
+	// leave everything that currently thinks the mouse is over it
+	if ( menu ) {
+		for ( i = 0; i < menu->itemCount; i++ ) {
+			itemDef_t *it = menu->items[i];
+			if ( it != to && ( it->window.flags & WINDOW_MOUSEOVER ) ) {
+				it->window.flags &= ~WINDOW_MOUSEOVER;
+				if ( it->mouseExit ) {
+					Item_RunScript( it, it->mouseExit );
+				}
+			}
+		}
+	}
+	if ( from && !fromHovered && from->mouseExit ) {
+		Item_RunScript( from, from->mouseExit );
+	}
+	if ( to ) {
+		to->window.flags |= WINDOW_MOUSEOVER;
+		if ( to->mouseEnter ) {
+			Item_RunScript( to, to->mouseEnter );
+		}
+	}
+}
+
 itemDef_t *Menu_SetPrevCursorItem( menuDef_t *menu ) {
 	qboolean wrapped = qfalse;
 	int oldCursor = menu->cursorItem;
@@ -2920,11 +2970,13 @@ itemDef_t *Menu_SetPrevCursorItem( menuDef_t *menu ) {
 
 		if ( UI_PadNavEnabled() ) {
 			qboolean focused;
+			itemDef_t *prev = UI_PadNavFocusedItem( menu );
 			g_padNavFocus = qtrue;
 			focused = Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory );
 			g_padNavFocus = qfalse;
 			if ( focused ) {
 				UI_PadNavMoveCursorTo( menu->items[menu->cursorItem] );
+				UI_PadNavHover( prev, menu->items[menu->cursorItem] );
 				return menu->items[menu->cursorItem];
 			}
 			continue;
@@ -2964,11 +3016,13 @@ itemDef_t *Menu_SetNextCursorItem( menuDef_t *menu ) {
 
 		if ( UI_PadNavEnabled() ) {
 			qboolean focused;
+			itemDef_t *prev = UI_PadNavFocusedItem( menu );
 			g_padNavFocus = qtrue;
 			focused = Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory );
 			g_padNavFocus = qfalse;
 			if ( focused ) {
 				UI_PadNavMoveCursorTo( menu->items[menu->cursorItem] );
+				UI_PadNavHover( prev, menu->items[menu->cursorItem] );
 				return menu->items[menu->cursorItem];
 			}
 			continue;

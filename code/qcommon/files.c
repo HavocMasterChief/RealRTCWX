@@ -4432,6 +4432,27 @@ static void FS_Startup( const char *gameName )
 	// print the current search paths
 	FS_Path_f();
 
+#ifdef RTCW_UWP
+	// Xbox bring-up: list the menu files each pak provides, so menu
+	// overrides in xbox/ui can target the names the installed paks use.
+	{
+		searchpath_t *sp;
+		int k;
+		for ( sp = fs_searchpaths; sp; sp = sp->next ) {
+			if ( !sp->pack ) {
+				continue;
+			}
+			for ( k = 0; k < sp->pack->numfiles; k++ ) {
+				const char *fn = sp->pack->buildBuffer[k].name;
+				int fl = strlen( fn );
+				if ( ( fl > 5 && !Q_stricmp( fn + fl - 5, ".menu" ) ) || !Q_stricmp( fn, "ui/menus.txt" ) ) {
+					Com_Printf( "pakmenu: %s %s\n", sp->pack->pakBasename, fn );
+				}
+			}
+		}
+	}
+#endif
+
 	fs_gamedirvar->modified = qfalse; // We just loaded, it's not modified
 
 	Com_Printf( "----------------------\n" );

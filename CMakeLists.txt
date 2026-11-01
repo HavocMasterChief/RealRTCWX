@@ -104,7 +104,8 @@ if(RTCW_UWP)
   # runtime. WinMain lives in sys_uwp.c. The exe must be flagged AppContainer.
   # 16 MB main-thread stack: the game runs on the UI thread, and the engine plus
   # Mesa's texture upload path need far more than the 1 MB default.
-  target_link_options(realrtcw PRIVATE /MANIFEST:NO /APPCONTAINER /STACK:16777216)
+  target_link_options(realrtcw PRIVATE /MANIFEST:NO /APPCONTAINER /STACK:16777216
+    /MAP:$<TARGET_FILE_DIR:realrtcw>/RealRTCW.x64.map)
 else()
   target_link_libraries(realrtcw PRIVATE opengl32)
   # win_resource.rc already embeds win_manifest.xml.

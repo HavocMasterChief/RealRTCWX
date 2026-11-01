@@ -2878,6 +2878,11 @@ shader_t *R_FindShader( const char *name, int lightmapIndex, qboolean mipRawImag
 
 	// attempt to define shader from an explicit parameter file
 	shaderText = FindShaderInShaderText( strippedName );
+#ifdef RTCW_UWP
+	if ( !Q_stricmpn( strippedName, "gore/", 5 ) ) {
+		ri.Printf( PRINT_ALL, "gore shader '%s': %s\n", strippedName, shaderText ? "found in script" : "NOT FOUND (implicit)" );
+	}
+#endif
 	{
 		// "<shader>#green": parse the base shader, but load every image as
 		// its red/green-swapped variant (green blood option).
@@ -3376,6 +3381,7 @@ a single large text block that can be scanned for shader names
 static void ScanAndLoadShaderFiles( void ) {
 	char **shaderFiles;
 	char *buffers[MAX_SHADER_FILES] = {NULL};
+	static qboolean unclosed[MAX_SHADER_FILES];
 	char *p;
 	int numShaderFiles;
 	int i;
@@ -3409,6 +3415,7 @@ static void ScanAndLoadShaderFiles( void ) {
 			ri.Error( ERR_DROP, "Couldn't load %s", filename );
 		
 		// Do a simple check on the shader structure in that file to make sure one bad shader file cannot fuck up all other shaders.
+		unclosed[i] = qfalse;
 		p = buffers[i];
 		COM_BeginParseSession(filename);
 		while(1)
@@ -3452,7 +3459,11 @@ static void ScanAndLoadShaderFiles( void ) {
 					buffers[i] = NULL;
 					break;
 				} else {
-					ri.Printf(PRINT_WARNING, ".\n");
+					// RealRTCWX: close it off when the files are joined below;
+					// otherwise the open brace swallows every shader file that
+					// follows in the joined text (they silently stop existing)
+					ri.Printf(PRINT_WARNING, " (closed automatically).\n");
+					unclosed[i] = qtrue;
 				}
 			}
 		}
@@ -3462,7 +3473,7 @@ static void ScanAndLoadShaderFiles( void ) {
 	}
 
 	// build single large buffer
-	s_shaderText = ri.Hunk_Alloc( sum + numShaderFiles*2, h_low );
+	s_shaderText = ri.Hunk_Alloc( sum + numShaderFiles*6, h_low );
 	s_shaderText[ 0 ] = '\0';
 	textEnd = s_shaderText;
 
@@ -3473,7 +3484,7 @@ static void ScanAndLoadShaderFiles( void ) {
 			continue;
 
 		strcat( textEnd, buffers[i] );
-		strcat( textEnd, "\n" );
+		strcat( textEnd, unclosed[i] ? "\n}\n" : "\n" );
 		textEnd += strlen( textEnd );
 		ri.FS_FreeFile( buffers[i] );
 	}

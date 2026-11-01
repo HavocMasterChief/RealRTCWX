@@ -197,6 +197,32 @@ trace on Xbox. Mesa uses the shared UCRT (ucrtbase.dll), not our static
 CRT, so point *that* CRT's stdout/stderr at LocalState\\stderr.txt.
 =================
 */
+static void UWP_LogLine( const char *msg ) {
+	char path[ MAX_PATH ];
+	FILE *f;
+
+	snprintf( path, sizeof( path ), "%s\\crash_info.txt", uwp_localDir );
+	f = fopen( path, "a" );
+	if ( f ) {
+		fprintf( f, "%s\n", msg );
+		fclose( f );
+	}
+}
+
+static void __cdecl UWP_OnAbort( int sig ) {
+	(void)sig;
+	UWP_LogLine( "abort() was called (SIGABRT) - usually Mesa or the C runtime giving up; see stderr.txt" );
+}
+
+static void __cdecl UWP_OnInvalidParameter( const wchar_t *expr, const wchar_t *func, const wchar_t *file,
+	unsigned int line, uintptr_t reserved ) {
+	char msg[ 512 ];
+	(void)reserved;
+	snprintf( msg, sizeof( msg ), "C runtime invalid parameter: %ls in %ls (%ls:%u)",
+		expr ? expr : L"?", func ? func : L"?", file ? file : L"?", line );
+	UWP_LogLine( msg );
+}
+
 static void UWP_CaptureStderr( void ) {
 	typedef int ( __cdecl *open_osfhandle_t )( intptr_t, int );
 	typedef int ( __cdecl *dup2_t )( int, int );
@@ -235,6 +261,34 @@ static void UWP_CaptureStderr( void ) {
 		if ( p_putenv ) {
 			// Ask Mesa to explain errors instead of failing quietly.
 			p_putenv( "MESA_DEBUG=1" );
+		}
+		{
+			// Make failed asserts print to stderr instead of a message box
+			// (none can appear on Xbox), and make abort() print + raise
+			// SIGABRT rather than fast-failing straight out of the process.
+			typedef int ( __cdecl *set_error_mode_t )( int );
+			typedef unsigned int ( __cdecl *set_abort_behavior_t )( unsigned int, unsigned int );
+			typedef void ( __cdecl *sig_handler_t )( int );
+			typedef sig_handler_t ( __cdecl *signal_t )( int, sig_handler_t );
+			typedef void ( __cdecl *iph_t )( const wchar_t *, const wchar_t *, const wchar_t *, unsigned int, uintptr_t );
+			typedef iph_t ( __cdecl *set_iph_t )( iph_t );
+			set_error_mode_t p_sem = (set_error_mode_t)GetProcAddress( ucrt, "_set_error_mode" );
+			set_abort_behavior_t p_sab = (set_abort_behavior_t)GetProcAddress( ucrt, "_set_abort_behavior" );
+			signal_t p_signal = (signal_t)GetProcAddress( ucrt, "signal" );
+			set_iph_t p_siph = (set_iph_t)GetProcAddress( ucrt, "_set_invalid_parameter_handler" );
+
+			if ( p_sem ) {
+				p_sem( 1 /* _OUT_TO_STDERR */ );
+			}
+			if ( p_sab ) {
+				p_sab( 0x1 /* _WRITE_ABORT_MSG */, 0x1 | 0x2 /* | _CALL_REPORTFAULT */ );
+			}
+			if ( p_signal ) {
+				p_signal( 22 /* SIGABRT */, UWP_OnAbort );
+			}
+			if ( p_siph ) {
+				p_siph( UWP_OnInvalidParameter );
+			}
 		}
 	}
 	{

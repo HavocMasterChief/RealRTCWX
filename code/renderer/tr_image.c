@@ -783,6 +783,14 @@ byte * gles_convertLuminanceAlpha(byte * data, int width, int height)
 Upload32
 ===============
 */
+#ifdef RTCW_UWP
+// Xbox bring-up: trace the GL calls made for built-in ("*name") images.
+static qboolean uwp_imgTrace;
+#define UWP_IMGTRACE( ... ) do { if ( uwp_imgTrace ) { ri.Printf( PRINT_ALL, __VA_ARGS__ ); } } while ( 0 )
+#else
+#define UWP_IMGTRACE( ... )
+#endif
+
 static void Upload32(   unsigned *data,
                         int width, int height,
                         qboolean mipmap,
@@ -1141,7 +1149,9 @@ static void Upload32(   unsigned *data,
 #else
     if ( ( scaled_width == width ) && ( scaled_height == height ) ) {
         if ( !mipmap ) {
+            UWP_IMGTRACE( "........direct upload %dx%d samples %d fmt 0x%x\n", scaled_width, scaled_height, samples, internalFormat );
             qglTexImage2D( GL_TEXTURE_2D, 0, internalFormat, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data );
+            UWP_IMGTRACE( "........teximage ok\n" );
             *pUploadWidth = scaled_width;
             *pUploadHeight = scaled_height;
             *format = internalFormat;
@@ -1162,13 +1172,16 @@ static void Upload32(   unsigned *data,
         memcpy( scaledBuffer, data, width * height * 4 );
     }
 
+    UWP_IMGTRACE( "........lightscale\n" );
     R_LightScaleTexture( scaledBuffer, scaled_width, scaled_height, !mipmap );
 
     *pUploadWidth = scaled_width;
     *pUploadHeight = scaled_height;
     *format = internalFormat;
 
+    UWP_IMGTRACE( "........upload %dx%d samples %d fmt 0x%x mip %d\n", scaled_width, scaled_height, samples, internalFormat, mipmap );
     qglTexImage2D( GL_TEXTURE_2D, 0, internalFormat, scaled_width, scaled_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, scaledBuffer );
+    UWP_IMGTRACE( "........teximage ok\n" );
 
     if ( mipmap ) {
         int miplevel = 0;
@@ -1234,6 +1247,11 @@ image_t *R_CreateImageExt( const char *name, byte *pic, int width, int height, i
 	int         glWrapClampMode;
 	long hash;
 	qboolean noCompress = qfalse;
+
+#ifdef RTCW_UWP
+	uwp_imgTrace = ( name && name[0] == '*' );
+	UWP_IMGTRACE( ".......create %s %dx%d\n", name, width, height );
+#endif
 
 	if ( strlen( name ) >= MAX_QPATH ) {
 		ri.Error( ERR_DROP, "R_CreateImage: \"%s\" is too long", name );
@@ -1308,8 +1326,10 @@ image_t *R_CreateImageExt( const char *name, byte *pic, int width, int height, i
 			  &image->uploadHeight,
 			  noCompress, image );
 
+	UWP_IMGTRACE( "........wrap mode 0x%x\n", glWrapClampMode );
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, glWrapClampMode );
 	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, glWrapClampMode );
+	UWP_IMGTRACE( "........done\n" );
 
 	glState.currenttextures[glState.currenttmu] = 0;
 	qglBindTexture( GL_TEXTURE_2D, 0 );

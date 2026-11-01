@@ -1689,6 +1689,9 @@ void R_CreateBuiltinImages( void ) {
 
 	// we use a solid white image instead of disabling texturing
 	memset( data, 255, sizeof( data ) );
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "......builtin image: white\n" );
+#endif
 	tr.whiteImage = R_CreateImage( "*white", (byte *)data, 8, 8, IMGTYPE_COLORALPHA, IMGFLAG_NONE, 0 );
 
 	// with overbright bits active, we need an image which is some fraction of full color,
@@ -1702,6 +1705,9 @@ void R_CreateBuiltinImages( void ) {
 		}
 	}
 
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "......builtin image: identityLight\n" );
+#endif
 	tr.identityLightImage = R_CreateImage( "*identityLight", (byte *)data, 8, 8, IMGTYPE_COLORALPHA, IMGFLAG_NONE, 0 );
 
 
@@ -1710,7 +1716,13 @@ void R_CreateBuiltinImages( void ) {
 		tr.scratchImage[x] = R_CreateImage( "*scratch", (byte *)data, DEFAULT_SIZE, DEFAULT_SIZE, IMGTYPE_COLORALPHA, IMGFLAG_PICMIP | IMGFLAG_CLAMPTOEDGE, 0 );
 	}
 
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "......builtin image: dlight\n" );
+#endif
 	R_CreateDlightImage();
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "......builtin image: fog\n" );
+#endif
 	R_CreateFogImage();
 }
 

@@ -1532,16 +1532,34 @@ void R_Init( void ) {
 	// must run before R_InitImages(): R_SetColorMappings() needs fboEnabled already set
 	FBO_Init();
 
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "...R_InitImages\n" );
+#endif
 	R_InitImages();
 
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "...R_InitShaders\n" );
+#endif
 	R_InitShaders();
 
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "...R_InitSkins\n" );
+#endif
 	R_InitSkins();
 
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "...R_ModelInit\n" );
+#endif
 	R_ModelInit();
 
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "...R_InitFreeType\n" );
+#endif
 	R_InitFreeType();
 
+#ifdef RTCW_UWP
+	ri.Printf( PRINT_ALL, "...RB_ZombieFXInit\n" );
+#endif
 	RB_ZombieFXInit();
 
 	err = qglGetError();

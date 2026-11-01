@@ -158,6 +158,74 @@ static LONG CALLBACK UWP_ExceptionLogger( EXCEPTION_POINTERS *ep ) {
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
+/*
+=================
+UWP_CaptureStderr
+
+Mesa reports fatal problems on stderr and then aborts, which leaves no
+trace on Xbox. Mesa uses the shared UCRT (ucrtbase.dll), not our static
+CRT, so point *that* CRT's stdout/stderr at LocalState\\stderr.txt.
+=================
+*/
+static void UWP_CaptureStderr( void ) {
+	typedef int ( __cdecl *open_osfhandle_t )( intptr_t, int );
+	typedef int ( __cdecl *dup2_t )( int, int );
+	typedef int ( __cdecl *putenv_t )( const char * );
+	char path[ MAX_PATH ];
+	HMODULE ucrt;
+	HANDLE h;
+
+	snprintf( path, sizeof( path ), "%s\\stderr.txt", uwp_localDir );
+	h = CreateFileA( path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+	if ( h == INVALID_HANDLE_VALUE ) {
+		return;
+	}
+	SetStdHandle( STD_ERROR_HANDLE, h );
+	SetStdHandle( STD_OUTPUT_HANDLE, h );
+
+	ucrt = GetModuleHandleA( "ucrtbase.dll" );
+	if ( ucrt ) {
+		open_osfhandle_t p_open = (open_osfhandle_t)GetProcAddress( ucrt, "_open_osfhandle" );
+		dup2_t p_dup2 = (dup2_t)GetProcAddress( ucrt, "_dup2" );
+		putenv_t p_putenv = (putenv_t)GetProcAddress( ucrt, "_putenv" );
+		HANDLE h2 = INVALID_HANDLE_VALUE;
+
+		if ( p_open && p_dup2 ) {
+			int fd = p_open( (intptr_t)h, 0 );
+			if ( fd >= 0 ) {
+				p_dup2( fd, 2 );
+			}
+			if ( DuplicateHandle( GetCurrentProcess(), h, GetCurrentProcess(), &h2, 0, FALSE, DUPLICATE_SAME_ACCESS ) ) {
+				fd = p_open( (intptr_t)h2, 0 );
+				if ( fd >= 0 ) {
+					p_dup2( fd, 1 );
+				}
+			}
+		}
+		if ( p_putenv ) {
+			// Ask Mesa to explain errors instead of failing quietly.
+			p_putenv( "MESA_DEBUG=1" );
+		}
+	}
+	{
+		const char *msg = ucrt ? "stderr captured (ucrtbase)\r\n" : "stderr: ucrtbase.dll not loaded yet\r\n";
+		DWORD w;
+		WriteFile( h, msg, (DWORD)strlen( msg ), &w, NULL );
+	}
+}
+
+static void UWP_AtExit( void ) {
+	char path[ MAX_PATH ];
+	FILE *f;
+
+	snprintf( path, sizeof( path ), "%s\\crash_info.txt", uwp_localDir );
+	f = fopen( path, "a" );
+	if ( f ) {
+		fprintf( f, "process exited through exit() (not a crash)\n" );
+		fclose( f );
+	}
+}
+
 static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 	char exePath[ MAX_PATH ];
 	char *args[ 32 ];
@@ -170,6 +238,8 @@ static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 	UWP_CopyPath( uwp_localDir, sizeof( uwp_localDir ), SDL_GetWinRTFSPath( UWP_PATH_LOCAL_FOLDER ) );
 
 	AddVectoredExceptionHandler( 1, UWP_ExceptionLogger );
+	UWP_CaptureStderr();
+	atexit( UWP_AtExit );
 
 	// Sys_Main derives the binary path from argv[0]'s directory.
 	snprintf( exePath, sizeof( exePath ), "%s\\RealRTCW.x64.exe", uwp_installDir );

@@ -104,6 +104,60 @@ void *Sys_UWP_LoadLibrary( const char *path ) {
 	return handle;
 }
 
+/*
+=================
+UWP_ExceptionLogger
+
+Vectored handler: sees crashes before WinRT or the C runtime can swallow
+them, and appends where it happened to LocalState\crash_info.txt. It only
+logs and lets the exception continue, so behaviour is otherwise unchanged.
+=================
+*/
+static LONG CALLBACK UWP_ExceptionLogger( EXCEPTION_POINTERS *ep ) {
+	static volatile LONG logged = 0;
+	DWORD code = ep->ExceptionRecord->ExceptionCode;
+	void *addr = ep->ExceptionRecord->ExceptionAddress;
+	char path[ MAX_PATH ], module[ MAX_PATH ] = "?";
+	HMODULE mod = NULL;
+	FILE *f;
+
+	if ( code != EXCEPTION_ACCESS_VIOLATION && code != EXCEPTION_ILLEGAL_INSTRUCTION &&
+		 code != EXCEPTION_STACK_OVERFLOW && code != EXCEPTION_INT_DIVIDE_BY_ZERO &&
+		 code != EXCEPTION_PRIV_INSTRUCTION && code != 0xC0000409 /* fast fail / GS */ ) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	if ( InterlockedIncrement( &logged ) > 8 ) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+	if ( GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+			(LPCSTR)addr, &mod ) && mod ) {
+		const char *base;
+		GetModuleFileNameA( mod, module, sizeof( module ) );
+		base = strrchr( module, '\\' );
+		if ( base ) {
+			memmove( module, base + 1, strlen( base + 1 ) + 1 );
+		}
+	}
+
+	snprintf( path, sizeof( path ), "%s\\crash_info.txt", uwp_localDir );
+	f = fopen( path, "a" );
+	if ( f ) {
+		fprintf( f, "exception 0x%08lX in %s+0x%llX (thread %lu)",
+			(unsigned long)code, module,
+			(unsigned long long)( (char *)addr - (char *)mod ), GetCurrentThreadId() );
+		if ( code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2 ) {
+			fprintf( f, ", %s address 0x%llX",
+				ep->ExceptionRecord->ExceptionInformation[ 0 ] == 0 ? "reading" :
+				ep->ExceptionRecord->ExceptionInformation[ 0 ] == 1 ? "writing" : "executing",
+				(unsigned long long)ep->ExceptionRecord->ExceptionInformation[ 1 ] );
+		}
+		fprintf( f, "\n" );
+		fclose( f );
+	}
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+
 static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 	char exePath[ MAX_PATH ];
 	char *args[ 32 ];
@@ -114,6 +168,8 @@ static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 
 	UWP_CopyPath( uwp_installDir, sizeof( uwp_installDir ), SDL_GetWinRTFSPath( UWP_PATH_INSTALLED_LOCATION ) );
 	UWP_CopyPath( uwp_localDir, sizeof( uwp_localDir ), SDL_GetWinRTFSPath( UWP_PATH_LOCAL_FOLDER ) );
+
+	AddVectoredExceptionHandler( 1, UWP_ExceptionLogger );
 
 	// Sys_Main derives the binary path from argv[0]'s directory.
 	snprintf( exePath, sizeof( exePath ), "%s\\RealRTCW.x64.exe", uwp_installDir );
@@ -127,6 +183,9 @@ static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 	args[ n++ ] = "+set"; args[ n++ ] = "r_mode"; args[ n++ ] = "-2";
 	args[ n++ ] = "+set"; args[ n++ ] = "in_joystick"; args[ n++ ] = "1";
 	args[ n++ ] = "+set"; args[ n++ ] = "s_useOpenAL"; args[ n++ ] = "0";
+	// The render-to-texture path (bloom etc.) crashes in FBO_Init on Mesa's
+	// D3D12 driver; render straight to the window until that's sorted out.
+	args[ n++ ] = "+set"; args[ n++ ] = "r_fbo"; args[ n++ ] = "0";
 	// Flush every console line to LocalState/main/qconsole.log so a crash
 	// still leaves a usable log to pull from Device Portal.
 	args[ n++ ] = "+set"; args[ n++ ] = "logfile"; args[ n++ ] = "2";

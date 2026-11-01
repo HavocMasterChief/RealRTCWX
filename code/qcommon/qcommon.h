@@ -1219,6 +1219,7 @@ void UWP_RequestRefreshRate( int hz );
 void IN_Rumble( float low, float high, float trigger, int ms );
 void CL_UWP_Background( qboolean background );
 void CL_UWP_SuspendSave( void );
+void SNDDMA_UWP_Pause( qboolean pause );
 #define SYS_KEEPALIVE() Sys_UWP_KeepAlive()
 #else
 #define SYS_KEEPALIVE()

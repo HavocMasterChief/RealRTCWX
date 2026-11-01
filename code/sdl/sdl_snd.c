@@ -310,8 +310,37 @@ SNDDMA_Submit
 Send sound to device if buffer isn't really the dma buffer
 ===============
 */
+#ifdef RTCW_UWP
+// Xbox: the sound device is paused while we're in the background (see
+// SNDDMA_UWP_Pause), and the stream isn't locked then: when the console
+// takes the device away, SDL's audio thread can sit holding that lock, and
+// the game would block on it and never answer the suspend request.
+static qboolean snd_uwpPaused;
+
+void SNDDMA_UWP_Pause( qboolean pause )
+{
+	if ( !sdlPlaybackStream || pause == snd_uwpPaused ) {
+		return;
+	}
+	if ( pause ) {
+		SDL_PauseAudioStreamDevice( sdlPlaybackStream );
+		snd_uwpPaused = qtrue;
+		Com_Printf( "UWP: sound paused\n" );
+	} else {
+		snd_uwpPaused = qfalse;
+		SDL_ResumeAudioStreamDevice( sdlPlaybackStream );
+		Com_Printf( "UWP: sound resumed\n" );
+	}
+}
+#endif
+
 void SNDDMA_Submit(void)
 {
+#ifdef RTCW_UWP
+	if ( snd_uwpPaused ) {
+		return;
+	}
+#endif
 	SDL_UnlockAudioStream(sdlPlaybackStream);
 }
 
@@ -322,6 +351,11 @@ SNDDMA_BeginPainting
 */
 void SNDDMA_BeginPainting (void)
 {
+#ifdef RTCW_UWP
+	if ( snd_uwpPaused ) {
+		return;     // nothing reads the buffer while paused; no lock needed
+	}
+#endif
 	SDL_LockAudioStream(sdlPlaybackStream);
 }
 

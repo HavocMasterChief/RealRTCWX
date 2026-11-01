@@ -1213,11 +1213,13 @@ static void IN_ProcessEvents( void )
 #ifdef RTCW_UWP
 			case SDL_EVENT_WINDOW_FOCUS_LOST :
 				Com_Printf( "UWP: focus lost (Guide / overlay)\n" );
+				SNDDMA_UWP_Pause( qtrue );          // while the device still works
 				Cvar_SetValue( "com_unfocused", 1 );
 				CL_UWP_Background( qtrue );     // pause, mute, stop rumble
 				break;
 			case SDL_EVENT_WINDOW_FOCUS_GAINED :
 				Com_Printf( "UWP: focus back\n" );
+				SNDDMA_UWP_Pause( qfalse );
 				Cvar_SetValue( "com_unfocused", 0 );
 				Cvar_SetValue( "com_minimized", 0 );     // the pause above set it
 				break;

@@ -2225,6 +2225,7 @@ separate file or a ZIP file.
 */
 long FS_FOpenFileRead(const char *filename, fileHandle_t *file, qboolean uniqueFILE)
 {
+	SYS_KEEPALIVE();
 	searchpath_t *search;
 	long len;
 	qboolean isLocalConfig;
@@ -2707,6 +2708,7 @@ If searchPath is non-NULL search only in that specific search path
 */
 long FS_ReadFileDir(const char *qpath, void *searchPath, qboolean unpure, void **buffer)
 {
+	SYS_KEEPALIVE();
 	fileHandle_t h;
 	searchpath_t	*search;
 	byte*           buf;

@@ -106,6 +106,36 @@ void *Sys_UWP_LoadLibrary( const char *path ) {
 
 /*
 =================
+Sys_UWP_KeepAlive
+
+SDL3-uwp runs the game on the app's UI thread, and the window only gets
+activated (and the system only sees the app as alive) when that thread
+pumps events. RtCW's startup can go many seconds without pumping (indexing
+2 GB of paks, building textures, parsing shaders), and the Xbox kills an
+app that doesn't respond. Long-running code paths call this; it pumps at
+most every 50 ms.
+=================
+*/
+void Sys_UWP_KeepAlive( void ) {
+	static Uint64 last = 0;
+	static int busy = 0;
+	Uint64 now;
+
+	if ( busy || !SDL_WasInit( SDL_INIT_VIDEO ) ) {
+		return;
+	}
+	now = SDL_GetTicks();
+	if ( now - last < 50 ) {
+		return;
+	}
+	last = now;
+	busy = 1;
+	SDL_PumpEvents();
+	busy = 0;
+}
+
+/*
+=================
 UWP_ExceptionLogger
 
 Vectored handler: sees crashes before WinRT or the C runtime can swallow
@@ -240,6 +270,11 @@ static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 	AddVectoredExceptionHandler( 1, UWP_ExceptionLogger );
 	UWP_CaptureStderr();
 	atexit( UWP_AtExit );
+
+	// Bring up SDL video right away and pump once, so the CoreWindow is
+	// activated before the long engine startup begins.
+	SDL_InitSubSystem( SDL_INIT_VIDEO );
+	SDL_PumpEvents();
 
 	// Sys_Main derives the binary path from argv[0]'s directory.
 	snprintf( exePath, sizeof( exePath ), "%s\\RealRTCW.x64.exe", uwp_installDir );

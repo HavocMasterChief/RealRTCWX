@@ -184,6 +184,8 @@ void QDECL Com_Printf( const char *fmt, ... ) {
 	char msg[MAXPRINTMSG];
 	static qboolean opening_qconsole = qfalse;
 
+	SYS_KEEPALIVE();
+
 	va_start( argptr,fmt );
 	Q_vsnprintf( msg, sizeof (msg), fmt, argptr );
 	va_end( argptr );

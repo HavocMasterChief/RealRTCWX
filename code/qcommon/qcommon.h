@@ -1212,6 +1212,13 @@ typedef enum
 
 dialogResult_t Sys_Dialog( dialogType_t type, const char *message, const char *title );
 
+#ifdef RTCW_UWP
+void Sys_UWP_KeepAlive( void );
+#define SYS_KEEPALIVE() Sys_UWP_KeepAlive()
+#else
+#define SYS_KEEPALIVE()
+#endif
+
 void Sys_RemovePIDFile( const char *gamedir );
 void Sys_InitPIDFile( const char *gamedir );
 

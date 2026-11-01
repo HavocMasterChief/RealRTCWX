@@ -24,6 +24,39 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 
 #include "cg_local.h"
 
+/*
+===============
+CG_GoreLog
+
+Writes to gore_log.txt (in LocalState\\main on Xbox) so effects that
+don't show up can be diagnosed without spamming the screen.
+===============
+*/
+static fileHandle_t goLogFile;
+static int goLogLines;
+
+static void QDECL CG_GoreLog( const char *fmt, ... ) {
+	va_list ap;
+	char buf[512];
+	int len;
+
+	if ( goLogLines > 4000 ) {
+		return;     // enough
+	}
+	if ( !goLogFile ) {
+		trap_FS_FOpenFile( "gore_log.txt", &goLogFile, FS_APPEND_SYNC );   // synced: survives a crash
+		if ( !goLogFile ) {
+			return;
+		}
+	}
+	len = Com_sprintf( buf, sizeof( buf ), "%8i ", cg.time );
+	va_start( ap, fmt );
+	Q_vsnprintf( buf + len, sizeof( buf ) - len, fmt, ap );
+	va_end( ap );
+	trap_FS_Write( buf, strlen( buf ), goLogFile );
+	goLogLines++;
+}
+
 #define GORE_MAX_POOLS          24
 #define GORE_MAX_DRIPS          16
 #define GORE_MAX_RUNS           24
@@ -183,14 +216,15 @@ static float CG_GoreLightAt( const vec3_t point ) {
 // blood colour at a given light level, as vertex colours
 static void CG_GoreColor( float light, float alpha, byte *out ) {
 	// about the darkness of the game's own blood decals
+	float k = 0.55f + 0.45f * light;    // mostly constant, a little darker in shadow
 	if ( cg_bloodMode.integer == BLOODMODE_GREEN ) {
-		out[0] = (byte)( 18 * light );
-		out[1] = (byte)( 85 * light );
-		out[2] = (byte)( 10 * light );
+		out[0] = (byte)( 25 * k );
+		out[1] = (byte)( 95 * k );
+		out[2] = (byte)( 12 * k );
 	} else {
-		out[0] = (byte)( 80 * light );
-		out[1] = (byte)( 4 * light );
-		out[2] = (byte)( 4 * light );
+		out[0] = (byte)( 105 * k );
+		out[1] = (byte)( 8 * k );
+		out[2] = (byte)( 8 * k );
 	}
 	out[3] = (byte)( 255 * alpha );
 }
@@ -246,6 +280,7 @@ static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime ) 
 									  (float *)&markPoints[0], GORE_POOL_MAX_FRAGS, frags );
 	if ( numFrags <= 0 ) {
 		p->active = qfalse;
+		CG_GoreLog( "pool: no surface under (%.0f %.0f %.0f)\n", origin[0], origin[1], origin[2] );
 		return;
 	}
 
@@ -278,6 +313,7 @@ static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime ) 
 	p->radius = radius;
 	p->variant = rand() & 1;
 	p->light = CG_GoreLightAt( origin );
+	CG_GoreLog( "pool: spawned at (%.0f %.0f %.0f) r=%.0f frags=%i light=%.2f\n", origin[0], origin[1], origin[2], radius, p->numFragments, p->light );
 	VectorCopy( origin, p->origin );
 }
 
@@ -298,6 +334,8 @@ static void CG_GorePoolAt( const vec3_t point, float radius, int growTime ) {
 	end[2] -= 96;
 	CG_Trace( &tr, start, NULL, NULL, end, -1, MASK_SOLID );
 	if ( tr.fraction >= 1.0f || tr.startsolid || tr.plane.normal[2] < 0.7f ) {
+		CG_GoreLog( "pool: no floor below (%.0f %.0f %.0f) frac=%.2f startsolid=%i nz=%.2f\n",
+					point[0], point[1], point[2], tr.fraction, tr.startsolid, tr.plane.normal[2] );
 		return;
 	}
 	CG_GoreSpawnPool( tr.endpos, radius, growTime );
@@ -363,6 +401,7 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 		len += 3.0f;
 	}
 	if ( len < 10 ) {
+		CG_GoreLog( "run: too short (%.0f) at (%.0f %.0f %.0f)\n", len, point[0], point[1], point[2] );
 		return;
 	}
 
@@ -380,6 +419,7 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 	numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_RUN_MAX_POINTS,
 									  (float *)&markPoints[0], GORE_RUN_MAX_FRAGS, frags );
 	if ( numFrags <= 0 ) {
+		CG_GoreLog( "run: no wall surface at (%.0f %.0f %.0f)\n", point[0], point[1], point[2] );
 		return;
 	}
 
@@ -417,6 +457,7 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 	// creeps down: 10-20 s for the full length
 	r->runTime = 10000 + rand() % 10000;
 	r->light = CG_GoreLightAt( point );
+	CG_GoreLog( "run: spawned at (%.0f %.0f %.0f) len=%.0f frags=%i pools=%i light=%.2f\n", point[0], point[1], point[2], len, r->numFragments, pools, r->light );
 }
 
 /*
@@ -586,6 +627,7 @@ static void CG_GoreCheckBodies( void ) {
 		}
 		goPooled[num] = qtrue;
 		cent = &cg_entities[num];
+		CG_GoreLog( "body %i dead (aiChar %i): starting pool\n", num, s->aiChar );
 		CG_GorePoolAt( cent->lerpOrigin, ( CG_BloodExtreme() ? 40 : 30 ) + random() * 12,
 					   CG_BloodExtreme() ? 15000 : 20000 );
 	}
@@ -606,10 +648,16 @@ static void CG_GoreGovernor( void ) {
 	float target, fps, limit;
 	int i, oldest;
 
-	if ( cg.frametime <= 0 || cg.frametime > 250 ) {
-		return;     // pauses, loads and hitches don't count
+	static int lastReal;
+	int now = trap_Milliseconds(), ms = now - lastReal;
+
+	lastReal = now;
+	// real frame time (the game clock can step unevenly); pauses, loads and
+	// hitches don't count
+	if ( ms <= 0 || ms > 250 || cg.frametime <= 0 ) {
+		return;
 	}
-	avgMs = avgMs ? avgMs * 0.95f + cg.frametime * 0.05f : (float)cg.frametime;
+	avgMs = avgMs ? avgMs * 0.95f + ms * 0.05f : (float)ms;
 	fps = 1000.0f / avgMs;
 
 	{
@@ -646,6 +694,7 @@ static void CG_GoreGovernor( void ) {
 		return;
 	}
 	lastTrim = cg.time;
+	CG_GoreLog( "governor: fps %.1f below %.1f (baseline %.1f) - trimming\n", fps, limit, baseline );
 
 	// drips first, then runs, then pools, then decals
 	for ( oldest = -1, i = 0; i < GORE_MAX_DRIPS; i++ ) {
@@ -986,7 +1035,7 @@ void CG_DrawGoreScreen( void ) {
 		static float light = 1.0f;
 		float target = CG_GoreLightAt( cg.refdef.vieworg );
 		light += ( target - light ) * 0.1f;
-		color[0] = color[1] = color[2] = 0.1f + 0.7f * light;
+		color[0] = color[1] = color[2] = 0.45f + 0.35f * light;
 	}
 
 	for ( i = 0; i < GORE_MAX_SCREEN; i++ ) {

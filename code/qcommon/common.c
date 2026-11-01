@@ -226,6 +226,10 @@ void QDECL Com_Printf( const char *fmt, ... ) {
 #ifdef RTCW_UWP
 			// keep the previous session's log: if the console closed the game
 			// (e.g. while suspended), that's the one that says what happened
+			// keep the last three sessions
+			if ( FS_FileExists( "rtcwconsole_prev.log" ) ) {
+				FS_Rename( "rtcwconsole_prev.log", "rtcwconsole_prev2.log" );
+			}
 			if ( FS_FileExists( "rtcwconsole.log" ) ) {
 				FS_Rename( "rtcwconsole.log", "rtcwconsole_prev.log" );
 			}

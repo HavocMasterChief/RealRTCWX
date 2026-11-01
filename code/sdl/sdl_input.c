@@ -73,7 +73,12 @@ right-trigger motor; all 0..1.
 // again until we're resumed. Save the game here.
 static bool SDLCALL IN_UWP_EventWatch( void *userdata, SDL_Event *event ) {
 	if ( event->type == SDL_EVENT_WILL_ENTER_BACKGROUND ) {
+		Com_Printf( "UWP: suspend requested\n" );
+		Sys_UWP_LogMemory( "suspend requested" );
 		CL_UWP_SuspendSave();
+		Com_Printf( "UWP: ready to suspend\n" );
+	} else if ( event->type == SDL_EVENT_WILL_ENTER_FOREGROUND ) {
+		Com_Printf( "UWP: resuming\n" );   // anything after this in the log happened after resume
 	}
 	return true;
 }

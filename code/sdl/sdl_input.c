@@ -1203,11 +1203,28 @@ static void IN_ProcessEvents( void )
 			}
 			break;
 
+#ifdef RTCW_UWP
+			case SDL_EVENT_WINDOW_MINIMIZED :    Com_Printf( "UWP: window hidden\n" ); Cvar_SetValue( "com_minimized", 1 ); break;
+#else
 			case SDL_EVENT_WINDOW_MINIMIZED :    Cvar_SetValue( "com_minimized", 1 ); break;
+#endif
 			case SDL_EVENT_WINDOW_RESTORED :
 			case SDL_EVENT_WINDOW_MAXIMIZED :    Cvar_SetValue( "com_minimized", 0 ); break;
+#ifdef RTCW_UWP
+			case SDL_EVENT_WINDOW_FOCUS_LOST :
+				Com_Printf( "UWP: focus lost (Guide / overlay)\n" );
+				Cvar_SetValue( "com_unfocused", 1 );
+				CL_UWP_Background( qtrue );     // pause, mute, stop rumble
+				break;
+			case SDL_EVENT_WINDOW_FOCUS_GAINED :
+				Com_Printf( "UWP: focus back\n" );
+				Cvar_SetValue( "com_unfocused", 0 );
+				Cvar_SetValue( "com_minimized", 0 );     // the pause above set it
+				break;
+#else
 			case SDL_EVENT_WINDOW_FOCUS_LOST :   Cvar_SetValue( "com_unfocused", 1 ); break;
 			case SDL_EVENT_WINDOW_FOCUS_GAINED : Cvar_SetValue( "com_unfocused", 0 ); break;
+#endif
 #ifdef RTCW_UWP
 			case SDL_EVENT_WILL_ENTER_BACKGROUND :
 			case SDL_EVENT_DID_ENTER_BACKGROUND :  CL_UWP_Background( qtrue ); break;

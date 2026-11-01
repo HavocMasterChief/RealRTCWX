@@ -741,6 +741,15 @@ void SCR_UpdateScreen( void ) {
 	}
 	recursive = 1;
 
+#ifdef RTCW_UWP
+	// Xbox: don't draw while the Guide is open or we're in the background.
+	// A backgrounded game loses the GPU; a frame caught mid-draw would wait
+	// forever and the console would kill us instead of suspending.
+	if ( com_unfocused && com_unfocused->integer ) {
+		recursive = 0;
+		return;
+	}
+#endif
 	if( ( uivm || com_dedicated->integer ) && !com_minimized->integer )
 	{
 		// XXX

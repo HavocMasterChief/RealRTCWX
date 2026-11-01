@@ -76,6 +76,8 @@ typedef struct {
 	float st[GORE_POOL_MAX_POINTS][2];  // texture coords at full size
 	int variant;
 	float light;            // level light at the pool, 0..1
+	int entityNum;          // surface it's on (moving objects like the tram)
+	vec3_t entOrigin;
 } gorePool_t;
 
 typedef struct {
@@ -104,6 +106,8 @@ typedef struct {
 	vec3_t xyz[GORE_RUN_MAX_POINTS];
 	float st[GORE_RUN_MAX_POINTS][2];
 	float light;
+	int entityNum;
+	vec3_t entOrigin;
 } goreRun_t;
 
 static gorePool_t goPools[GORE_MAX_POOLS];
@@ -128,6 +132,8 @@ struct goreFoot_s {
 	qboolean active;
 	int startTime;
 	float light, strength;
+	int entityNum;
+	vec3_t entOrigin;
 	int numFragments;
 	int fragFirst[GORE_FOOT_MAX_FRAGS];
 	int fragCount[GORE_FOOT_MAX_FRAGS];
@@ -183,6 +189,45 @@ void CG_GoreReset( void ) {
 
 static qboolean CG_GoreEnabled( void ) {
 	return ( cg_blood.integer && cg_bloodMode.integer != BLOODMODE_OFF ) ? qtrue : qfalse;
+}
+
+/*
+===============
+Moving surfaces
+
+Blood that lands on a moving object (the tram, lifts, doors) belongs to
+that object: remember where it was, and offset the effect by how far it
+has moved since.
+===============
+*/
+static void CG_GoreAttach( int entityNum, int *outEnt, vec3_t outOrigin ) {
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES && entityNum != ENTITYNUM_WORLD ) {
+		*outEnt = entityNum;
+		VectorCopy( cg_entities[entityNum].lerpOrigin, outOrigin );
+	} else {
+		*outEnt = ENTITYNUM_WORLD;
+		VectorClear( outOrigin );
+	}
+}
+
+static void CG_GoreAttachOffset( int entityNum, const vec3_t origin0, vec3_t out ) {
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES && entityNum != ENTITYNUM_WORLD ) {
+		VectorSubtract( cg_entities[entityNum].lerpOrigin, origin0, out );
+	} else {
+		VectorClear( out );
+	}
+}
+
+// One quad as a fallback "fragment" when the surface isn't world geometry
+// (decal projection only works on the world).
+static int CG_GoreQuadFragment( vec3_t quad[4], const vec3_t lift, vec5_t *points, markFragment_t *frag ) {
+	int i;
+	for ( i = 0; i < 4; i++ ) {
+		VectorAdd( quad[i], lift, points[i] );
+	}
+	frag->firstPoint = 0;
+	frag->numPoints = 4;
+	return 1;
 }
 
 /*
@@ -252,7 +297,7 @@ CG_GoreSpawnPool
 Projects a pool onto the surface below 'origin' at full size.
 ===============
 */
-static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime ) {
+static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime, int entityNum ) {
 	gorePool_t *p;
 	vec3_t axis[3], points[4], projection, delta;
 	markFragment_t frags[GORE_POOL_MAX_FRAGS], *mf;
@@ -276,12 +321,16 @@ static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime ) 
 	}
 	VectorScale( up, -24, projection );
 
-	numFrags = trap_CM_MarkFragments( 0, (void *)points, projection, GORE_POOL_MAX_POINTS,
-									  (float *)&markPoints[0], GORE_POOL_MAX_FRAGS, frags );
+	numFrags = 0;
+	if ( entityNum == ENTITYNUM_WORLD ) {
+		numFrags = trap_CM_MarkFragments( 0, (void *)points, projection, GORE_POOL_MAX_POINTS,
+										  (float *)&markPoints[0], GORE_POOL_MAX_FRAGS, frags );
+	}
 	if ( numFrags <= 0 ) {
-		p->active = qfalse;
-		CG_GoreLog( "pool: no surface under (%.0f %.0f %.0f)\n", origin[0], origin[1], origin[2] );
-		return;
+		// a moving object or a surface the projection missed: a flat quad
+		static const vec3_t lift = { 0, 0, 0.25f };
+		numFrags = CG_GoreQuadFragment( points, lift, markPoints, frags );
+		CG_GoreLog( "pool: using a flat quad (entity %i)\n", entityNum );
 	}
 
 	texScale = 0.5f / radius;
@@ -313,6 +362,7 @@ static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime ) 
 	p->radius = radius;
 	p->variant = rand() & 1;
 	p->light = CG_GoreLightAt( origin );
+	CG_GoreAttach( entityNum, &p->entityNum, p->entOrigin );
 	CG_GoreLog( "pool: spawned at (%.0f %.0f %.0f) r=%.0f frags=%i light=%.2f\n", origin[0], origin[1], origin[2], radius, p->numFragments, p->light );
 	VectorCopy( origin, p->origin );
 }
@@ -338,7 +388,7 @@ static void CG_GorePoolAt( const vec3_t point, float radius, int growTime ) {
 					point[0], point[1], point[2], tr.fraction, tr.startsolid, tr.plane.normal[2] );
 		return;
 	}
-	CG_GoreSpawnPool( tr.endpos, radius, growTime );
+	CG_GoreSpawnPool( tr.endpos, radius, growTime, tr.entityNum );
 }
 
 /*
@@ -361,8 +411,9 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 	float d, maxLen, len, width;
 	int i, j, n, numFrags, outPoints = 0;
 	qboolean pools = qfalse;
+	int wallEnt;
 
-	// only on the world, and not right next to another run
+	// not right next to another run
 	for ( i = 0; i < GORE_MAX_RUNS; i++ ) {
 		if ( goRuns[i].active && Distance( goRuns[i].start, point ) < 28 ) {
 			return;
@@ -374,6 +425,16 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 		return;
 	}
 	CrossProduct( normal, rdown, side );
+
+	// what is the splat on? (the world, or a moving object like the tram)
+	VectorMA( point, 1.0f, normal, a );
+	VectorMA( point, -4.0f, normal, b );
+	CG_Trace( &tr, a, NULL, NULL, b, -1, MASK_SOLID );
+	if ( tr.fraction >= 1.0f ) {
+		CG_GoreLog( "run: no wall behind (%.0f %.0f %.0f)\n", point[0], point[1], point[2] );
+		return;
+	}
+	wallEnt = tr.entityNum;
 
 	maxLen = 32 + random() * 72;
 	VectorMA( point, 1.0f, normal, prev );
@@ -393,8 +454,8 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 		VectorMA( cur, 1.0f, normal, a );
 		VectorMA( cur, -4.0f, normal, b );
 		CG_Trace( &tr, a, NULL, NULL, b, -1, MASK_SOLID );
-		if ( tr.fraction >= 1.0f || tr.entityNum != ENTITYNUM_WORLD ||
-			 DotProduct( tr.plane.normal, normal ) < 0.95f ) {
+		if ( tr.fraction >= 1.0f || tr.entityNum != wallEnt ||
+			 DotProduct( tr.plane.normal, normal ) < 0.85f ) {
 			break;
 		}
 		VectorCopy( cur, prev );
@@ -416,11 +477,18 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 		quad[3][i] = top[i] - width * side[i] + len * rdown[i];
 	}
 	VectorScale( normal, -6.0f, projection );
-	numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_RUN_MAX_POINTS,
-									  (float *)&markPoints[0], GORE_RUN_MAX_FRAGS, frags );
+	numFrags = 0;
+	if ( wallEnt == ENTITYNUM_WORLD ) {
+		numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_RUN_MAX_POINTS,
+										  (float *)&markPoints[0], GORE_RUN_MAX_FRAGS, frags );
+	}
 	if ( numFrags <= 0 ) {
-		CG_GoreLog( "run: no wall surface at (%.0f %.0f %.0f)\n", point[0], point[1], point[2] );
-		return;
+		// a moving object: a flat strip on the wall (the walk above already
+		// checked the wall is there for the whole length)
+		vec3_t lift;
+		VectorScale( normal, -1.85f, lift );
+		numFrags = CG_GoreQuadFragment( quad, lift, markPoints, frags );
+		CG_GoreLog( "run: flat strip (entity %i)\n", wallEnt );
 	}
 
 	GORE_ALLOC( goRuns, GORE_MAX_RUNS, r );
@@ -457,6 +525,7 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 	// creeps down: 10-20 s for the full length
 	r->runTime = 10000 + rand() % 10000;
 	r->light = CG_GoreLightAt( point );
+	CG_GoreAttach( wallEnt, &r->entityNum, r->entOrigin );
 	CG_GoreLog( "run: spawned at (%.0f %.0f %.0f) len=%.0f frags=%i pools=%i light=%.2f\n", point[0], point[1], point[2], len, r->numFragments, pools, r->light );
 }
 
@@ -501,6 +570,9 @@ static void CG_GoreDrawPool( gorePool_t *p, qhandle_t shader ) {
 	polyVert_t verts[MAX_VERTS_ON_POLY];
 	float growth, inv;
 	int i, j;
+	vec3_t ofs;
+
+	CG_GoreAttachOffset( p->entityNum, p->entOrigin, ofs );
 
 	growth = (float)( cg.time - p->startTime ) / (float)p->growTime;
 	if ( growth > 1.0f ) {
@@ -516,7 +588,7 @@ static void CG_GoreDrawPool( gorePool_t *p, qhandle_t shader ) {
 	for ( i = 0; i < p->numFragments; i++ ) {
 		int first = p->fragFirst[i], n = p->fragCount[i];
 		for ( j = 0; j < n; j++ ) {
-			VectorCopy( p->xyz[first + j], verts[j].xyz );
+			VectorAdd( p->xyz[first + j], ofs, verts[j].xyz );
 			verts[j].st[0] = 0.5f + ( p->st[first + j][0] - 0.5f ) * inv;
 			verts[j].st[1] = 0.5f + ( p->st[first + j][1] - 0.5f ) * inv;
 			CG_GoreColor( p->light, 0.92f, verts[j].modulate );
@@ -529,6 +601,9 @@ static void CG_GoreDrawRun( goreRun_t *r, qhandle_t shader ) {
 	polyVert_t verts[MAX_VERTS_ON_POLY];
 	float frac, inv;
 	int i, j;
+	vec3_t ofs;
+
+	CG_GoreAttachOffset( r->entityNum, r->entOrigin, ofs );
 
 	frac = (float)( cg.time - r->startTime ) / (float)r->runTime;
 	if ( frac > 1.0f ) {
@@ -545,7 +620,7 @@ static void CG_GoreDrawRun( goreRun_t *r, qhandle_t shader ) {
 	for ( i = 0; i < r->numFragments; i++ ) {
 		int first = r->fragFirst[i], n = r->fragCount[i];
 		for ( j = 0; j < n; j++ ) {
-			VectorCopy( r->xyz[first + j], verts[j].xyz );
+			VectorAdd( r->xyz[first + j], ofs, verts[j].xyz );
 			verts[j].st[0] = r->st[first + j][0];
 			verts[j].st[1] = r->st[first + j][1] * inv;
 			CG_GoreColor( r->light, 0.9f, verts[j].modulate );
@@ -554,8 +629,10 @@ static void CG_GoreDrawRun( goreRun_t *r, qhandle_t shader ) {
 	}
 
 	if ( frac >= 0.98f && r->pools && !r->pooled ) {
+		vec3_t end;
 		r->pooled = qtrue;
-		CG_GorePoolAt( r->end, 9 + random() * 7, 9000 );
+		VectorAdd( r->end, ofs, end );
+		CG_GorePoolAt( end, 9 + random() * 7, 9000 );
 	}
 }
 
@@ -751,7 +828,7 @@ static void CG_GoreFeetReset( void ) {
 	goFootSteps = 0;
 }
 
-static void CG_GoreSpawnFoot( const vec3_t point, const vec3_t normal, const vec3_t forward, float strength, qboolean left ) {
+static void CG_GoreSpawnFoot( const vec3_t point, const vec3_t normal, const vec3_t forward, float strength, qboolean left, int entityNum ) {
 	goreFoot_t *f;
 	vec3_t fwd, right, quad[4], projection, delta;
 	markFragment_t frags[GORE_FOOT_MAX_FRAGS], *mf;
@@ -774,10 +851,15 @@ static void CG_GoreSpawnFoot( const vec3_t point, const vec3_t normal, const vec
 		quad[3][i] = point[i] - fwd[i] * halfLen - right[i] * halfWid + normal[i] * 2;
 	}
 	VectorScale( normal, -8.0f, projection );
-	numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_FOOT_MAX_POINTS,
-									  (float *)&markPoints[0], GORE_FOOT_MAX_FRAGS, frags );
+	numFrags = 0;
+	if ( entityNum == ENTITYNUM_WORLD ) {
+		numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_FOOT_MAX_POINTS,
+										  (float *)&markPoints[0], GORE_FOOT_MAX_FRAGS, frags );
+	}
 	if ( numFrags <= 0 ) {
-		return;
+		vec3_t lift;
+		VectorScale( normal, -1.85f, lift );
+		numFrags = CG_GoreQuadFragment( quad, lift, markPoints, frags );
 	}
 	GORE_ALLOC( goFeet, GORE_MAX_FEET, f );
 	for ( i = 0, mf = frags; i < numFrags; i++, mf++ ) {
@@ -808,6 +890,7 @@ static void CG_GoreSpawnFoot( const vec3_t point, const vec3_t normal, const vec
 	f->startTime = cg.time;
 	f->strength = strength;
 	f->light = CG_GoreLightAt( point );
+	CG_GoreAttach( entityNum, &f->entityNum, f->entOrigin );
 }
 
 // did the player step in a pool? lay a print every stride while bloody
@@ -831,8 +914,12 @@ static void CG_GoreUpdateFeet( void ) {
 			g = 1.0f;
 		}
 		g = 1.0f - ( 1.0f - g ) * ( 1.0f - g );
-		dx = ps->origin[0] - p->origin[0];
-		dy = ps->origin[1] - p->origin[1];
+		{
+			vec3_t ofs;
+			CG_GoreAttachOffset( p->entityNum, p->entOrigin, ofs );
+			dx = ps->origin[0] - ( p->origin[0] + ofs[0] );
+			dy = ps->origin[1] - ( p->origin[1] + ofs[1] );
+		}
 		if ( g > 0.25f && dx * dx + dy * dy < ( p->radius * g * 0.7f ) * ( p->radius * g * 0.7f ) ) {
 			if ( goFootSteps <= 0 ) {
 				VectorCopy( ps->origin, goFootLast );
@@ -863,7 +950,7 @@ static void CG_GoreUpdateFeet( void ) {
 	CG_Trace( &tr, start, NULL, NULL, end, ps->clientNum, MASK_SOLID );
 	if ( tr.fraction < 1.0f && !tr.startsolid && tr.plane.normal[2] > 0.7f ) {
 		CG_GoreSpawnFoot( tr.endpos, tr.plane.normal, forward,
-						  (float)goFootSteps / GORE_FOOT_STEPS, goFootLeft );
+						  (float)goFootSteps / GORE_FOOT_STEPS, goFootLeft, tr.entityNum );
 	}
 	goFootSteps--;
 }
@@ -871,11 +958,14 @@ static void CG_GoreUpdateFeet( void ) {
 static void CG_GoreDrawFoot( goreFoot_t *f ) {
 	polyVert_t verts[MAX_VERTS_ON_POLY];
 	int i, j;
+	vec3_t ofs;
+
+	CG_GoreAttachOffset( f->entityNum, f->entOrigin, ofs );
 
 	for ( i = 0; i < f->numFragments; i++ ) {
 		int first = f->fragFirst[i], n = f->fragCount[i];
 		for ( j = 0; j < n; j++ ) {
-			VectorCopy( f->xyz[first + j], verts[j].xyz );
+			VectorAdd( f->xyz[first + j], ofs, verts[j].xyz );
 			verts[j].st[0] = f->st[first + j][0];
 			verts[j].st[1] = f->st[first + j][1];
 			CG_GoreColor( f->light, 0.25f + 0.65f * f->strength, verts[j].modulate );

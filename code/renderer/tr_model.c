@@ -1621,6 +1621,49 @@ static qboolean R_LoadMDR( model_t *mod, void *buffer, int filesize, const char 
 R_LoadMDS
 =================
 */
+#ifdef RTCW_UWP
+/*
+=================
+R_DumpMDSSkeleton
+
+RealRTCWX: writes each skeletal model's bones (index, name, parent, flags,
+parent distance) and tags to mds_bones.txt, for building the ragdolls.
+=================
+*/
+static void R_DumpMDSSkeleton( mdsHeader_t *mds, const char *name ) {
+	static char dump[65536];
+	static int len;
+	static char seen[64][MAX_QPATH];
+	static int numSeen;
+	mdsBoneInfo_t *bi;
+	mdsTag_t *tag;
+	int i;
+
+	for ( i = 0; i < numSeen; i++ ) {
+		if ( !Q_stricmp( seen[i], name ) ) {
+			return;
+		}
+	}
+	if ( numSeen >= 64 || len > (int)sizeof( dump ) - 8192 ) {
+		return;
+	}
+	Q_strncpyz( seen[numSeen++], name, MAX_QPATH );
+
+	len += Com_sprintf( dump + len, sizeof( dump ) - len, "== %s  bones %d  tags %d  torsoParent %d  frames %d\n",
+						name, mds->numBones, mds->numTags, mds->torsoParent, mds->numFrames );
+	bi = ( mdsBoneInfo_t * )( (byte *)mds + mds->ofsBones );
+	for ( i = 0; i < mds->numBones && len < (int)sizeof( dump ) - 256; i++ ) {
+		len += Com_sprintf( dump + len, sizeof( dump ) - len, "  bone %3d %-32s parent %3d flags %d dist %.2f tw %.2f\n",
+							i, bi[i].name, bi[i].parent, bi[i].flags, bi[i].parentDist, bi[i].torsoWeight );
+	}
+	tag = ( mdsTag_t * )( (byte *)mds + mds->ofsTags );
+	for ( i = 0; i < mds->numTags && len < (int)sizeof( dump ) - 256; i++ ) {
+		len += Com_sprintf( dump + len, sizeof( dump ) - len, "  tag  %-32s bone %3d\n", tag[i].name, tag[i].boneIndex );
+	}
+	ri.FS_WriteFile( "mds_bones.txt", dump, len );
+}
+#endif
+
 static qboolean R_LoadMDS( model_t *mod, void *buffer, const char *mod_name ) {
 	int i, j, k;
 	mdsHeader_t         *pinmodel, *mds;
@@ -1799,6 +1842,9 @@ static qboolean R_LoadMDS( model_t *mod, void *buffer, const char *mod_name ) {
 		surf = ( mdsSurface_t * )( (byte *)surf + surf->ofsEnd );
 	}
 
+#ifdef RTCW_UWP
+	R_DumpMDSSkeleton( mds, mod_name );
+#endif
 	return qtrue;
 }
 

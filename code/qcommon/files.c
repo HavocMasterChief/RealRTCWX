@@ -4438,6 +4438,8 @@ static void FS_Startup( const char *gameName )
 	{
 		searchpath_t *sp;
 		int k;
+		// FS starts before the log file opens, so write the list to its own file.
+		FILE *mf = Sys_FOpen( FS_BuildOSPath( fs_homepath->string, "", "pak_menus.txt" ), "wb" );
 		for ( sp = fs_searchpaths; sp; sp = sp->next ) {
 			if ( !sp->pack ) {
 				continue;
@@ -4446,9 +4448,19 @@ static void FS_Startup( const char *gameName )
 				const char *fn = sp->pack->buildBuffer[k].name;
 				int fl = strlen( fn );
 				if ( ( fl > 5 && !Q_stricmp( fn + fl - 5, ".menu" ) ) || !Q_stricmp( fn, "ui/menus.txt" ) ) {
-					Com_Printf( "pakmenu: %s %s\n", sp->pack->pakBasename, fn );
+					if ( mf ) {
+						fprintf( mf, "%s %s\r\n", sp->pack->pakBasename, fn );
+					}
 				}
 			}
+		}
+		if ( mf ) {
+			FILE *t = Sys_FOpen( FS_BuildOSPath( fs_basepath->string, "xbox", "ui/main_game_view.menu" ), "rb" );
+			fprintf( mf, "overlay xbox/ui/main_game_view.menu present: %s\r\n", t ? "yes" : "no" );
+			if ( t ) {
+				fclose( t );
+			}
+			fclose( mf );
 		}
 	}
 #endif

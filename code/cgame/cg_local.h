@@ -2360,6 +2360,7 @@ void CG_FreeOldestMark( void );
 void CG_AddGore( void );
 void CG_GoreReset( void );
 void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal );
+void CG_AddBloodTrails( vec3_t origin, vec3_t dir, int speed, int duration, int count, float randScale );
 void CG_GoreScreenSplat( const vec3_t origin, int count );
 void CG_DrawGoreScreen( void );
 void CG_PadRumble( float low, float high, int ms, float trigger );

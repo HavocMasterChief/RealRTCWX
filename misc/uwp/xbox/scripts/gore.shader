@@ -7,7 +7,7 @@ gore/bloodpool1
 {
 	polygonOffset
 	nopicmip
-	sort decal
+	cull none
 	{
 		clampmap gore/bloodpool1.tga
 		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
@@ -20,7 +20,7 @@ gore/bloodpool2
 {
 	polygonOffset
 	nopicmip
-	sort decal
+	cull none
 	{
 		clampmap gore/bloodpool2.tga
 		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
@@ -33,7 +33,6 @@ gore/bloodrun
 {
 	polygonOffset
 	nopicmip
-	sort decal
 	cull none
 	{
 		clampmap gore/bloodrun.tga
@@ -47,7 +46,7 @@ gore/footprint
 {
 	polygonOffset
 	nopicmip
-	sort decal
+	cull none
 	{
 		clampmap gore/footprint.tga
 		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA

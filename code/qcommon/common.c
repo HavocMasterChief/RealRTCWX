@@ -223,6 +223,13 @@ void QDECL Com_Printf( const char *fmt, ... ) {
 			time( &aclock );
 			newtime = localtime( &aclock );
 
+#ifdef RTCW_UWP
+			// keep the previous session's log: if the console closed the game
+			// (e.g. while suspended), that's the one that says what happened
+			if ( FS_FileExists( "rtcwconsole.log" ) ) {
+				FS_Rename( "rtcwconsole.log", "rtcwconsole_prev.log" );
+			}
+#endif
 			logfile = FS_FOpenFileWrite( "rtcwconsole.log" );    //----(SA)	changed name for Wolf
 			if(logfile)
 			{

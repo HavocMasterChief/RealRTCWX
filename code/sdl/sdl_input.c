@@ -68,6 +68,16 @@ Controller vibration (Xbox). low/high are the two body motors, trigger the
 right-trigger motor; all 0..1.
 ===============
 */
+// SDL delivers "will enter background" synchronously on the main thread
+// while the console is suspending us; the event queue itself isn't read
+// again until we're resumed. Save the game here.
+static bool SDLCALL IN_UWP_EventWatch( void *userdata, SDL_Event *event ) {
+	if ( event->type == SDL_EVENT_WILL_ENTER_BACKGROUND ) {
+		CL_UWP_SuspendSave();
+	}
+	return true;
+}
+
 void IN_Rumble( float low, float high, float trigger, int ms ) {
 	Uint16 l = (Uint16)( low * 65535.0f ), h = (Uint16)( high * 65535.0f );
 	if ( ms < 0 ) ms = 0;
@@ -1261,6 +1271,11 @@ IN_Init
 void IN_Init( void *windowData )
 {
 	int appState;
+
+#ifdef RTCW_UWP
+	SDL_RemoveEventWatch( IN_UWP_EventWatch, NULL );
+	SDL_AddEventWatch( IN_UWP_EventWatch, NULL );
+#endif
 
 	if( !SDL_WasInit( SDL_INIT_VIDEO ) )
 	{

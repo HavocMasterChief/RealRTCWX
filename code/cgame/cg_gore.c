@@ -167,27 +167,30 @@ static float CG_GoreLightAt( const vec3_t point ) {
 	VectorCopy( point, p );
 	p[2] += 8;      // just above the surface
 	if ( !trap_R_LightForPoint( p, ambient, directed, dir ) ) {
-		return 0.7f;
+		return 0.45f;
 	}
-	l = ( ( ambient[0] + ambient[1] + ambient[2] ) + 0.6f * ( directed[0] + directed[1] + directed[2] ) ) / ( 3.0f * 190.0f );
-	if ( l < 0.12f ) {
-		l = 0.12f;
-	} else if ( l > 1.0f ) {
+	l = ( ( ambient[0] + ambient[1] + ambient[2] ) + 0.5f * ( directed[0] + directed[1] + directed[2] ) ) / ( 3.0f * 255.0f );
+	if ( l > 1.0f ) {
 		l = 1.0f;
+	}
+	l = l * sqrt( l );      // darker in the shadows
+	if ( l < 0.08f ) {
+		l = 0.08f;
 	}
 	return l;
 }
 
 // blood colour at a given light level, as vertex colours
 static void CG_GoreColor( float light, float alpha, byte *out ) {
+	// about the darkness of the game's own blood decals
 	if ( cg_bloodMode.integer == BLOODMODE_GREEN ) {
-		out[0] = (byte)( 40 * light );
-		out[1] = (byte)( 150 * light );
-		out[2] = (byte)( 20 * light );
+		out[0] = (byte)( 18 * light );
+		out[1] = (byte)( 85 * light );
+		out[2] = (byte)( 10 * light );
 	} else {
-		out[0] = (byte)( 125 * light );
-		out[1] = (byte)( 8 * light );
-		out[2] = (byte)( 8 * light );
+		out[0] = (byte)( 80 * light );
+		out[1] = (byte)( 4 * light );
+		out[2] = (byte)( 4 * light );
 	}
 	out[3] = (byte)( 255 * alpha );
 }
@@ -983,7 +986,7 @@ void CG_DrawGoreScreen( void ) {
 		static float light = 1.0f;
 		float target = CG_GoreLightAt( cg.refdef.vieworg );
 		light += ( target - light ) * 0.1f;
-		color[0] = color[1] = color[2] = 0.35f + 0.65f * light;
+		color[0] = color[1] = color[2] = 0.1f + 0.7f * light;
 	}
 
 	for ( i = 0; i < GORE_MAX_SCREEN; i++ ) {

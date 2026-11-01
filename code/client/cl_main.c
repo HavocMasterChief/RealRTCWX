@@ -3067,10 +3067,47 @@ bringing us back. Pause into the in-game menu so play doesn't continue
 unseen, and mute while away.
 ==================
 */
+/*
+==================
+CL_UWP_SuspendSave / CL_UWP_CheckResumeSave
+
+The console may close a suspended game to free memory. So when it
+suspends, save to a dedicated slot and leave a marker; a normal resume
+removes the marker, and if instead the next launch finds it, the game
+loads that save (like Quick Resume).
+Called from an SDL event watch while the console is suspending us.
+==================
+*/
+#define UWP_SUSPEND_SAVE    "xbox_suspend"
+#define UWP_SUSPEND_MARKER  "xbox_suspended.txt"
+
+void CL_UWP_SuspendSave( void ) {
+	if ( clc.state != CA_ACTIVE || clc.demoplaying || !com_sv_running || !com_sv_running->integer ) {
+		return;
+	}
+	if ( cl.snap.ps.stats[STAT_HEALTH] <= 0 ) {
+		return;
+	}
+	Com_Printf( "UWP: suspending - saving to '%s'\n", UWP_SUSPEND_SAVE );
+	Cbuf_ExecuteText( EXEC_NOW, "savegame " UWP_SUSPEND_SAVE "\n" );
+	FS_WriteFile( UWP_SUSPEND_MARKER, "1", 1 );
+}
+
+static void CL_UWP_CheckResumeSave( void ) {
+	if ( FS_FileExists( UWP_SUSPEND_MARKER ) ) {
+		FS_HomeRemove( UWP_SUSPEND_MARKER );
+		Com_Printf( "UWP: the game was closed while suspended - loading '%s'\n", UWP_SUSPEND_SAVE );
+		Cbuf_AddText( "loadgame " UWP_SUSPEND_SAVE "\n" );
+	}
+}
+
 void CL_UWP_Background( qboolean background ) {
 	Com_Printf( "UWP: %s\n", background ? "entering background (suspend)" : "back in foreground (resume)" );
 	Sys_UWP_LogMemory( background ? "suspend" : "resume" );
 	Cvar_SetValue( "com_minimized", background ? 1 : 0 );
+	if ( !background && FS_FileExists( UWP_SUSPEND_MARKER ) ) {
+		FS_HomeRemove( UWP_SUSPEND_MARKER );    // resumed normally: no need to reload
+	}
 	if ( background ) {
 		IN_Rumble( 0, 0, 0, 0 );
 		S_StopAllSounds();
@@ -4100,6 +4137,7 @@ void CL_Init( void ) {
 	xbox_rumble = Cvar_Get( "xbox_rumble", "0", 0 );
 	xbox_rumble->modified = qfalse;
 	xbox_vibration = Cvar_Get( "xbox_vibration", "1", CVAR_ARCHIVE );
+	CL_UWP_CheckResumeSave();
 	CL_ApplyConsoleGfxMode( qfalse );
 #endif
 

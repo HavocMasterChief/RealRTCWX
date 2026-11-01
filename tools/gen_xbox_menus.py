@@ -315,6 +315,10 @@ def main():
     files["main_controls_shoot_advanced.menu"] = "// Key bindings are fixed on Xbox; see the Layout tab.\n"
     for n, t in files.items():
         write_raw(n, t)
+    # copy_stock_ui() above restores the stock campaign_menu.menu; rebuild the
+    # Xbox campaign flow on top of it every time so it can't be lost.
+    import gen_xbox_campaign
+    gen_xbox_campaign.main()
 
 
 if __name__ == "__main__":

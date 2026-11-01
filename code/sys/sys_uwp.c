@@ -195,6 +195,24 @@ static LONG CALLBACK UWP_ExceptionLogger( EXCEPTION_POINTERS *ep ) {
 				(unsigned long long)ep->ExceptionRecord->ExceptionInformation[ 1 ] );
 		}
 		fprintf( f, "\n" );
+		{
+			// Call stack: frames of this handler, the dispatcher, then the
+			// faulting code and its callers. Resolve with the build's .map.
+			void *frames[ 48 ];
+			USHORT nf = CaptureStackBackTrace( 0, 48, frames, NULL ), i;
+			for ( i = 0; i < nf; i++ ) {
+				HMODULE fm = NULL;
+				char fname[ MAX_PATH ] = "?";
+				const char *fb = fname;
+				if ( GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+						(LPCSTR)frames[ i ], &fm ) && fm ) {
+					GetModuleFileNameA( fm, fname, sizeof( fname ) );
+					fb = strrchr( fname, '\\' ) ? strrchr( fname, '\\' ) + 1 : fname;
+				}
+				fprintf( f, "  #%02u %s+0x%llX\n", (unsigned)i, fb,
+					(unsigned long long)( (char *)frames[ i ] - (char *)fm ) );
+			}
+		}
 		fclose( f );
 	}
 	return EXCEPTION_CONTINUE_SEARCH;

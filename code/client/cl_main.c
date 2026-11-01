@@ -2947,6 +2947,77 @@ void CL_CheckUserinfo( void ) {
 	}
 }
 
+
+#ifdef RTCW_UWP
+/*
+==================
+CL_ApplyConsoleGfxMode
+
+Xbox graphics come down to one choice, xbox_gfxMode:
+  0 = Quality:     HD textures, full effects, 60 FPS with v-sync
+  1 = Performance: same textures, lighter geometry/filtering, up to 120 FPS
+The PC presets and renderer options are hidden from the Xbox menus, and
+these settings are re-applied at every launch so old PC values can't stick.
+==================
+*/
+static cvar_t *xbox_gfxMode;
+
+static void CL_SetGfxCvar( const char *name, const char *value, qboolean *needRestart ) {
+	cvar_t *cv = Cvar_Get( name, value, CVAR_ARCHIVE );
+	const char *current = ( cv->latchedString ) ? cv->latchedString : cv->string;
+	if ( Q_stricmp( current, value ) ) {
+		Cvar_Set( name, value );
+		if ( cv->flags & CVAR_LATCH ) {
+			*needRestart = qtrue;
+		}
+	}
+}
+
+static void CL_ApplyConsoleGfxMode( qboolean rendererRunning ) {
+	qboolean restart = qfalse;
+	qboolean performance = ( xbox_gfxMode->integer == 1 );
+
+	// shared: full-resolution textures, everything on
+	CL_SetGfxCvar( "r_picmip", "0", &restart );
+	CL_SetGfxCvar( "r_picmip2", "0", &restart );
+	CL_SetGfxCvar( "r_texturebits", "32", &restart );
+	CL_SetGfxCvar( "r_ext_compressed_textures", "0", &restart );
+	CL_SetGfxCvar( "r_ext_texture_filter_anisotropic", "1", &restart );
+	CL_SetGfxCvar( "r_dynamiclight", "1", &restart );
+	CL_SetGfxCvar( "r_drawfoliage", "1", &restart );
+	CL_SetGfxCvar( "r_fastsky", "0", &restart );
+	CL_SetGfxCvar( "cg_skybox", "1", &restart );
+	CL_SetGfxCvar( "cg_wolfparticles", "1", &restart );
+	CL_SetGfxCvar( "r_finish", "0", &restart );
+	CL_SetGfxCvar( "r_vertexlight", "0", &restart );
+
+	if ( performance ) {
+		CL_SetGfxCvar( "com_maxfps", "120", &restart );
+		CL_SetGfxCvar( "r_swapInterval", "0", &restart );
+		CL_SetGfxCvar( "r_lodbias", "0", &restart );
+		CL_SetGfxCvar( "r_ext_max_anisotropy", "4", &restart );
+		CL_SetGfxCvar( "r_texturemode", "GL_LINEAR_MIPMAP_NEAREST", &restart );
+	} else {
+		CL_SetGfxCvar( "com_maxfps", "60", &restart );
+		CL_SetGfxCvar( "r_swapInterval", "1", &restart );
+		CL_SetGfxCvar( "r_lodbias", "-2", &restart );
+		CL_SetGfxCvar( "r_ext_max_anisotropy", "16", &restart );
+		CL_SetGfxCvar( "r_texturemode", "GL_LINEAR_MIPMAP_LINEAR", &restart );
+	}
+
+	if ( restart && rendererRunning ) {
+		Cbuf_AddText( "vid_restart\n" );
+	}
+}
+
+static void CL_CheckConsoleGfxMode( void ) {
+	if ( xbox_gfxMode && xbox_gfxMode->modified ) {
+		xbox_gfxMode->modified = qfalse;
+		CL_ApplyConsoleGfxMode( cls.rendererStarted );
+	}
+}
+#endif
+
 /*
 ==================
 CL_Frame
@@ -2958,6 +3029,10 @@ void CL_Frame( int msec ) {
 	if ( !com_cl_running->integer ) {
 		return;
 	}
+
+#ifdef RTCW_UWP
+	CL_CheckConsoleGfxMode();
+#endif
 
 #ifdef USE_CURL
 	if(clc.downloadCURLM) {
@@ -3952,6 +4027,12 @@ void CL_Init( void ) {
 	CL_GenerateQKey();
 	Cvar_Get( "cl_guid", "", CVAR_USERINFO | CVAR_ROM );
 	CL_UpdateGUID( NULL, 0 );
+
+#ifdef RTCW_UWP
+	xbox_gfxMode = Cvar_Get( "xbox_gfxMode", "0", CVAR_ARCHIVE );
+	xbox_gfxMode->modified = qfalse;
+	CL_ApplyConsoleGfxMode( qfalse );
+#endif
 
 	Com_Printf( "----- Client Initialization Complete -----\n" );
 }

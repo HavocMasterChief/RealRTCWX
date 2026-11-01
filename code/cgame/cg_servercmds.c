@@ -641,6 +641,7 @@ static void CG_MapRestart( void ) {
 
 	CG_InitLocalEntities();
 	CG_InitMarkPolys();
+	CG_GoreReset();
 
 	//Rafael particles
 	CG_ClearParticles();

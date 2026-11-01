@@ -3008,6 +3008,7 @@ void CG_Init( int serverMessageNum, int serverCommandSequence ) {
 	CG_InitLocalEntities();
 
 	CG_InitMarkPolys();
+	CG_GoreReset();
 
 	// RF, init ZombieFX
 	trap_RB_ZombieFXAddNewHit( -1, NULL, NULL );

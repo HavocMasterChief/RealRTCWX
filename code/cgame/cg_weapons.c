@@ -7195,6 +7195,7 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 				// big splat, plus a few smaller ones around it
 				CG_ImpactMark( CG_BloodDot(), trace.endpos, trace.plane.normal, random() * 360,
 							   1,1,1,1, qtrue, 30 + random() * 30, qfalse, CG_BloodMarkTime() );
+				CG_GoreSurfaceHit( trace.endpos, trace.plane.normal );
 				for ( k = 0; k < 3; k++ ) {
 					vec3_t p;
 					VectorCopy( trace.endpos, p );

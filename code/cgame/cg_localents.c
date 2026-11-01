@@ -278,6 +278,7 @@ void CG_FragmentBounceMark( localEntity_t *le, trace_t *trace ) {
 			radius = 16 + ( rand() & 31 );
 			CG_ImpactMark( CG_BloodDot(), trace->endpos, trace->plane.normal, random() * 360,
 						   1,1,1,1, qtrue, radius, qfalse, CG_BloodMarkTime() );
+			CG_GoreSurfaceHit( trace->endpos, trace->plane.normal );
 
 			lastBloodMark = cg.time;
 		}
@@ -950,11 +951,11 @@ void CG_AddBloodElements( localEntity_t *le ) {
 		le->headJuncIndex = CG_AddSparkJunc( le->headJuncIndex,
 											 CG_BloodShader( cgs.media.bloodTrailShader, cgs.media.bloodTrailShaderGreen ),
 											 le->refEntity.origin,
-											 200,
+											 CG_BloodExtreme() ? 90 : 200,
 											 1.0 - lifeFrac, // start alpha
 											 1.0 - lifeFrac, // end alpha
-											 3.0,
-											 5.0 );
+											 CG_BloodExtreme() ? 1.2 : 3.0,
+											 CG_BloodExtreme() ? 2.0 : 5.0 );
 
 		if ( trace.fraction < 1.0 ) {
 			// reflect the velocity on the trace plane
@@ -964,6 +965,7 @@ void CG_AddBloodElements( localEntity_t *le ) {
 			if ( le->leMarkType == LEMT_BLOOD ) {
 				CG_ImpactMark( CG_BloodDot(), trace.endpos, trace.plane.normal, random() * 360,
 							   1,1,1,1, qtrue, 4 + random() * 9, qfalse, CG_BloodMarkTime() );
+				CG_GoreSurfaceHit( trace.endpos, trace.plane.normal );
 				le->leMarkType = LEMT_NONE;
 				le->endTime = cg.time;      // soaked in; stop bouncing
 			}

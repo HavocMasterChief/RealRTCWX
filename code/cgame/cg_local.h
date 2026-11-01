@@ -1980,7 +1980,8 @@ extern vmCvar_t cg_bloodMode;
 // pick the red or green version of a blood shader
 #define CG_BloodShader( normal, green ) ( ( cg_bloodMode.integer == BLOODMODE_GREEN && ( green ) ) ? ( green ) : ( normal ) )
 // how long blood decals stay; Extreme keeps them around 10x longer
-#define CG_BloodMarkTime()  ( cg_bloodTime.integer * 1000 * ( CG_BloodExtreme() ? 10 : 1 ) )
+// Extreme keeps blood decals until the frame-rate governor (cg_gore.c) clears them
+#define CG_BloodMarkTime()  ( CG_BloodExtreme() ? 3600000 : cg_bloodTime.integer * 1000 )
 extern vmCvar_t cg_norender;
 extern vmCvar_t cg_skybox;
 
@@ -2354,6 +2355,11 @@ void CG_AddBulletParticles( vec3_t origin, vec3_t dir, int speed, int duration, 
 // cg_marks.c
 //
 void    CG_InitMarkPolys( void );
+void CG_FreeOldestMark( void );
+// cg_gore.c
+void CG_AddGore( void );
+void CG_GoreReset( void );
+void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal );
 void    CG_AddMarks( void );
 void    CG_ImpactMark( qhandle_t markShader,
 					   const vec3_t origin, const vec3_t dir,

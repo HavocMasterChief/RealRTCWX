@@ -387,15 +387,18 @@ void CG_Bleed( vec3_t origin, int entityNum ) {
 		if ( CG_BloodExtreme() ) {
 			// arterial spray: more, faster, longer-lived droplets that
 			// reach nearby walls and floors and paint them
-			for ( i = 0; i < BLOOD_SPURT_COUNT * 3; i++ ) {
-				VectorCopy( dir, ndir );
-				for ( j = 0; j < 3; j++ ) ndir[j] += crandom() * 0.5;
-				ndir[2] += 0.25f;
+			// 'dir' points from the body toward the wound, i.e. toward the
+			// shooter. Spray mostly the other way (out the back and sides,
+			// falling) so it doesn't cover the player's view.
+			for ( i = 0; i < BLOOD_SPURT_COUNT * 2; i++ ) {
+				VectorScale( dir, -1.0f, ndir );
+				for ( j = 0; j < 3; j++ ) ndir[j] += crandom() * 0.7;
+				ndir[2] -= 0.15f;
 				VectorNormalize( ndir );
 				CG_AddBloodTrails( bOrigin, ndir,
-								   160 + rand() % 140,
-								   700 + (int)( crandom() * 200 ),
-								   3 + rand() % 3,
+								   140 + rand() % 120,
+								   900 + (int)( crandom() * 200 ),
+								   2 + rand() % 2,
 								   0.2 );
 			}
 		} else
@@ -792,6 +795,27 @@ void CG_GibPlayer( centity_t *cent, vec3_t playerOrigin, vec3_t gdir ) {
 				}
 			} else {
 				CG_LaunchGib( cent, origin, angles, velocity, ci->gibModels[gibIndex], 1.0, 0 );
+				if ( CG_BloodExtreme() ) {
+					// Extreme: two or three extra chunks per body part, smaller
+					// and thrown wider
+					int extra = 2 + ( rand() & 1 ), k;
+					for ( k = 0; k < extra; k++ ) {
+						vec3_t v2;
+						int m, tries;
+						qhandle_t model = 0;
+						for ( tries = 0; tries < 8 && !model; tries++ ) {
+							m = rand() % MAX_GIB_MODELS;
+							model = ci->gibModels[m];
+						}
+						if ( !model ) {
+							model = ci->gibModels[gibIndex];
+						}
+						v2[0] = velocity[0] + crandom() * GIB_VELOCITY * 1.5f;
+						v2[1] = velocity[1] + crandom() * GIB_VELOCITY * 1.5f;
+						v2[2] = velocity[2] + random() * GIB_VELOCITY;
+						CG_LaunchGib( cent, origin, angles, v2, model, 0.45f + random() * 0.4f, 0 );
+					}
+				}
 			}
 
 			for ( junction = 0; junction < MAXJUNCTIONS; junction++ )

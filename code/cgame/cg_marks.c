@@ -92,6 +92,19 @@ CG_AllocMark
 Will allways succeed, even if it requires freeing an old active mark
 ===================
 */
+/*
+===================
+CG_FreeOldestMark
+
+Used by the gore frame-rate governor.
+===================
+*/
+void CG_FreeOldestMark( void ) {
+	if ( cg_activeMarkPolys.prevMark && cg_activeMarkPolys.prevMark != &cg_activeMarkPolys ) {
+		CG_FreeMarkPoly( cg_activeMarkPolys.prevMark );
+	}
+}
+
 markPoly_t  *CG_AllocMark( int endTime ) {
 	markPoly_t  *le; //, *trav, *lastTrav;
 	int time;

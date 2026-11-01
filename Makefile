@@ -2636,6 +2636,7 @@ Q3CGOBJ_ = \
   $(B)/$(BASEGAME)/cgame/cg_info.o \
   $(B)/$(BASEGAME)/cgame/cg_localents.o \
   $(B)/$(BASEGAME)/cgame/cg_marks.o \
+  $(B)/$(BASEGAME)/cgame/cg_gore.o \
   $(B)/$(BASEGAME)/cgame/cg_newdraw.o \
   $(B)/$(BASEGAME)/cgame/cg_particles.o \
   $(B)/$(BASEGAME)/cgame/cg_players.o \

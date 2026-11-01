@@ -85,6 +85,8 @@ typedef struct {
 	int startTime;
 	int nextDrip;
 	vec3_t origin;
+	int entityNum;          // ceiling it's on (moving objects like the tram)
+	vec3_t entOrigin;
 } goreDrip_t;
 
 #define GORE_RUN_MAX_POINTS     96
@@ -108,6 +110,7 @@ typedef struct {
 	float light;
 	int entityNum;
 	vec3_t entOrigin;
+	vec3_t wallNormal;
 } goreRun_t;
 
 static gorePool_t goPools[GORE_MAX_POOLS];
@@ -118,7 +121,7 @@ static int goDeadTime[MAX_GENTITIES];   // when we first saw each entity dead (0
 static qboolean goPooled[MAX_GENTITIES];
 
 static qhandle_t goPoolShader[2], goPoolShaderGreen[2];
-static qhandle_t goRunShader, goRunShaderGreen, goFootShader;
+static qhandle_t goRunShader, goRunShaderGreen, goFootShader, goFootShaderGreen;
 static qboolean goRegistered;
 
 #define GORE_MAX_FEET           48
@@ -158,11 +161,12 @@ static void CG_GoreRegister( void ) {
 	}
 	goPoolShader[0] = trap_R_RegisterShader( "gore/bloodpool1" );
 	goPoolShader[1] = trap_R_RegisterShader( "gore/bloodpool2" );
-	goPoolShaderGreen[0] = goPoolShader[0];     // green is a vertex colour now
-	goPoolShaderGreen[1] = goPoolShader[1];
+	goPoolShaderGreen[0] = trap_R_RegisterShader( "gore/bloodpool1#green" );
+	goPoolShaderGreen[1] = trap_R_RegisterShader( "gore/bloodpool2#green" );
 	goRunShader = trap_R_RegisterShader( "gore/bloodrun" );
-	goRunShaderGreen = goRunShader;
+	goRunShaderGreen = trap_R_RegisterShader( "gore/bloodrun#green" );
 	goFootShader = trap_R_RegisterShader( "gore/footprint" );
+	goFootShaderGreen = trap_R_RegisterShader( "gore/footprint#green" );
 	goRegistered = qtrue;
 }
 
@@ -261,16 +265,9 @@ static float CG_GoreLightAt( const vec3_t point ) {
 // blood colour at a given light level, as vertex colours
 static void CG_GoreColor( float light, float alpha, byte *out ) {
 	// about the darkness of the game's own blood decals
-	float k = 0.55f + 0.45f * light;    // mostly constant, a little darker in shadow
-	if ( cg_bloodMode.integer == BLOODMODE_GREEN ) {
-		out[0] = (byte)( 25 * k );
-		out[1] = (byte)( 95 * k );
-		out[2] = (byte)( 12 * k );
-	} else {
-		out[0] = (byte)( 105 * k );
-		out[1] = (byte)( 8 * k );
-		out[2] = (byte)( 8 * k );
-	}
+	// the texture holds the blood colour; this only darkens it in shadow
+	float k = 0.6f + 0.4f * light;
+	out[0] = out[1] = out[2] = (byte)( 255 * k );
 	out[3] = (byte)( 255 * alpha );
 }
 
@@ -342,6 +339,21 @@ static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime, i
 		if ( outPoints + n > GORE_POOL_MAX_POINTS ) {
 			break;
 		}
+		// floors only: skip pieces that landed on walls, steps or legs of
+		// furniture (anything not level with the pool)
+		{
+			int q;
+			qboolean flat = qtrue;
+			for ( q = 0; q < n; q++ ) {
+				if ( fabs( markPoints[mf->firstPoint + q][2] - origin[2] ) > 2.5f ) {
+					flat = qfalse;
+					break;
+				}
+			}
+			if ( !flat ) {
+				continue;
+			}
+		}
 		p->fragFirst[p->numFragments] = outPoints;
 		p->fragCount[p->numFragments] = n;
 		for ( j = 0; j < n; j++ ) {
@@ -356,6 +368,11 @@ static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime, i
 		p->numFragments++;
 	}
 
+	if ( !p->numFragments ) {
+		p->active = qfalse;
+		CG_GoreLog( "pool: no flat floor at (%.0f %.0f %.0f)\n", origin[0], origin[1], origin[2] );
+		return;
+	}
 	p->active = qtrue;
 	p->startTime = cg.time;
 	p->growTime = growTime;
@@ -526,6 +543,7 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 	r->runTime = 10000 + rand() % 10000;
 	r->light = CG_GoreLightAt( point );
 	CG_GoreAttach( wallEnt, &r->entityNum, r->entOrigin );
+	VectorCopy( normal, r->wallNormal );
 	CG_GoreLog( "run: spawned at (%.0f %.0f %.0f) len=%.0f frags=%i pools=%i light=%.2f\n", point[0], point[1], point[2], len, r->numFragments, pools, r->light );
 }
 
@@ -556,6 +574,14 @@ void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal ) {
 		d->startTime = cg.time;
 		d->nextDrip = cg.time + 300 + rand() % 700;
 		VectorMA( point, 1.0f, normal, d->origin );
+		{
+			trace_t tr;
+			vec3_t a, b;
+			VectorMA( point, 2.0f, normal, a );
+			VectorMA( point, -4.0f, normal, b );
+			CG_Trace( &tr, a, NULL, NULL, b, -1, MASK_SOLID );
+			CG_GoreAttach( tr.fraction < 1.0f ? tr.entityNum : ENTITYNUM_WORLD, &d->entityNum, d->entOrigin );
+		}
 	} else if ( fabs( normal[2] ) < 0.35f && random() < 0.15f ) {
 		CG_GoreStartRun( point, normal );
 	}
@@ -630,9 +656,12 @@ static void CG_GoreDrawRun( goreRun_t *r, qhandle_t shader ) {
 
 	if ( frac >= 0.98f && r->pools && !r->pooled ) {
 		vec3_t end;
+		float rad = 4.5f + random() * 3.0f;
 		r->pooled = qtrue;
-		VectorAdd( r->end, ofs, end );
-		CG_GorePoolAt( end, 9 + random() * 7, 9000 );
+		// a small circle on the floor, just out from the foot of the wall
+		VectorMA( r->end, rad * 0.7f, r->wallNormal, end );
+		VectorAdd( end, ofs, end );
+		CG_GorePoolAt( end, rad, 7000 );
 	}
 }
 
@@ -646,7 +675,10 @@ static void CG_GoreUpdateDrip( goreDrip_t *d ) {
 	}
 	if ( cg.time >= d->nextDrip ) {
 		// one falling drop that leaves a small splat where it lands
-		CG_AddBloodTrails( d->origin, down, 20, 3000, 1, 0.0f );
+		vec3_t from, ofs;
+		CG_GoreAttachOffset( d->entityNum, d->entOrigin, ofs );
+		VectorAdd( d->origin, ofs, from );
+		CG_AddBloodTrails( from, down, 20, 3000, 1, 0.0f );
 		// drips slow down as the blood dries up
 		d->nextDrip = cg.time + 400 + age / 15 + rand() % 600;
 	}
@@ -975,7 +1007,7 @@ static void CG_GoreDrawFoot( goreFoot_t *f ) {
 			verts[j].st[1] = f->st[first + j][1];
 			CG_GoreColor( f->light, 0.25f + 0.65f * f->strength, verts[j].modulate );
 		}
-		trap_R_AddPolyToScene( goFootShader, n, verts );
+		trap_R_AddPolyToScene( cg_bloodMode.integer == BLOODMODE_GREEN ? goFootShaderGreen : goFootShader, n, verts );
 	}
 }
 

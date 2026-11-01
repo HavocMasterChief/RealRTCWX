@@ -19,9 +19,10 @@ OUT = os.path.join(ROOT, "misc", "uwp", "xbox", "gore")
 
 
 def save(density, name):
-    """density: L image (0..255). Alpha = density; RGB is a light shading
-    (a touch darker where the blood is thickest). The colour itself (red or
-    green, darkened by the level's light) comes from vertex colours."""
+    """density: L image (0..255). Alpha = density; RGB is the blood colour
+    itself (dark red, a little darker where it's thickest), like the game's
+    own blood decals. Vertex colours only darken it for the level's light;
+    green blood uses the renderer's automatic "#green" variant."""
     w, h = density.size
     d = density.load()
     img = Image.new("RGBA", (w, h))
@@ -29,8 +30,8 @@ def save(density, name):
     for y in range(h):
         for x in range(w):
             v = d[x, y] / 255.0
-            shade = int(255 * (1.0 - 0.25 * v))
-            p[x, y] = (shade, shade, shade, int(255 * min(1.0, v * 1.05)))
+            k = 1.0 - 0.3 * v
+            p[x, y] = (int(110 * k), int(9 * k), int(9 * k), int(255 * min(1.0, v * 1.05)))
     img.save(os.path.join(OUT, f"{name}.tga"))
     print("wrote", f"{name}.tga")
 

@@ -431,7 +431,7 @@ R_LightForPoint
 int R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir ) {
 	trRefEntity_t ent;
 
-	if ( tr.world->lightGridData == NULL ) {
+	if ( !tr.world || tr.world->lightGridData == NULL ) {
 		return qfalse;
 	}
 

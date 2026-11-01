@@ -1693,6 +1693,7 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	re.AddPolysToScene  = RE_AddPolysToScene;
 	// done.
 	re.AddLightToScene  = RE_AddLightToScene;
+	re.LightForPoint    = R_LightForPoint;   // RealRTCWX (gore lighting)
 //----(SA)
 	re.AddCoronaToScene = RE_AddCoronaToScene;
 	re.SetFog           = R_SetFog;

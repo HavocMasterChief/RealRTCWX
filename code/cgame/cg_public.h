@@ -224,7 +224,10 @@ typedef enum {
 	// New in IORTCW
 	CG_ALLOC = 900,
 
-	CG_R_REGISTERSMARTSKIN
+	CG_R_REGISTERSMARTSKIN,
+
+	// RealRTCWX
+	CG_R_LIGHTFORPOINT_X = 950
 
 } cgameImport_t;
 

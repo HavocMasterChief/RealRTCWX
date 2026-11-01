@@ -187,7 +187,9 @@ def main():
     ml = set_field(ml, "elementheight", "18")
     ml = set_field(ml, "textscale", ".26")
     ml = set_field(ml, "visible", "1")
-    ml = ml.replace('{', '{\n\t\taccept { close xbox_missions ; open xbox_difficulty_mission }', 1)
+    # up/down always scroll it and A always picks the highlighted mission,
+    # whether or not the list has focus (see padList / padA in ui_shared.c)
+    ml = re.sub(r'^(\s*)name\s+\S+', lambda m: m.group(1) + 'name padList', ml, count=1, flags=re.M)
     prev = re.sub(r'\brect\s+29\s+146\s+229\s+114', 'rect 341 141 258 154', preview)
     prev = re.sub(r'\brect\s+28\s+145\s+230\s+115', 'rect 340 140 260 156', prev)
     prev = prev.replace("visible\t\t\t\t1", "visible 1")
@@ -199,6 +201,14 @@ def main():
     chap = chap.replace('{', '{\n\t\tdecoration', 1)        # changed with LB/RB, not focused
     missions = background + ml + prev + chap
     missions += label("LB / RB: change chapter", 340, 330, 260, scale=".2", color="1 1 1 .6")
+    missions += '''
+	itemDef {
+		name padA
+		visible 0
+		decoration
+		action { close xbox_missions ; open xbox_difficulty_mission }
+	}
+'''
     missions += hints("A  Select mission          LB / RB  Chapter          B  Back")
     out += menu("xbox_missions", missions, on_esc="close xbox_missions ; open campaign_menu")
 

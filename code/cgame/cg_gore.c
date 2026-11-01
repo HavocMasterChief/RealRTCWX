@@ -42,6 +42,7 @@ typedef struct {
 	vec3_t xyz[GORE_POOL_MAX_POINTS];
 	float st[GORE_POOL_MAX_POINTS][2];  // texture coords at full size
 	int variant;
+	float light;            // level light at the pool, 0..1
 } gorePool_t;
 
 typedef struct {
@@ -69,6 +70,7 @@ typedef struct {
 	int fragCount[GORE_RUN_MAX_FRAGS];
 	vec3_t xyz[GORE_RUN_MAX_POINTS];
 	float st[GORE_RUN_MAX_POINTS][2];
+	float light;
 } goreRun_t;
 
 static gorePool_t goPools[GORE_MAX_POOLS];
@@ -79,8 +81,32 @@ static int goDeadTime[MAX_GENTITIES];   // when we first saw each entity dead (0
 static qboolean goPooled[MAX_GENTITIES];
 
 static qhandle_t goPoolShader[2], goPoolShaderGreen[2];
-static qhandle_t goRunShader, goRunShaderGreen;
+static qhandle_t goRunShader, goRunShaderGreen, goFootShader;
 static qboolean goRegistered;
+
+#define GORE_MAX_FEET           48
+typedef struct goreFoot_s goreFoot_t;
+#define GORE_FOOT_MAX_POINTS    40
+#define GORE_FOOT_MAX_FRAGS     6
+#define GORE_FOOT_STEPS         14
+#define GORE_FOOT_STRIDE        30.0f
+
+struct goreFoot_s {
+	qboolean active;
+	int startTime;
+	float light, strength;
+	int numFragments;
+	int fragFirst[GORE_FOOT_MAX_FRAGS];
+	int fragCount[GORE_FOOT_MAX_FRAGS];
+	vec3_t xyz[GORE_FOOT_MAX_POINTS];
+	float st[GORE_FOOT_MAX_POINTS][2];
+};
+
+static goreFoot_t goFeet[GORE_MAX_FEET];
+static int goFootSteps;             // bloody steps left
+static qboolean goFootLeft;
+static vec3_t goFootLast;
+
 
 /*
 ===============
@@ -93,10 +119,11 @@ static void CG_GoreRegister( void ) {
 	}
 	goPoolShader[0] = trap_R_RegisterShader( "gore/bloodpool1" );
 	goPoolShader[1] = trap_R_RegisterShader( "gore/bloodpool2" );
-	goPoolShaderGreen[0] = trap_R_RegisterShader( "gore/bloodpool1_green" );
-	goPoolShaderGreen[1] = trap_R_RegisterShader( "gore/bloodpool2_green" );
+	goPoolShaderGreen[0] = goPoolShader[0];     // green is a vertex colour now
+	goPoolShaderGreen[1] = goPoolShader[1];
 	goRunShader = trap_R_RegisterShader( "gore/bloodrun" );
-	goRunShaderGreen = trap_R_RegisterShader( "gore/bloodrun_green" );
+	goRunShaderGreen = goRunShader;
+	goFootShader = trap_R_RegisterShader( "gore/footprint" );
 	goRegistered = qtrue;
 }
 
@@ -108,9 +135,11 @@ Called on level load; everything client-side starts clean.
 ===============
 */
 static void CG_GoreScreenReset( void );
+static void CG_GoreFeetReset( void );
 
 void CG_GoreReset( void ) {
 	CG_GoreScreenReset();
+	CG_GoreFeetReset();
 	memset( goPools, 0, sizeof( goPools ) );
 	memset( goDrips, 0, sizeof( goDrips ) );
 	memset( goRuns, 0, sizeof( goRuns ) );
@@ -121,6 +150,46 @@ void CG_GoreReset( void ) {
 
 static qboolean CG_GoreEnabled( void ) {
 	return ( cg_blood.integer && cg_bloodMode.integer != BLOODMODE_OFF ) ? qtrue : qfalse;
+}
+
+/*
+===============
+CG_GoreLightAt
+
+How lit a spot is (0.12..1), from the level's light grid, so blood is
+as dark as the surface it's on.
+===============
+*/
+static float CG_GoreLightAt( const vec3_t point ) {
+	vec3_t p, ambient, directed, dir;
+	float l;
+
+	VectorCopy( point, p );
+	p[2] += 8;      // just above the surface
+	if ( !trap_R_LightForPoint( p, ambient, directed, dir ) ) {
+		return 0.7f;
+	}
+	l = ( ( ambient[0] + ambient[1] + ambient[2] ) + 0.6f * ( directed[0] + directed[1] + directed[2] ) ) / ( 3.0f * 190.0f );
+	if ( l < 0.12f ) {
+		l = 0.12f;
+	} else if ( l > 1.0f ) {
+		l = 1.0f;
+	}
+	return l;
+}
+
+// blood colour at a given light level, as vertex colours
+static void CG_GoreColor( float light, float alpha, byte *out ) {
+	if ( cg_bloodMode.integer == BLOODMODE_GREEN ) {
+		out[0] = (byte)( 40 * light );
+		out[1] = (byte)( 150 * light );
+		out[2] = (byte)( 20 * light );
+	} else {
+		out[0] = (byte)( 125 * light );
+		out[1] = (byte)( 8 * light );
+		out[2] = (byte)( 8 * light );
+	}
+	out[3] = (byte)( 255 * alpha );
 }
 
 /*
@@ -205,6 +274,7 @@ static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime ) 
 	p->growTime = growTime;
 	p->radius = radius;
 	p->variant = rand() & 1;
+	p->light = CG_GoreLightAt( origin );
 	VectorCopy( origin, p->origin );
 }
 
@@ -343,6 +413,7 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 	VectorMA( r->end, 3.0f, normal, r->end );   // out from the wall, over the floor
 	// creeps down: 10-20 s for the full length
 	r->runTime = 10000 + rand() % 10000;
+	r->light = CG_GoreLightAt( point );
 }
 
 /*
@@ -404,8 +475,7 @@ static void CG_GoreDrawPool( gorePool_t *p, qhandle_t shader ) {
 			VectorCopy( p->xyz[first + j], verts[j].xyz );
 			verts[j].st[0] = 0.5f + ( p->st[first + j][0] - 0.5f ) * inv;
 			verts[j].st[1] = 0.5f + ( p->st[first + j][1] - 0.5f ) * inv;
-			verts[j].modulate[0] = verts[j].modulate[1] = verts[j].modulate[2] = 255;
-			verts[j].modulate[3] = 255;
+			CG_GoreColor( p->light, 0.92f, verts[j].modulate );
 		}
 		trap_R_AddPolyToScene( shader, n, verts );
 	}
@@ -434,8 +504,7 @@ static void CG_GoreDrawRun( goreRun_t *r, qhandle_t shader ) {
 			VectorCopy( r->xyz[first + j], verts[j].xyz );
 			verts[j].st[0] = r->st[first + j][0];
 			verts[j].st[1] = r->st[first + j][1] * inv;
-			verts[j].modulate[0] = verts[j].modulate[1] = verts[j].modulate[2] = 255;
-			verts[j].modulate[3] = 255;
+			CG_GoreColor( r->light, 0.9f, verts[j].modulate );
 		}
 		trap_R_AddPolyToScene( shader, n, verts );
 	}
@@ -585,6 +654,15 @@ static void CG_GoreGovernor( void ) {
 		goDrips[oldest].active = qfalse;
 		return;
 	}
+	for ( oldest = -1, i = 0; i < GORE_MAX_FEET; i++ ) {
+		if ( goFeet[i].active && ( oldest < 0 || goFeet[i].startTime < goFeet[oldest].startTime ) ) {
+			oldest = i;
+		}
+	}
+	if ( oldest >= 0 ) {
+		goFeet[oldest].active = qfalse;
+		return;
+	}
 	for ( oldest = -1, i = 0; i < GORE_MAX_RUNS; i++ ) {
 		if ( goRuns[i].active && ( oldest < 0 || goRuns[i].startTime < goRuns[oldest].startTime ) ) {
 			oldest = i;
@@ -605,6 +683,152 @@ static void CG_GoreGovernor( void ) {
 	}
 	for ( i = 0; i < 8; i++ ) {
 		CG_FreeOldestMark();
+	}
+}
+
+/*
+===========================================================================
+Bloody footprints
+
+Walk through a pool and you leave footprints for a while; each step is a
+little fainter until the blood runs out.
+===========================================================================
+*/
+static void CG_GoreFeetReset( void ) {
+	memset( goFeet, 0, sizeof( goFeet ) );
+	goFootSteps = 0;
+}
+
+static void CG_GoreSpawnFoot( const vec3_t point, const vec3_t normal, const vec3_t forward, float strength, qboolean left ) {
+	goreFoot_t *f;
+	vec3_t fwd, right, quad[4], projection, delta;
+	markFragment_t frags[GORE_FOOT_MAX_FRAGS], *mf;
+	vec5_t markPoints[GORE_FOOT_MAX_POINTS];
+	const float halfLen = 6.5f, halfWid = 3.25f;
+	int i, j, n, numFrags, outPoints = 0;
+	float d;
+
+	// forward along the floor
+	d = DotProduct( forward, normal );
+	VectorMA( forward, -d, normal, fwd );
+	if ( VectorNormalize( fwd ) < 0.1f ) {
+		return;
+	}
+	CrossProduct( fwd, normal, right );
+	for ( i = 0; i < 3; i++ ) {
+		quad[0][i] = point[i] + fwd[i] * halfLen - right[i] * halfWid + normal[i] * 2;
+		quad[1][i] = point[i] + fwd[i] * halfLen + right[i] * halfWid + normal[i] * 2;
+		quad[2][i] = point[i] - fwd[i] * halfLen + right[i] * halfWid + normal[i] * 2;
+		quad[3][i] = point[i] - fwd[i] * halfLen - right[i] * halfWid + normal[i] * 2;
+	}
+	VectorScale( normal, -8.0f, projection );
+	numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_FOOT_MAX_POINTS,
+									  (float *)&markPoints[0], GORE_FOOT_MAX_FRAGS, frags );
+	if ( numFrags <= 0 ) {
+		return;
+	}
+	GORE_ALLOC( goFeet, GORE_MAX_FEET, f );
+	for ( i = 0, mf = frags; i < numFrags; i++, mf++ ) {
+		n = mf->numPoints < 0 ? -mf->numPoints : mf->numPoints;
+		if ( n > MAX_VERTS_ON_POLY ) {
+			n = MAX_VERTS_ON_POLY;
+		}
+		if ( outPoints + n > GORE_FOOT_MAX_POINTS ) {
+			break;
+		}
+		f->fragFirst[f->numFragments] = outPoints;
+		f->fragCount[f->numFragments] = n;
+		for ( j = 0; j < n; j++ ) {
+			VectorCopy( markPoints[mf->firstPoint + j], f->xyz[outPoints] );
+			VectorMA( f->xyz[outPoints], 0.12f, normal, f->xyz[outPoints] );
+			VectorSubtract( f->xyz[outPoints], point, delta );
+			// toe at the top of the texture; mirror for the left foot
+			f->st[outPoints][0] = 0.5f + ( left ? -1.0f : 1.0f ) * DotProduct( delta, right ) / ( 2.0f * halfWid );
+			f->st[outPoints][1] = 0.5f - DotProduct( delta, fwd ) / ( 2.0f * halfLen );
+			outPoints++;
+		}
+		f->numFragments++;
+	}
+	if ( !f->numFragments ) {
+		return;
+	}
+	f->active = qtrue;
+	f->startTime = cg.time;
+	f->strength = strength;
+	f->light = CG_GoreLightAt( point );
+}
+
+// did the player step in a pool? lay a print every stride while bloody
+static void CG_GoreUpdateFeet( void ) {
+	playerState_t *ps = &cg.predictedPlayerState;
+	vec3_t start, end, forward, delta;
+	trace_t tr;
+	int i;
+
+	if ( !cg.snap || ps->stats[STAT_HEALTH] <= 0 || ps->groundEntityNum == ENTITYNUM_NONE ) {
+		return;
+	}
+	for ( i = 0; i < GORE_MAX_POOLS; i++ ) {
+		gorePool_t *p = &goPools[i];
+		float g, dx, dy;
+		if ( !p->active || fabs( ps->origin[2] - 24 - p->origin[2] ) > 32 ) {
+			continue;
+		}
+		g = (float)( cg.time - p->startTime ) / (float)p->growTime;
+		if ( g > 1.0f ) {
+			g = 1.0f;
+		}
+		g = 1.0f - ( 1.0f - g ) * ( 1.0f - g );
+		dx = ps->origin[0] - p->origin[0];
+		dy = ps->origin[1] - p->origin[1];
+		if ( g > 0.25f && dx * dx + dy * dy < ( p->radius * g * 0.7f ) * ( p->radius * g * 0.7f ) ) {
+			if ( goFootSteps <= 0 ) {
+				VectorCopy( ps->origin, goFootLast );
+			}
+			goFootSteps = GORE_FOOT_STEPS;
+			break;
+		}
+	}
+	if ( goFootSteps <= 0 ) {
+		return;
+	}
+	VectorSubtract( ps->origin, goFootLast, delta );
+	delta[2] = 0;
+	if ( VectorLength( delta ) < GORE_FOOT_STRIDE ) {
+		return;
+	}
+	VectorCopy( ps->origin, goFootLast );
+	VectorNormalize2( delta, forward );
+
+	// where the foot lands: a little to the side of the walk line
+	goFootLeft = !goFootLeft;
+	{
+		vec3_t right = { forward[1], -forward[0], 0 };
+		VectorMA( ps->origin, goFootLeft ? -4.0f : 4.0f, right, start );
+	}
+	VectorCopy( start, end );
+	end[2] -= 64;
+	CG_Trace( &tr, start, NULL, NULL, end, ps->clientNum, MASK_SOLID );
+	if ( tr.fraction < 1.0f && !tr.startsolid && tr.plane.normal[2] > 0.7f ) {
+		CG_GoreSpawnFoot( tr.endpos, tr.plane.normal, forward,
+						  (float)goFootSteps / GORE_FOOT_STEPS, goFootLeft );
+	}
+	goFootSteps--;
+}
+
+static void CG_GoreDrawFoot( goreFoot_t *f ) {
+	polyVert_t verts[MAX_VERTS_ON_POLY];
+	int i, j;
+
+	for ( i = 0; i < f->numFragments; i++ ) {
+		int first = f->fragFirst[i], n = f->fragCount[i];
+		for ( j = 0; j < n; j++ ) {
+			VectorCopy( f->xyz[first + j], verts[j].xyz );
+			verts[j].st[0] = f->st[first + j][0];
+			verts[j].st[1] = f->st[first + j][1];
+			CG_GoreColor( f->light, 0.25f + 0.65f * f->strength, verts[j].modulate );
+		}
+		trap_R_AddPolyToScene( goFootShader, n, verts );
 	}
 }
 
@@ -640,6 +864,12 @@ void CG_AddGore( void ) {
 	for ( i = 0; i < GORE_MAX_DRIPS; i++ ) {
 		if ( goDrips[i].active ) {
 			CG_GoreUpdateDrip( &goDrips[i] );
+		}
+	}
+	CG_GoreUpdateFeet();
+	for ( i = 0; i < GORE_MAX_FEET; i++ ) {
+		if ( goFeet[i].active ) {
+			CG_GoreDrawFoot( &goFeet[i] );
 		}
 	}
 }
@@ -748,6 +978,13 @@ void CG_DrawGoreScreen( void ) {
 		return;
 	}
 	CG_GoreScreenRegister();
+	{
+		// match the light where you're standing (smoothed)
+		static float light = 1.0f;
+		float target = CG_GoreLightAt( cg.refdef.vieworg );
+		light += ( target - light ) * 0.1f;
+		color[0] = color[1] = color[2] = 0.35f + 0.65f * light;
+	}
 
 	for ( i = 0; i < GORE_MAX_SCREEN; i++ ) {
 		goreScreen_t *s = &goScreen[i];

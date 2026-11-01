@@ -2952,6 +2952,78 @@ static void UI_PadNavHover( itemDef_t *from, itemDef_t *to ) {
 	}
 }
 
+/*
+=================
+Pad navigation scope
+
+When a button opens a panel inside the same menu (the main menu's options,
+tabs), the D-pad should move only between that panel's options until it's
+closed (B hides it again). The scope is the set of items the button made
+visible.
+=================
+*/
+static menuDef_t *g_scopeMenu;
+static itemDef_t *g_scope[MAX_MENUITEMS];
+static int g_scopeCount;
+
+static qboolean UI_PadNavInScope( menuDef_t *menu, itemDef_t *item ) {
+	int i;
+	qboolean anyVisible = qfalse, found = qfalse;
+
+	if ( !g_scopeCount || g_scopeMenu != menu ) {
+		return qtrue;
+	}
+	for ( i = 0; i < g_scopeCount; i++ ) {
+		if ( g_scope[i]->window.flags & WINDOW_VISIBLE ) {
+			anyVisible = qtrue;
+		}
+		if ( g_scope[i] == item ) {
+			found = qtrue;
+		}
+	}
+	if ( !anyVisible ) {        // the panel was closed
+		g_scopeCount = 0;
+		return qtrue;
+	}
+	return found;
+}
+
+static qboolean UI_PadNavSelectable( itemDef_t *it ) {
+	if ( !( it->window.flags & WINDOW_VISIBLE ) || ( it->window.flags & WINDOW_DECORATION ) ) {
+		return qfalse;
+	}
+	return ( it->action || it->cvar || it->type == ITEM_TYPE_LISTBOX || it->type == ITEM_TYPE_SLIDER ||
+			 it->type == ITEM_TYPE_YESNO || it->type == ITEM_TYPE_MULTI ) ? qtrue : qfalse;
+}
+
+// Run an item's action; if it opened a panel, move focus into it.
+static void UI_PadNavRunAction( menuDef_t *menu, itemDef_t *item, const char *script ) {
+	static qboolean wasVisible[MAX_MENUITEMS];
+	itemDef_t *newItems[MAX_MENUITEMS];
+	int i, n = 0, count = menu->itemCount < MAX_MENUITEMS ? menu->itemCount : MAX_MENUITEMS;
+
+	for ( i = 0; i < count; i++ ) {
+		wasVisible[i] = ( menu->items[i]->window.flags & WINDOW_VISIBLE ) ? qtrue : qfalse;
+	}
+	Item_RunScript( item, script );
+	if ( !( menu->window.flags & WINDOW_VISIBLE ) ) {
+		return;                 // the action closed this menu
+	}
+	for ( i = 0; i < count; i++ ) {
+		if ( !wasVisible[i] && UI_PadNavSelectable( menu->items[i] ) ) {
+			newItems[n++] = menu->items[i];
+		}
+	}
+	if ( n ) {
+		memcpy( g_scope, newItems, n * sizeof( newItems[0] ) );
+		g_scopeCount = n;
+		g_scopeMenu = menu;
+		Menu_ClearFocus( menu );
+		menu->cursorItem = -1;
+		Menu_SetNextCursorItem( menu );
+	}
+}
+
 itemDef_t *Menu_SetPrevCursorItem( menuDef_t *menu ) {
 	qboolean wrapped = qfalse;
 	int oldCursor = menu->cursorItem;
@@ -2972,6 +3044,9 @@ itemDef_t *Menu_SetPrevCursorItem( menuDef_t *menu ) {
 		if ( UI_PadNavEnabled() ) {
 			qboolean focused;
 			itemDef_t *prev = UI_PadNavFocusedItem( menu );
+			if ( !UI_PadNavInScope( menu, menu->items[menu->cursorItem] ) ) {
+				continue;
+			}
 			g_padNavFocus = qtrue;
 			focused = Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory );
 			g_padNavFocus = qfalse;
@@ -3020,6 +3095,9 @@ itemDef_t *Menu_SetNextCursorItem( menuDef_t *menu ) {
 		if ( UI_PadNavEnabled() ) {
 			qboolean focused;
 			itemDef_t *prev = UI_PadNavFocusedItem( menu );
+			if ( !UI_PadNavInScope( menu, menu->items[menu->cursorItem] ) ) {
+				continue;
+			}
 			g_padNavFocus = qtrue;
 			focused = Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory );
 			g_padNavFocus = qfalse;
@@ -3247,9 +3325,8 @@ static qboolean UI_PadNavTab( menuDef_t *menu, int dir ) {
 		current = 0;
 	}
 	current = ( current + dir + n ) % n;
-	Item_RunScript( tabs[current], tabs[current]->action );
 	DC->startLocalSound( DC->Assets.itemFocusSound, CHAN_LOCAL_SOUND );
-	Menu_ClearFocus( menu );
+	UI_PadNavRunAction( menu, tabs[current], tabs[current]->action );
 	return qtrue;
 }
 
@@ -3376,6 +3453,25 @@ void Menu_HandleKey( menuDef_t *menu, int key, qboolean down ) {
 	for ( i = 0; i < menu->itemCount; i++ ) {
 		if ( menu->items[i]->window.flags & WINDOW_HASFOCUS ) {
 			item = menu->items[i];
+		}
+	}
+
+	if ( UI_PadNavEnabled() && down ) {
+		// A runs the menu's "padA" item if it has one (e.g. pick the highlighted mission)
+		if ( key == K_PAD0_A ) {
+			itemDef_t *a = Menu_FindItemByName( menu, "padA" );
+			if ( a && a->action ) {
+				Item_RunScript( a, a->action );
+				return;
+			}
+		}
+		// up/down always drive the menu's "padList" list, focused or not
+		if ( key == K_PAD0_DPAD_UP || key == K_PAD0_DPAD_DOWN ) {
+			itemDef_t *l = Menu_FindItemByName( menu, "padList" );
+			if ( l && l->type == ITEM_TYPE_LISTBOX && ( l->window.flags & WINDOW_VISIBLE ) ) {
+				Item_ListBox_HandleKey( l, key, down, qtrue );
+				return;
+			}
 		}
 	}
 
@@ -3527,6 +3623,8 @@ void Menu_HandleKey( menuDef_t *menu, int key, qboolean down ) {
 				item->cursorPos = 0;
 				g_editingField = qtrue;
 				g_editItem = item;
+			} else if ( key == K_PAD0_A && UI_PadNavEnabled() ) {
+				UI_PadNavRunAction( menu, item, item->action );
 			} else {
 				Item_Action( item );
 			}

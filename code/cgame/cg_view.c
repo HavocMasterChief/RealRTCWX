@@ -1568,14 +1568,10 @@ static void CG_SyncBloodMode( void ) {
 	if ( cg_bloodMode.modificationCount == lastMod ) {
 		return;
 	}
-	if ( lastMod == -1 ) {
-		// first frame: only enforce "off"; leave com_blood alone otherwise
-		if ( cg_bloodMode.integer == BLOODMODE_OFF ) {
-			trap_Cvar_Set( "com_blood", "0" );
-		}
-	} else {
-		trap_Cvar_Set( "com_blood", cg_bloodMode.integer == BLOODMODE_OFF ? "0" : "1" );
-	}
+	// match the engine's blood switch to the option every level load and on
+	// every change (switching Disabled -> another mode in the main menu used
+	// to leave blood off)
+	trap_Cvar_Set( "com_blood", cg_bloodMode.integer == BLOODMODE_OFF ? "0" : "1" );
 	if ( cg_bloodMode.integer == BLOODMODE_OFF ) {
 		// clear what's already there: decals, pools, runs, screen blood
 		CG_ClearBloodMarks();

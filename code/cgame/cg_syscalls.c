@@ -559,3 +559,8 @@ void *trap_Alloc( int size ) {
 qhandle_t trap_R_RegisterSmartSkin( const char *name, const char *mapName, qboolean upgraded ) {
 	return syscall( CG_R_REGISTERSMARTSKIN, name, mapName, upgraded );
 }
+
+// RealRTCWX: light (ambient + directed) at a point, from the level's light grid
+int trap_R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir ) {
+	return syscall( CG_R_LIGHTFORPOINT_X, point, ambientLight, directedLight, lightDir );
+}

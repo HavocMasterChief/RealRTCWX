@@ -169,8 +169,7 @@ itemDef
 		decoration
 	}
 				 itemDef {
-		accept { close xbox_missions ; open xbox_difficulty_mission }
-					name			maplist
+					name padList
 					group			campCreate
 					rect 40 140 280 290
 					type			ITEM_TYPE_LISTBOX
@@ -243,6 +242,13 @@ itemDef
 		forecolor 1 1 1 .6
 		visible 1
 		decoration
+	}
+
+	itemDef {
+		name padA
+		visible 0
+		decoration
+		action { close xbox_missions ; open xbox_difficulty_mission }
 	}
 
 	itemDef {

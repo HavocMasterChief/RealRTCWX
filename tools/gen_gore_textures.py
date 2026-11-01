@@ -3,12 +3,10 @@
 Generates the gore textures in misc/uwp/xbox/gore/ (see code/cgame/cg_gore.c
 and misc/uwp/xbox/scripts/gore.shader).
 
-Pools and runs are drawn with a multiply-style blend
-(blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR): each texel says how much light
-the blood absorbs, so the blood darkens whatever surface it's on and is lit
-by the level like the game's own blood decals. Black = no blood. Every
-texture's outer rows/columns are black, because the effects "grow" by
-stretching the texture with clamped coordinates.
+Alpha holds how thick the blood is; the colour comes from vertex colours,
+which cg_gore.c darkens with the level's light at that spot. Every
+texture's outer rows/columns are transparent, because the effects "grow"
+by stretching the texture with clamped coordinates.
 """
 import math
 import os
@@ -18,24 +16,23 @@ from PIL import Image, ImageFilter
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "misc", "uwp", "xbox", "gore")
 
-# fraction of light the blood lets through, per channel (fully soaked)
-RED = (0.30, 0.03, 0.04)
-GREEN = (0.07, 0.32, 0.04)
 
 
 def save(density, name):
-    """density: L image (0..255). Writes red and green absorbance versions."""
+    """density: L image (0..255). Alpha = density; RGB is a light shading
+    (a touch darker where the blood is thickest). The colour itself (red or
+    green, darkened by the level's light) comes from vertex colours."""
     w, h = density.size
     d = density.load()
-    for suffix, col in (("", RED), ("_green", GREEN)):
-        img = Image.new("RGB", (w, h))
-        p = img.load()
-        for y in range(h):
-            for x in range(w):
-                v = d[x, y] / 255.0
-                p[x, y] = tuple(int(255 * v * (1.0 - c)) for c in col)
-        img.save(os.path.join(OUT, f"{name}{suffix}.tga"))
-        print("wrote", f"{name}{suffix}.tga")
+    img = Image.new("RGBA", (w, h))
+    p = img.load()
+    for y in range(h):
+        for x in range(w):
+            v = d[x, y] / 255.0
+            shade = int(255 * (1.0 - 0.25 * v))
+            p[x, y] = (shade, shade, shade, int(255 * min(1.0, v * 1.05)))
+    img.save(os.path.join(OUT, f"{name}.tga"))
+    print("wrote", f"{name}.tga")
 
 
 def clear_border(img, n=2):
@@ -108,8 +105,38 @@ def run(size_w=32, size_h=128):
     save(clear_border(img, 1), "bloodrun")
 
 
+def footprint(w=32, h=64):
+    """A boot print: sole at the top (toe forward = up), heel at the bottom,
+    with a little tread texture so it doesn't read as a solid blob."""
+    random.seed(11)
+    img = Image.new("L", (w, h), 0)
+    p = img.load()
+    for y in range(h):
+        for x in range(w):
+            v = 0.0
+            # sole: rounded, slightly narrower at the toe
+            sy = (y - 20) / 17.0
+            sx = (x - 16) / (9.5 - 1.5 * max(0.0, -sy))
+            if sx * sx + sy * sy < 1.0:
+                v = 1.0
+            # heel
+            hy = (y - 50) / 9.0
+            hx = (x - 16) / 8.0
+            if hx * hx + hy * hy < 1.0 or (abs(x - 16) < 8 and 44 <= y <= 55):
+                v = 1.0
+            # tread: horizontal grooves
+            if v and (y % 6 in (0, 1)):
+                v = 0.45
+            if v:
+                v *= 0.75 + 0.25 * random.random()
+            p[x, y] = int(255 * v)
+    img = img.filter(ImageFilter.GaussianBlur(0.8))
+    save(clear_border(img, 1), "footprint")
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     pool(1)
     pool(2)
     run()
+    footprint()

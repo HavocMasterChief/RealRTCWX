@@ -698,15 +698,20 @@ static void CG_GoreCheckBodies( void ) {
 		if ( !goDeadTime[num] ) {
 			goDeadTime[num] = cg.time;
 		}
-		// wait for the body to fall before the pool starts
-		if ( goPooled[num] || cg.time - goDeadTime[num] < 1200 || !CG_GoreBleeds( s ) ) {
-			continue;
+		// wait for the body to fall before the pool starts (a ragdoll takes
+		// a little longer to come to rest)
+		{
+			vec3_t pelvis;
+			qboolean rag = CG_RagdollPelvis( num, pelvis );
+			if ( goPooled[num] || cg.time - goDeadTime[num] < ( rag ? 2000 : 1200 ) || !CG_GoreBleeds( s ) ) {
+				continue;
+			}
+			goPooled[num] = qtrue;
+			cent = &cg_entities[num];
+			CG_GoreLog( "body %i dead (aiChar %i, ragdoll %i): starting pool\n", num, s->aiChar, rag );
+			CG_GorePoolAt( rag ? pelvis : cent->lerpOrigin, ( CG_BloodExtreme() ? 40 : 30 ) + random() * 12,
+						   CG_BloodExtreme() ? 15000 : 20000 );
 		}
-		goPooled[num] = qtrue;
-		cent = &cg_entities[num];
-		CG_GoreLog( "body %i dead (aiChar %i): starting pool\n", num, s->aiChar );
-		CG_GorePoolAt( cent->lerpOrigin, ( CG_BloodExtreme() ? 40 : 30 ) + random() * 12,
-					   CG_BloodExtreme() ? 15000 : 20000 );
 	}
 }
 

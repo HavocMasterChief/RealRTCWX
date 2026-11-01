@@ -1969,6 +1969,7 @@ extern vmCvar_t cg_newinventory;
 extern vmCvar_t cg_overheal;
 extern vmCvar_t cg_bloodTime;
 extern vmCvar_t cg_bloodMode;
+extern vmCvar_t cg_ragdoll;
 
 // cg_bloodMode values (Options > Game > Blood)
 #define BLOODMODE_DEFAULT   0
@@ -2359,6 +2360,9 @@ void CG_FreeOldestMark( void );
 qboolean CG_IsBloodMark( qhandle_t shader );
 void CG_ClearBloodMarks( void );
 // cg_gore.c
+void CG_RagdollBody( centity_t *cent, refEntity_t *body );
+void CG_RagdollReset( void );
+qboolean CG_RagdollPelvis( int entityNum, vec3_t out );
 void CG_AddGore( void );
 void CG_GoreReset( void );
 void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal );
@@ -2763,6 +2767,8 @@ void        testPrintFloat( char *string, float f );
 int         trap_MemoryRemaining( void );
 void        trap_R_RegisterFont( const char *fontName, int pointSize, fontInfo_t *font );
 qboolean    trap_Key_IsDown( int keynum );
+void        trap_R_SetRagdoll( int slot, const float *data );
+int         trap_R_LerpBone( orientation_t *tag, const refEntity_t *refent, const char *boneName );
 int         trap_R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir );
 int         trap_Key_GetCatcher( void );
 void        trap_Key_SetCatcher( int catcher );

@@ -97,9 +97,27 @@
 	itemDef {
 		name iortcwgraphics
 		group grpsystem
+		type ITEM_TYPE_YESNO
+		text "Ragdolls"
+		cvar "cg_ragdoll"
+		rect 82 70 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textfont UI_FONT_BIG
+		textalignx 142
+		textaligny 10
+		textscale .22
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 0
+	}
+
+	itemDef {
+		name iortcwgraphics
+		group grpsystem
 		type ITEM_TYPE_TEXT
 		text "Quality: HD textures and full effects, capped at 60 FPS."
-		rect 82 80 290 12
+		rect 82 95 290 12
 		textalign ITEM_ALIGN_LEFT
 		textfont UI_FONT_BIG
 		textalignx 4
@@ -115,7 +133,7 @@
 		group grpsystem
 		type ITEM_TYPE_TEXT
 		text "Performance: up to 120 FPS (switches a 120 Hz TV to 120 Hz)."
-		rect 82 95 290 12
+		rect 82 110 290 12
 		textalign ITEM_ALIGN_LEFT
 		textfont UI_FONT_BIG
 		textalignx 4

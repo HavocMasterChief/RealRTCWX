@@ -55,6 +55,9 @@ typedef struct {
 	qhandle_t ( *RegisterModel )( const char *name );
 	qhandle_t ( *RegisterSkin )( const char *name );
 	qhandle_t (*RegisterSmartSkin)(const char *name, const char *mapName, qboolean upgraded);
+	// RealRTCWX ragdolls
+	void ( *SetRagdoll )( int slot, const float *data );
+	int ( *LerpBone )( orientation_t *tag, const refEntity_t *refent, const char *boneName );
 	qhandle_t ( *RegisterShader )( const char *name );
 	qhandle_t ( *RegisterShaderNoMip )( const char *name );
 	void ( *LoadWorld )( const char *name );

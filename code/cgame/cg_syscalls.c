@@ -564,3 +564,13 @@ qhandle_t trap_R_RegisterSmartSkin( const char *name, const char *mapName, qbool
 int trap_R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir ) {
 	return syscall( CG_R_LIGHTFORPOINT_X, point, ambientLight, directedLight, lightDir );
 }
+
+// RealRTCWX ragdolls: body-part transforms for a ragdoll slot (NULL clears it)
+void trap_R_SetRagdoll( int slot, const float *data ) {
+	syscall( CG_R_SETRAGDOLL_X, slot, data );
+}
+
+// RealRTCWX ragdolls: model-space position/axis of a named skeleton bone
+int trap_R_LerpBone( orientation_t *tag, const refEntity_t *refent, const char *boneName ) {
+	return syscall( CG_R_LERPBONE_X, tag, refent, boneName );
+}

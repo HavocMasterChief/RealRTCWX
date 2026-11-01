@@ -1694,6 +1694,8 @@ refexport_t *GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	// done.
 	re.AddLightToScene  = RE_AddLightToScene;
 	re.LightForPoint    = R_LightForPoint;   // RealRTCWX (gore lighting)
+	re.SetRagdoll       = RE_SetRagdoll;     // RealRTCWX ragdolls
+	re.LerpBone         = RE_LerpBone;
 //----(SA)
 	re.AddCoronaToScene = RE_AddCoronaToScene;
 	re.SetFog           = R_SetFog;

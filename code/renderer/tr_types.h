@@ -168,6 +168,11 @@ typedef struct {
 
 	int entityNum;                  // currentState.number, so we can attach rendering effects to specific entities (Zombie)
 
+	// RealRTCWX ragdolls: slot set with RE_SetRagdoll (0 = none), and a stamp
+	// that changes whenever the pose does (keeps the bone cache honest)
+	int ragdoll;
+	int ragdollStamp;
+
 } refEntity_t;
 
 //----(SA)

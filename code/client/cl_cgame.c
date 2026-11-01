@@ -924,6 +924,11 @@ intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 		return re.RegisterSmartSkin(VMA(1), VMA(2), args[3]);
 	case CG_R_LIGHTFORPOINT_X:
 		return re.LightForPoint( VMA( 1 ), VMA( 2 ), VMA( 3 ), VMA( 4 ) );
+	case CG_R_SETRAGDOLL_X:
+		re.SetRagdoll( args[1], VMA( 2 ) );
+		return 0;
+	case CG_R_LERPBONE_X:
+		return re.LerpBone( VMA( 1 ), VMA( 2 ), VMA( 3 ) );
 		//----(SA)	added
 	default:
 		Com_Error( ERR_DROP, "Bad cgame system trap: %ld", (long int) args[0] );

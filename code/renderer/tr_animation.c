@@ -147,6 +147,10 @@ static int R_CullModel( mdsHeader_t *header, trRefEntity_t *ent ) {
 
 	cullSphere = qtrue;
 
+	if ( ent->e.ragdoll ) {
+		return CULL_CLIP;   // the body no longer matches the frame's bounds
+	}
+
 	frameSize = (int) ( sizeof( mdsFrame_t ) - sizeof( mdsBoneFrameCompressed_t ) + header->numBones * sizeof( mdsBoneFrameCompressed_t ) );
 
 	// compute frame pointers
@@ -867,6 +871,8 @@ R_CalcBones
 	The list of bones[] should only be built and modified from within here
 ==============
 */
+static void R_ApplyRagdoll( const mdsHeader_t *header, const refEntity_t *refent, const int *boneList, int numBones );
+
 void R_CalcBones( mdsHeader_t *header, const refEntity_t *refent, int *boneList, int numBones ) {
 
 	int i;
@@ -896,6 +902,19 @@ void R_CalcBones( mdsHeader_t *header, const refEntity_t *refent, int *boneList,
 	}
 
 	memset( newBones, 0, header->numBones );
+
+	// ragdoll: always rebuild the whole skeleton in order (parents before
+	// children) from the plain animation pose, so no bone is ever computed
+	// from a parent that was already moved by the ragdoll
+	if ( refent->ragdoll ) {
+		static int fullList[MDS_MAX_BONES];
+		for ( i = 0; i < header->numBones; i++ ) {
+			fullList[i] = i;
+		}
+		boneList = fullList;
+		numBones = header->numBones;
+		memset( validBones, 0, header->numBones );
+	}
 
 	if ( refent->oldframe == refent->frame ) {
 		backlerp = 0;
@@ -1033,6 +1052,12 @@ void R_CalcBones( mdsHeader_t *header, const refEntity_t *refent, int *boneList,
 
 	// backup the final bones
 	memcpy( oldBones, bones, sizeof( bones[0] ) * header->numBones );
+
+	// ragdoll: move each bone with its body part (after the backup, so the
+	// cache keeps the plain animation pose)
+	if ( refent->ragdoll ) {
+		R_ApplyRagdoll( header, refent, boneList, numBones );
+	}
 }
 
 #ifdef DBG_PROFILE_BONES
@@ -1844,3 +1869,175 @@ void MC_UnCompress(float mat[3][4],const unsigned char * comp)
 	mat[2][2]=((float)(val))*MC_SCALE_VECT;
 }
 
+
+/*
+===========================================================================
+RealRTCWX ragdolls
+
+cgame simulates a jointed body and sends, per ragdoll slot, a rigid
+transform (3x3 rotation R, translation t, in the entity's model space) for
+each of RD_NUM_SEGS body parts. Every bone of a skeletal (MDS) model is
+assigned to a part by its name (the Character Studio "Bip01 ..." biped all
+RTCW characters use); after the normal animation pose is computed, each bone
+is moved with its part's transform. Tags are bones too, so heads, helmets
+and gear attached to tags follow automatically.
+===========================================================================
+*/
+#define RD_MAX_SLOTS    16
+#define RD_NUM_SEGS     11
+
+static float rd_data[RD_MAX_SLOTS + 1][RD_NUM_SEGS][12];   // R[3][3] row-major, t[3]
+static qboolean rd_valid[RD_MAX_SLOTS + 1];
+
+typedef struct {
+	const mdsHeader_t *mds;
+	signed char seg[MDS_MAX_BONES];
+} rdBoneMap_t;
+
+static rdBoneMap_t rd_maps[32];
+static int rd_numMaps;
+
+void RE_SetRagdoll( int slot, const float *data ) {
+	if ( slot < 1 || slot > RD_MAX_SLOTS ) {
+		return;
+	}
+	if ( !data ) {
+		rd_valid[slot] = qfalse;
+		return;
+	}
+	memcpy( rd_data[slot], data, sizeof( rd_data[slot] ) );
+	rd_valid[slot] = qtrue;
+}
+
+// body part for a bone name; -1 = same as its parent (tags, fingers)
+static int R_RagdollSegForName( const char *n ) {
+	qboolean left = ( strstr( n, " L " ) != NULL );
+	if ( strncmp( n, "Bip01", 5 ) ) {
+		return -1;
+	}
+	if ( strstr( n, "Pelvis" ) || !strcmp( n, "Bip01 Spine" ) ) {
+		return 0;
+	}
+	if ( strstr( n, "Spine" ) || strstr( n, "Clavicle" ) ) {
+		return 1;
+	}
+	if ( strstr( n, "Neck" ) || strstr( n, "Head" ) ) {
+		return 2;
+	}
+	if ( strstr( n, "UpperArm" ) ) {
+		return left ? 3 : 5;
+	}
+	if ( strstr( n, "Forearm" ) || strstr( n, "Hand" ) ) {
+		return left ? 4 : 6;
+	}
+	if ( strstr( n, "Thigh" ) ) {
+		return left ? 7 : 9;
+	}
+	if ( strstr( n, "Calf" ) || strstr( n, "Foot" ) || strstr( n, "Toe" ) ) {
+		return left ? 8 : 10;
+	}
+	return -1;
+}
+
+static const signed char *R_RagdollBoneMap( const mdsHeader_t *mds ) {
+	mdsBoneInfo_t *bi;
+	rdBoneMap_t *m;
+	int i, s;
+
+	for ( i = 0; i < rd_numMaps; i++ ) {
+		if ( rd_maps[i].mds == mds ) {
+			return rd_maps[i].seg;
+		}
+	}
+	m = &rd_maps[rd_numMaps < 32 ? rd_numMaps++ : 31];
+	m->mds = mds;
+	bi = ( mdsBoneInfo_t * )( (byte *)mds + mds->ofsBones );
+	for ( i = 0; i < mds->numBones && i < MDS_MAX_BONES; i++ ) {
+		s = R_RagdollSegForName( bi[i].name );
+		if ( s < 0 ) {
+			s = ( bi[i].parent >= 0 && bi[i].parent < i ) ? m->seg[bi[i].parent] : 0;
+		}
+		m->seg[i] = (signed char)s;
+	}
+	return m->seg;
+}
+
+static void R_ApplyRagdoll( const mdsHeader_t *header, const refEntity_t *refent, const int *boneList, int numBones ) {
+	const signed char *map;
+	mdsBoneInfo_t *bi;
+	int i, b, k, r, c;
+
+	if ( refent->ragdoll < 1 || refent->ragdoll > RD_MAX_SLOTS || !rd_valid[refent->ragdoll] ) {
+		return;
+	}
+	map = R_RagdollBoneMap( header );
+	bi = ( mdsBoneInfo_t * )( (byte *)header + header->ofsBones );
+	for ( i = 0; i < numBones; i++ ) {
+		const float *d;
+		float m[3][3], tr[3];
+		mdsBoneFrame_t *bp;
+
+		b = boneList[i];
+		if ( b < 0 || b >= header->numBones ) {
+			continue;
+		}
+		d = rd_data[refent->ragdoll][(int)map[b]];
+		bp = &bones[b];
+		memcpy( m, bp->matrix, sizeof( m ) );
+		if ( bi[b].flags & BONEFLAG_TAG ) {
+			// tag axes are the rows: rotate each one
+			for ( k = 0; k < 3; k++ ) {
+				for ( r = 0; r < 3; r++ ) {
+					bp->matrix[k][r] = d[r * 3 + 0] * m[k][0] + d[r * 3 + 1] * m[k][1] + d[r * 3 + 2] * m[k][2];
+				}
+			}
+		} else {
+			// vertex = M * offset + T  ->  (R * M) * offset + (R * T + t)
+			for ( r = 0; r < 3; r++ ) {
+				for ( c = 0; c < 3; c++ ) {
+					bp->matrix[r][c] = d[r * 3 + 0] * m[0][c] + d[r * 3 + 1] * m[1][c] + d[r * 3 + 2] * m[2][c];
+				}
+			}
+		}
+		VectorCopy( bp->translation, tr );
+		for ( r = 0; r < 3; r++ ) {
+			bp->translation[r] = d[r * 3 + 0] * tr[0] + d[r * 3 + 1] * tr[1] + d[r * 3 + 2] * tr[2] + d[9 + r];
+		}
+	}
+}
+
+/*
+===============
+RE_LerpBone
+
+Model-space position/axis of a named bone for this refEntity's pose
+(ragdolls read the rest pose of their joints with this).
+===============
+*/
+int RE_LerpBone( orientation_t *out, const refEntity_t *refent, const char *boneName ) {
+	model_t *model;
+	mdsHeader_t *mds;
+	mdsBoneInfo_t *bi;
+	int boneList[MDS_MAX_BONES], numBones = 0, i;
+
+	memset( out, 0, sizeof( *out ) );
+	model = R_GetModelByHandle( refent->hModel );
+	if ( !model || model->type != MOD_MDS || !model->mds ) {
+		return -1;
+	}
+	mds = model->mds;
+	bi = ( mdsBoneInfo_t * )( (byte *)mds + mds->ofsBones );
+	for ( i = 0; i < mds->numBones; i++ ) {
+		if ( !Q_stricmp( bi[i].name, boneName ) ) {
+			break;
+		}
+	}
+	if ( i >= mds->numBones ) {
+		return -1;
+	}
+	R_RecursiveBoneListAdd( i, boneList, &numBones, bi );
+	R_CalcBones( mds, refent, boneList, numBones );
+	memcpy( out->axis, bones[i].matrix, sizeof( out->axis ) );
+	VectorCopy( bones[i].translation, out->origin );
+	return i;
+}

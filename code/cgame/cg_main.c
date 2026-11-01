@@ -238,6 +238,7 @@ vmCvar_t cg_newinventory;
 vmCvar_t cg_overheal;
 vmCvar_t cg_bloodTime;
 vmCvar_t cg_bloodMode;
+vmCvar_t cg_ragdoll;
 vmCvar_t cg_norender;
 vmCvar_t cg_skybox;
 
@@ -441,6 +442,7 @@ cvarTable_t cvarTable[] = {
 	{&cg_swingSpeed, "cg_swingSpeed", "0.1", CVAR_CHEAT}, // was 0.3 for Q3
 	{&cg_bloodTime, "cg_bloodTime", "120", CVAR_ARCHIVE},
 	{&cg_bloodMode, "cg_bloodMode", "0", CVAR_ARCHIVE},	// 0 default, 1 green, 2 off, 3 extreme
+	{&cg_ragdoll, "cg_ragdoll", "1", CVAR_ARCHIVE},	// RealRTCWX ragdoll deaths
 	{&cg_hunkUsed, "com_hunkUsed", "0", 0},
 	{&cg_soundAdjust, "hunk_soundadjust", "0", 0},
 
@@ -3009,6 +3011,7 @@ void CG_Init( int serverMessageNum, int serverCommandSequence ) {
 
 	CG_InitMarkPolys();
 	CG_GoreReset();
+	CG_RagdollReset();
 
 	// RF, init ZombieFX
 	trap_RB_ZombieFXAddNewHit( -1, NULL, NULL );

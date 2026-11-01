@@ -4696,6 +4696,8 @@ void CG_Player( centity_t *cent ) {
 		memcpy( legs.torsoAxis, torso.axis, sizeof( torso.axis ) );
 		legs.torsoBacklerp = torso.backlerp;
 
+		CG_RagdollBody( cent, &legs );     // RealRTCWX: dead bodies become ragdolls
+
 		CG_AddRefEntityWithPowerups( &legs, cent->currentState.powerups, ci->team, &cent->currentState, cent->fireRiseDir );
 
 		cent->pe.legsRefEnt = legs;

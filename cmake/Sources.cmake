@@ -426,6 +426,7 @@ set(CGAME_SRC
   code/cgame/cg_localents.c
   code/cgame/cg_marks.c
   code/cgame/cg_gore.c
+  code/cgame/cg_ragdoll.c
   code/cgame/cg_newdraw.c
   code/cgame/cg_particles.c
   code/cgame/cg_players.c

@@ -120,6 +120,23 @@ jobs:
           "Mesa DLLs (from $($gl.DirectoryName)):"
           Get-ChildItem $out | ForEach-Object { "  $($_.Name)" }
 
+      # Mesa's D3D12 driver loads DXIL.dll at runtime to validate/sign the
+      # shaders it generates. The Mesa release doesn't ship it, so take it from
+      # Microsoft's DirectX Shader Compiler release.
+      - name: Download DXIL.dll
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dl = "$env:RUNNER_TEMP\dxc"
+          gh release download v1.8.2505.1 -R microsoft/DirectXShaderCompiler -p "dxc_20*.zip" -D $dl
+          $zip = Get-ChildItem $dl -Filter *.zip | Where-Object Name -notmatch 'pdb|arm' | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath "$dl\x" -Force
+          $dxil = Get-ChildItem -Recurse "$dl\x" -Filter dxil.dll | Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+          if (-not $dxil) { throw "dxil.dll (x64) not found in $($zip.Name)" }
+          Copy-Item $dxil.FullName mesa\
+          "DXIL: $($dxil.FullName) from $($zip.Name)"
+
       # --------------------------------------------------------------- engine
       - name: Configure
         shell: pwsh

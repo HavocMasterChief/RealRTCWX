@@ -102,7 +102,9 @@ target_link_libraries(realrtcw PRIVATE
 if(RTCW_UWP)
   # OpenGL comes from Mesa's opengl32.dll in the package, loaded by SDL at
   # runtime. WinMain lives in sys_uwp.c. The exe must be flagged AppContainer.
-  target_link_options(realrtcw PRIVATE /MANIFEST:NO /APPCONTAINER)
+  # 16 MB main-thread stack: the game runs on the UI thread, and the engine plus
+  # Mesa's texture upload path need far more than the 1 MB default.
+  target_link_options(realrtcw PRIVATE /MANIFEST:NO /APPCONTAINER /STACK:16777216)
 else()
   target_link_libraries(realrtcw PRIVATE opengl32)
   # win_resource.rc already embeds win_manifest.xml.

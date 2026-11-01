@@ -143,6 +143,8 @@ them, and appends where it happened to LocalState\crash_info.txt. It only
 logs and lets the exception continue, so behaviour is otherwise unchanged.
 =================
 */
+static HANDLE uwp_crashFile = INVALID_HANDLE_VALUE;
+
 static LONG CALLBACK UWP_ExceptionLogger( EXCEPTION_POINTERS *ep ) {
 	static volatile LONG logged = 0;
 	DWORD code = ep->ExceptionRecord->ExceptionCode;
@@ -157,6 +159,16 @@ static LONG CALLBACK UWP_ExceptionLogger( EXCEPTION_POINTERS *ep ) {
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 	if ( InterlockedIncrement( &logged ) > 8 ) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	if ( code == EXCEPTION_STACK_OVERFLOW ) {
+		// Almost no stack left: no CRT calls, just a pre-opened handle.
+		static const char msg[] = "exception 0xC00000FD STACK OVERFLOW\r\n";
+		DWORD w;
+		if ( uwp_crashFile != INVALID_HANDLE_VALUE ) {
+			WriteFile( uwp_crashFile, msg, sizeof( msg ) - 1, &w, NULL );
+			FlushFileBuffers( uwp_crashFile );
+		}
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
@@ -321,6 +333,12 @@ static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 	UWP_CopyPath( uwp_installDir, sizeof( uwp_installDir ), SDL_GetWinRTFSPath( UWP_PATH_INSTALLED_LOCATION ) );
 	UWP_CopyPath( uwp_localDir, sizeof( uwp_localDir ), SDL_GetWinRTFSPath( UWP_PATH_LOCAL_FOLDER ) );
 
+	{
+		char crashPath[ MAX_PATH ];
+		snprintf( crashPath, sizeof( crashPath ), "%s\\crash_info.txt", uwp_localDir );
+		uwp_crashFile = CreateFileA( crashPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+			OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+	}
 	AddVectoredExceptionHandler( 1, UWP_ExceptionLogger );
 	UWP_CaptureStderr();
 	atexit( UWP_AtExit );

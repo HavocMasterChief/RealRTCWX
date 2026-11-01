@@ -542,9 +542,8 @@ void CL_GamepadUIMouseMove( void ) {
     if ( !(Key_GetCatcher() & KEYCATCH_UI) ) {
         return;
     }
-    if ( ui_padNav && ui_padNav->integer ) {
-        return;     // menus are navigated by focus, not a cursor
-    }
+    // (with ui_padNav the left stick still moves the cursor; the D-pad
+    //  moves focus between items and parks the cursor on them)
 
 float lx = cl.joystickAxis[0];
 float ly = cl.joystickAxis[1];

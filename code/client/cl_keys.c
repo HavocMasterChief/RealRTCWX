@@ -2223,13 +2223,9 @@ static int CL_PadNavKey( int key ) {
 	if ( !ui_padNav || !ui_padNav->integer || !( Key_GetCatcher() & KEYCATCH_UI ) ) {
 		return key;
 	}
-	switch ( key ) {
-	case K_PAD0_LEFTSTICK_UP:    return K_PAD0_DPAD_UP;
-	case K_PAD0_LEFTSTICK_DOWN:  return K_PAD0_DPAD_DOWN;
-	case K_PAD0_LEFTSTICK_LEFT:  return K_PAD0_DPAD_LEFT;
-	case K_PAD0_LEFTSTICK_RIGHT: return K_PAD0_DPAD_RIGHT;
-	default:                     return key;
-	}
+	// The left stick drives the cursor (see CL_GamepadUIMouseMove); only the
+	// D-pad moves focus. Nothing to remap here any more.
+	return key;
 }
 
 /*

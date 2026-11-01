@@ -88,6 +88,7 @@ itemDef_t *Menu_SetNextCursorItem( menuDef_t *menu );
 // Console-style menu navigation (cvar ui_padNav): focus moves between items
 // with the D-pad / left stick and A selects; there is no mouse cursor.
 static qboolean g_padNavFocus = qfalse;
+static qboolean g_padNavKeepCursor = qfalse;	// auto-focus: don't yank the cursor
 
 static qboolean UI_PadNavEnabled( void ) {
 	return ( DC && DC->getCVarValue && DC->getCVarValue( "ui_padNav" ) != 0 ) ? qtrue : qfalse;
@@ -2975,7 +2976,9 @@ itemDef_t *Menu_SetPrevCursorItem( menuDef_t *menu ) {
 			focused = Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory );
 			g_padNavFocus = qfalse;
 			if ( focused ) {
-				UI_PadNavMoveCursorTo( menu->items[menu->cursorItem] );
+				if ( !g_padNavKeepCursor ) {
+					UI_PadNavMoveCursorTo( menu->items[menu->cursorItem] );
+				}
 				UI_PadNavHover( prev, menu->items[menu->cursorItem] );
 				return menu->items[menu->cursorItem];
 			}
@@ -3021,7 +3024,9 @@ itemDef_t *Menu_SetNextCursorItem( menuDef_t *menu ) {
 			focused = Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory );
 			g_padNavFocus = qfalse;
 			if ( focused ) {
-				UI_PadNavMoveCursorTo( menu->items[menu->cursorItem] );
+				if ( !g_padNavKeepCursor ) {
+					UI_PadNavMoveCursorTo( menu->items[menu->cursorItem] );
+				}
 				UI_PadNavHover( prev, menu->items[menu->cursorItem] );
 				return menu->items[menu->cursorItem];
 			}
@@ -4970,7 +4975,9 @@ void Menu_Paint( menuDef_t *menu, qboolean forcePaint ) {
 		if ( !anyFocus && menu->itemCount > 0 ) {
 			// start from the last item so the search wraps to item 0 first
 			menu->cursorItem = menu->itemCount - 1;
+			g_padNavKeepCursor = qtrue;
 			Menu_SetNextCursorItem( menu );
+			g_padNavKeepCursor = qfalse;
 		}
 	}
 

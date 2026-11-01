@@ -61,7 +61,14 @@ set(MASM_SRC
 set_source_files_properties(${MASM_SRC} PROPERTIES COMPILE_OPTIONS "/Didx64")
 
 if(RTCW_UWP)
-  set(PLATFORM_SRC code/sys/sys_uwp.c)
+  set(PLATFORM_SRC code/sys/sys_uwp.c code/sys/uwp_display.cpp)
+  # C++/WinRT (TV refresh rate switching)
+  set_source_files_properties(code/sys/uwp_display.cpp PROPERTIES
+    COMPILE_OPTIONS "/std:c++17;/EHsc;/permissive-;/bigobj")
+  set(_cppwinrt "C:/Program Files (x86)/Windows Kits/10/Include/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/cppwinrt")
+  if(EXISTS "${_cppwinrt}")
+    set_property(SOURCE code/sys/uwp_display.cpp APPEND PROPERTY INCLUDE_DIRECTORIES "${_cppwinrt}")
+  endif()
   # No OpenAL (desktop audio backend) or Mumble on Xbox; SDL handles audio.
   set(PLATFORM_DEFS RTCW_UWP)
 else()
@@ -104,6 +111,7 @@ if(RTCW_UWP)
   # runtime. WinMain lives in sys_uwp.c. The exe must be flagged AppContainer.
   # 16 MB main-thread stack: the game runs on the UI thread, and the engine plus
   # Mesa's texture upload path need far more than the 1 MB default.
+  target_link_libraries(realrtcw PRIVATE windowsapp)
   target_link_options(realrtcw PRIVATE /MANIFEST:NO /APPCONTAINER /STACK:16777216
     /MAP:$<TARGET_FILE_DIR:realrtcw>/RealRTCW.x64.map)
 else()

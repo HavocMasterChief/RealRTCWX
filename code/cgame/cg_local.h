@@ -2360,6 +2360,9 @@ void CG_FreeOldestMark( void );
 void CG_AddGore( void );
 void CG_GoreReset( void );
 void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal );
+void CG_GoreScreenSplat( const vec3_t origin, int count );
+void CG_DrawGoreScreen( void );
+void CG_PadRumble( float low, float high, int ms, float trigger );
 void    CG_AddMarks( void );
 void    CG_ImpactMark( qhandle_t markShader,
 					   const vec3_t origin, const vec3_t dir,

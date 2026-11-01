@@ -4201,6 +4201,7 @@ static void CG_Draw2D(stereoFrame_t stereoFrame) {
 	}
 
 	CG_DrawFlashBlendBehindHUD();
+	CG_DrawGoreScreen();
 
 	if ( cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
 		CG_DrawSpectator();
@@ -4307,6 +4308,15 @@ void CG_StartShakeCamera( float p, int duration, vec3_t src, float radius ) {
 	cg.cameraShake[i].time = cg.time;
 	VectorCopy( src, cg.cameraShake[i].src );
 	cg.cameraShake[i].radius = radius;
+
+	// controller rumble: stronger the closer the source
+	{
+		float dist = Distance( src, cg.refdef.vieworg );
+		if ( radius > 0 && dist < radius ) {
+			float r = p * 10.0f * ( 1.0f - dist / radius ) + 0.15f;
+			CG_PadRumble( r, r * 0.8f, duration > 900 ? 900 : duration, 0.0f );
+		}
+	}
 }
 
 /*

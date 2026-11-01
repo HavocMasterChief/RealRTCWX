@@ -2330,7 +2330,15 @@ int FS_FindVM(void **startSearch, char *found, int foundlen, const char *name, i
 		{
 			dir = search->dir;
 
-			if(enableDll)
+			if(enableDll
+#ifdef RTCW_UWP
+				// Xbox: only load game code shipped in the package. Copies of the
+				// PC game's DLLs in LocalState\main (uploaded with the game data)
+				// would otherwise win and replace the Xbox code (blood modes,
+				// menu navigation, rumble...).
+				&& !FS_FilenameCompare(dir->path, fs_basepath->string)
+#endif
+				)
 			{
 				netpath = FS_BuildOSPath(dir->path, dir->gamedir, dllName);
 

@@ -16,6 +16,10 @@ layout that the current UI code and these edits don't match), then changes:
   - Performance tab: removed (the two modes cover it).
   - Sound: removes OpenAL, mute-when-minimized/unfocused and Steam items.
   - View: the screen-blood toggle becomes the Blood option (cg_bloodMode).
+  - Graphics: adds a Bloom toggle (xbox_bloom).
+  - Controls: key binding pages are replaced by two tabs: Layout (a picture
+    of the controller, from tools/gen_controller_layout.py) and Settings
+    (look/move sensitivity, aim assist, invert, vibration, auto options).
 """
 import os
 import re
@@ -109,9 +113,19 @@ def mode_items(name, group, x, y):
 	itemDef {{
 		name {name}
 		group {group}
+		type ITEM_TYPE_YESNO
+		text "Bloom"
+		cvar "xbox_bloom"
+		rect {x} {y + 15} 290 12
+		textalign ITEM_ALIGN_RIGHT
+{style}	}}
+
+	itemDef {{
+		name {name}
+		group {group}
 		type ITEM_TYPE_TEXT
 		text "Quality: HD textures and full effects, capped at 60 FPS."
-		rect {x} {y + 30} 290 12
+		rect {x} {y + 40} 290 12
 		textalign ITEM_ALIGN_LEFT
 {note}	}}
 
@@ -119,8 +133,8 @@ def mode_items(name, group, x, y):
 		name {name}
 		group {group}
 		type ITEM_TYPE_TEXT
-		text "Performance: up to 120 FPS. Best on a 120 Hz TV."
-		rect {x} {y + 45} 290 12
+		text "Performance: up to 120 FPS (switches a 120 Hz TV to 120 Hz)."
+		rect {x} {y + 55} 290 12
 		textalign ITEM_ALIGN_LEFT
 {note}	}}
 '''
@@ -164,6 +178,79 @@ def copy_stock_ui():
                 f.write(data)
 
 
+# ---------------------------------------------------------------------------
+# Controls: Layout + Settings tabs
+# ---------------------------------------------------------------------------
+def nth_item(text, n):
+    return [c for k, c in split_items(text) if k == 'item'][n]
+
+
+def retab(item, label, width=64):
+    item = re.sub(r'text "[^"]*"', f'text "{label}"', item, count=1)
+    item = re.sub(r'(\brect\s+[\d.]+\s+[\d.]+\s+)[\d.]+', lambda m: m.group(1) + str(width), item, count=1)
+    item = re.sub(r'textalignx\s+[\d.]+', f'textalignx {width // 2}', item, count=1)
+    return item
+
+
+def find_item(text, cvar):
+    for k, c in split_items(text):
+        if k == 'item' and cvar in (field(c, 'cvar'), field(c, 'cvarfloat')):
+            return c
+    raise SystemExit("control item not found: " + cvar)
+
+
+def place(item, name, x, y):
+    item = re.sub(r'^(\s*)name\s+\S+', lambda m: m.group(1) + 'name ' + name, item, count=1, flags=re.M)
+    return re.sub(r'\brect\s+[\d.]+\s+[\d.]+\s+290\s+12', f'rect {x} {y} 290 12', item, count=1)
+
+
+def controls_set(prefix, group, img_rect, x, y0, header_note):
+    look = open(os.path.join(SRC, prefix + "look.menu"), encoding="latin-1").read()
+    misc = open(os.path.join(SRC, prefix + "misc.menu"), encoding="latin-1").read()
+    move = open(os.path.join(SRC, prefix + "move.menu"), encoding="latin-1").read()
+
+    # Layout tab = the old Look tab button + the picture
+    items = split_items(look)
+    head = items[0][1]
+    keep = [retab(nth_item(look, 0), "Layout")]
+    if prefix.startswith("main"):
+        keep.append(nth_item(look, 1))      # the "CONTROLS" title
+    ix, iy, iw, ih = img_rect
+    picture = f'''
+	itemDef {{
+		name look
+		group {group}
+		style WINDOW_STYLE_SHADER
+		background "ui/xbox_controller"
+		rect {ix} {iy} {iw} {ih}
+		forecolor 1 1 1 1
+		visible 0
+		decoration
+	}}
+'''
+    out_look = head + "\n".join(keep) + picture
+
+    # Settings tab = the old Move tab button + gamepad options
+    rows = [find_item(look, c) for c in ("j_lookSens", "j_moveSens", "j_aimassist", "j_invertLook")]
+    vib = find_item(look, "j_invertLook")
+    vib = re.sub(r'text "[^"]*"', 'text "Vibration"', vib, count=1)
+    vib = vib.replace('cvar "j_invertLook"', 'cvar "xbox_vibration"')
+    rows.append(vib)
+    rows += [find_item(misc, c) for c in ("cg_autoreload", "cg_autoactivate", "cg_autoswitch")]
+    placed = [place(r, "move", x, y0 + 18 * i) for i, r in enumerate(rows)]
+    out_move = split_items(move)[0][1] + retab(nth_item(move, 0), "Settings") + "\n" + "\n".join(placed) + "\n"
+
+    empty = "// Key bindings are fixed on Xbox; see the Layout tab.\n"
+    return {prefix + "look.menu": out_look, prefix + "move.menu": out_move,
+            prefix + "shoot.menu": empty, prefix + "misc.menu": empty}
+
+
+def write_raw(name, text):
+    with open(os.path.join(DST, name), "w", encoding="latin-1") as f:
+        f.write(HEADER.format(name=name) + text)
+    print("wrote", name)
+
+
 def main():
     copy_stock_ui()
     # Display
@@ -186,6 +273,12 @@ def main():
     # Blood option
     for n in ("main_game_view.menu", "ingame_options_view.menu"):
         gen(n, blood_option)
+    # Controls
+    files = controls_set("main_controls_", "controls", (226, 128, 431, 216), 300, 132, True)
+    files.update(controls_set("ingame_controls_", "grpControls", (6, 28, 431, 216), 82, 32, False))
+    files["main_controls_shoot_advanced.menu"] = "// Key bindings are fixed on Xbox; see the Layout tab.\n"
+    for n, t in files.items():
+        write_raw(n, t)
 
 
 if __name__ == "__main__":

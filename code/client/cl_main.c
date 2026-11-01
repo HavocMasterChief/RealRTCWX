@@ -2961,6 +2961,7 @@ these settings are re-applied at every launch so old PC values can't stick.
 ==================
 */
 static cvar_t *xbox_gfxMode;
+static cvar_t *xbox_bloom;
 
 static void CL_SetGfxCvar( const char *name, const char *value, qboolean *needRestart ) {
 	cvar_t *cv = Cvar_Get( name, value, CVAR_ARCHIVE );
@@ -2981,7 +2982,9 @@ static void CL_ApplyConsoleGfxMode( qboolean rendererRunning ) {
 	CL_SetGfxCvar( "r_picmip", "0", &restart );
 	CL_SetGfxCvar( "r_picmip2", "0", &restart );
 	CL_SetGfxCvar( "r_texturebits", "32", &restart );
-	CL_SetGfxCvar( "r_ext_compressed_textures", "0", &restart );
+	// compressed textures: about a quarter of the memory. Uncompressed HD
+	// textures pushed level loads past the Xbox memory budget.
+	CL_SetGfxCvar( "r_ext_compressed_textures", "1", &restart );
 	CL_SetGfxCvar( "r_ext_texture_filter_anisotropic", "1", &restart );
 	CL_SetGfxCvar( "r_dynamiclight", "1", &restart );
 	CL_SetGfxCvar( "r_drawfoliage", "1", &restart );
@@ -3005,15 +3008,71 @@ static void CL_ApplyConsoleGfxMode( qboolean rendererRunning ) {
 		CL_SetGfxCvar( "r_texturemode", "GL_LINEAR_MIPMAP_LINEAR", &restart );
 	}
 
+	// bloom is its own toggle on the Graphics menu
+	CL_SetGfxCvar( "r_bloom", xbox_bloom->integer ? "1" : "0", &restart );
+
+	// ask the TV for 120 Hz in Performance, 60 Hz in Quality
+	UWP_RequestRefreshRate( performance ? 120 : 60 );
+
 	if ( restart && rendererRunning ) {
 		Cbuf_AddText( "vid_restart\n" );
 	}
 }
 
+/*
+==================
+CL_CheckRumble
+
+cgame posts controller rumble requests in xbox_rumble
+("low high ms trigger serial"); see CG_PadRumble.
+==================
+*/
+static cvar_t *xbox_rumble;
+static cvar_t *xbox_vibration;
+
+static void CL_CheckRumble( void ) {
+	float low, high, trig;
+	int ms, serial;
+
+	if ( !xbox_rumble || !xbox_rumble->modified ) {
+		return;
+	}
+	xbox_rumble->modified = qfalse;
+	if ( !xbox_vibration->integer ) {
+		return;
+	}
+	if ( sscanf( xbox_rumble->string, "%f %f %d %f %d", &low, &high, &ms, &trig, &serial ) >= 3 ) {
+		IN_Rumble( low, high, trig, ms );
+	}
+}
+
 static void CL_CheckConsoleGfxMode( void ) {
-	if ( xbox_gfxMode && xbox_gfxMode->modified ) {
+	if ( xbox_gfxMode && ( xbox_gfxMode->modified || xbox_bloom->modified ) ) {
 		xbox_gfxMode->modified = qfalse;
+		xbox_bloom->modified = qfalse;
 		CL_ApplyConsoleGfxMode( cls.rendererStarted );
+	}
+	CL_CheckRumble();
+}
+
+/*
+==================
+CL_UWP_Background
+
+The console is suspending us (Guide button, dashboard, another app) or
+bringing us back. Pause into the in-game menu so play doesn't continue
+unseen, and mute while away.
+==================
+*/
+void CL_UWP_Background( qboolean background ) {
+	Cvar_SetValue( "com_minimized", background ? 1 : 0 );
+	if ( background ) {
+		IN_Rumble( 0, 0, 0, 0 );
+		S_StopAllSounds();
+		if ( clc.state == CA_ACTIVE && !clc.demoplaying && uivm &&
+			 !( Key_GetCatcher() & KEYCATCH_UI ) ) {
+			VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_INGAME );
+		}
 	}
 }
 #endif
@@ -4031,6 +4090,11 @@ void CL_Init( void ) {
 #ifdef RTCW_UWP
 	xbox_gfxMode = Cvar_Get( "xbox_gfxMode", "0", CVAR_ARCHIVE );
 	xbox_gfxMode->modified = qfalse;
+	xbox_bloom = Cvar_Get( "xbox_bloom", "0", CVAR_ARCHIVE );
+	xbox_bloom->modified = qfalse;
+	xbox_rumble = Cvar_Get( "xbox_rumble", "0", 0 );
+	xbox_rumble->modified = qfalse;
+	xbox_vibration = Cvar_Get( "xbox_vibration", "1", CVAR_ARCHIVE );
 	CL_ApplyConsoleGfxMode( qfalse );
 #endif
 

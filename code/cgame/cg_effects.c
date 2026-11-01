@@ -743,6 +743,9 @@ void CG_GibPlayer( centity_t *cent, vec3_t playerOrigin, vec3_t gdir ) {
 	}
 	ci = &cgs.clientinfo[ clientNum ];
 
+	// Extreme: a body blown apart right in front of you hits the screen
+	CG_GoreScreenSplat( playerOrigin, 4 );
+
 	// Ridah, fetch the various positions of the tag_gib*'s
 	// and spawn the gibs from the correct places (especially the head)
 	for ( gibIndex = 0, count = 0, foundtag = qtrue; foundtag && gibIndex < MAX_GIB_MODELS && gibTags[gibIndex]; gibIndex++ ) {

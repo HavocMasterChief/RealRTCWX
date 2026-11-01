@@ -535,3 +535,168 @@ void CG_AddGore( void ) {
 		}
 	}
 }
+
+/*
+===========================================================================
+Extreme: close-range screen splatter
+
+When a target is shot or gibbed close to the player and in front of them,
+blood hits the "lens": a few splats appear on screen, slide down a little
+and fade over a couple of seconds. Red only (Extreme is always red).
+===========================================================================
+*/
+
+#define GORE_MAX_SCREEN         8
+#define GORE_SCREEN_RANGE       140.0f
+#define GORE_SCREEN_LIFE        2600
+
+typedef struct {
+	qboolean active;
+	int startTime;
+	float x, y, size;       // in 0..1 screen fractions (size relative to height)
+	float slide;            // how far it slides down over its life (fraction of height)
+	int variant;
+	qboolean flip;
+} goreScreen_t;
+
+static goreScreen_t goScreen[GORE_MAX_SCREEN];
+static qhandle_t goScreenShader[3];
+static qboolean goScreenRegistered;
+static int goScreenLast;
+
+static void CG_GoreScreenRegister( void ) {
+	if ( goScreenRegistered ) {
+		return;
+	}
+	goScreenShader[0] = trap_R_RegisterShaderNoMip( "gore/screensplat1" );
+	goScreenShader[1] = trap_R_RegisterShaderNoMip( "gore/screensplat2" );
+	goScreenShader[2] = trap_R_RegisterShaderNoMip( "gore/screensplat3" );
+	goScreenRegistered = qtrue;
+}
+
+/*
+===============
+CG_GoreScreenSplat
+
+'count' splats if 'origin' is close and in front of the view.
+===============
+*/
+void CG_GoreScreenSplat( const vec3_t origin, int count ) {
+	vec3_t delta, forward;
+	float dist;
+	int i;
+
+	if ( !CG_BloodExtreme() || !cg_blood.integer || cg.renderingThirdPerson ) {
+		return;
+	}
+	VectorSubtract( origin, cg.refdef.vieworg, delta );
+	dist = VectorNormalize( delta );
+	if ( dist > GORE_SCREEN_RANGE ) {
+		return;
+	}
+	AngleVectors( cg.refdefViewAngles, forward, NULL, NULL );
+	if ( DotProduct( delta, forward ) < 0.35f ) {
+		return;
+	}
+	// rapid fire shouldn't paint the whole screen at once
+	if ( count < 3 && cg.time - goScreenLast < 250 && goScreenLast <= cg.time ) {
+		return;
+	}
+	goScreenLast = cg.time;
+
+	// closer = bigger splats
+	for ( i = 0; i < count; i++ ) {
+		goreScreen_t *s;
+		GORE_ALLOC( goScreen, GORE_MAX_SCREEN, s );
+		s->active = qtrue;
+		s->startTime = cg.time;
+		s->x = 0.12f + random() * 0.76f;
+		s->y = 0.08f + random() * 0.70f;
+		s->size = ( 0.18f + random() * 0.22f ) * ( 1.3f - dist / GORE_SCREEN_RANGE * 0.6f );
+		s->slide = 0.02f + random() * 0.06f;
+		s->variant = rand() % 3;
+		s->flip = ( rand() & 1 ) ? qtrue : qfalse;
+	}
+}
+
+/*
+===============
+CG_DrawGoreScreen
+
+Called from CG_Draw2D, under the HUD.
+===============
+*/
+void CG_DrawGoreScreen( void ) {
+	int i;
+	float vw = cgs.glconfig.vidWidth, vh = cgs.glconfig.vidHeight;
+	vec4_t color = { 1, 1, 1, 1 };
+
+	if ( !CG_BloodExtreme() ) {
+		return;
+	}
+	CG_GoreScreenRegister();
+
+	for ( i = 0; i < GORE_MAX_SCREEN; i++ ) {
+		goreScreen_t *s = &goScreen[i];
+		float t, w, h, x, y;
+
+		if ( !s->active ) {
+			continue;
+		}
+		if ( s->startTime > cg.time ) {     // level restart / time went back
+			s->active = qfalse;
+			continue;
+		}
+		t = (float)( cg.time - s->startTime ) / GORE_SCREEN_LIFE;
+		if ( t >= 1.0f ) {
+			s->active = qfalse;
+			continue;
+		}
+		// full strength for the first 40%, then fade out
+		color[3] = ( t < 0.4f ) ? 0.9f : 0.9f * ( 1.0f - ( t - 0.4f ) / 0.6f );
+		h = s->size * vh;
+		w = h;
+		x = s->x * vw - w * 0.5f;
+		y = ( s->y + s->slide * t ) * vh - h * 0.5f;
+		trap_R_SetColor( color );
+		if ( s->flip ) {
+			trap_R_DrawStretchPic( x, y, w, h, 1, 0, 0, 1, goScreenShader[s->variant] );
+		} else {
+			trap_R_DrawStretchPic( x, y, w, h, 0, 0, 1, 1, goScreenShader[s->variant] );
+		}
+	}
+	trap_R_SetColor( NULL );
+}
+
+/*
+===========================================================================
+Controller rumble
+
+cgame can't talk to the controller, so it posts requests through the
+xbox_rumble cvar ("low high ms trigger serial"); the Xbox client reads it
+each frame and drives the gamepad (see CL_CheckRumble). On PC the cvar is
+simply unused.
+===========================================================================
+*/
+static int goRumbleSerial;
+static int goRumbleUntil;
+static float goRumbleStrength;
+
+void CG_PadRumble( float low, float high, int ms, float trigger ) {
+	float strength = low > high ? low : high;
+
+	if ( low <= 0 && high <= 0 && trigger <= 0 ) {
+		return;
+	}
+	// don't let a weak effect cut a strong one short
+	if ( cg.time < goRumbleUntil && strength < goRumbleStrength * 0.6f && goRumbleUntil >= cg.time ) {
+		return;
+	}
+	if ( low > 1 ) low = 1;
+	if ( high > 1 ) high = 1;
+	if ( trigger > 1 ) trigger = 1;
+	goRumbleUntil = cg.time + ms;
+	goRumbleStrength = strength;
+	goRumbleSerial++;
+	trap_Cvar_Set( "xbox_rumble", va( "%.2f %.2f %d %.2f %d", low, high, ms, trigger, goRumbleSerial ) );
+}

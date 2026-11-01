@@ -146,6 +146,12 @@ void CG_DamageFeedback( int yawByte, int pitchByte, int damage ) {
 	// show the attacking player's head and name in corner
 	cg.attackerTime = cg.time;
 
+	// controller rumble scaled by the hit
+	{
+		float r = 0.25f + damage / 40.0f;
+		CG_PadRumble( r, r * 0.6f, 120 + damage * 4, 0.0f );
+	}
+
 	// the lower on health you are, the greater the view kick will be
 	health = cg.snap->ps.stats[STAT_HEALTH];
 	if ( health < 40 ) {

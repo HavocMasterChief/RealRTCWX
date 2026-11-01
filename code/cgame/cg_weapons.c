@@ -5838,6 +5838,60 @@ Caused by an EV_FIRE_WEAPON event
 
 ================
 */
+/*
+================
+CG_FireRumble
+
+Controller rumble for the local player's shots (Xbox; see CG_PadRumble).
+The trigger value drives the right-trigger motor.
+================
+*/
+static void CG_FireRumble( int weapon ) {
+	switch ( weapon ) {
+	case WP_NONE:
+	case WP_KNIFE:
+	case WP_GRENADE_LAUNCHER:
+	case WP_GRENADE_PINEAPPLE:
+	case WP_DYNAMITE:
+	case WP_DYNAMITE_ENG:
+	case WP_AIRSTRIKE:
+	case WP_ARTY:
+	case WP_POISONGAS:
+	case WP_SMOKE_BOMB:
+		CG_PadRumble( 0.10f, 0.0f, 60, 0.0f );
+		break;
+	case WP_PANZERFAUST:
+		CG_PadRumble( 0.9f, 0.7f, 380, 1.0f );
+		break;
+	case WP_M97:
+	case WP_AUTO5:
+	case WP_M30:
+		CG_PadRumble( 0.75f, 0.55f, 180, 0.9f );
+		break;
+	case WP_VENOM:
+	case WP_MG42M:
+	case WP_BROWNING:
+		CG_PadRumble( 0.35f, 0.45f, 90, 0.6f );
+		break;
+	case WP_FLAMETHROWER:
+	case WP_TESLA:
+		CG_PadRumble( 0.15f, 0.35f, 250, 0.35f );
+		break;
+	case WP_MAUSER:
+	case WP_GARAND:
+	case WP_SNIPERRIFLE:
+	case WP_SNOOPERSCOPE:
+	case WP_M1GARAND:
+	case WP_M1941SCOPE:
+	case WP_DELISLESCOPE:
+		CG_PadRumble( 0.5f, 0.4f, 130, 0.8f );
+		break;
+	default:    // pistols, SMGs, rifles
+		CG_PadRumble( 0.2f, 0.35f, 70, 0.45f );
+		break;
+	}
+}
+
 void CG_FireWeapon( centity_t *cent, int event ) {
 	entityState_t *ent;
 	int c;
@@ -5858,6 +5912,9 @@ void CG_FireWeapon( centity_t *cent, int event ) {
 
 		trap_S_StartSound( NULL, cent->currentState.number, CHAN_WEAPON, hWeaponSnd );
 		//trap_S_StartSound( NULL, ent->number, CHAN_WEAPON, hWeaponSnd );
+		if ( cent->currentState.number == cg.snap->ps.clientNum ) {
+			CG_PadRumble( 0.35f, 0.5f, 90, 0.6f );
+		}
 		if ( cg_brassTime.integer > 0 ) {
 			CG_MachineGunEjectBrass( cent );
 		}
@@ -5885,6 +5942,7 @@ void CG_FireWeapon( centity_t *cent, int event ) {
 	// RF, kick angles
 	if ( ent->number == cg.snap->ps.clientNum ) {
 		CG_WeaponFireRecoil( ent->weapon );
+		CG_FireRumble( ent->weapon );
 	}
 
 	// lightning gun only does this this on initial press
@@ -7205,6 +7263,7 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 				}
 			}
 			CG_AddBloodTrails( end, dir, 260 + rand() % 120, 600, 6 + rand() % 4, 0.35 );
+			CG_GoreScreenSplat( end, 1 + ( rand() & 1 ) );
 		}
 
 		// if we haven't dropped a blood spat in a while, check if this is a good scenario

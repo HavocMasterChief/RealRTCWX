@@ -1215,6 +1215,9 @@ dialogResult_t Sys_Dialog( dialogType_t type, const char *message, const char *t
 #ifdef RTCW_UWP
 void Sys_UWP_KeepAlive( void );
 void Sys_UWP_LogMemory( const char *where );
+void UWP_RequestRefreshRate( int hz );
+void IN_Rumble( float low, float high, float trigger, int ms );
+void CL_UWP_Background( qboolean background );
 #define SYS_KEEPALIVE() Sys_UWP_KeepAlive()
 #else
 #define SYS_KEEPALIVE()

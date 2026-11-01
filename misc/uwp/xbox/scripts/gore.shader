@@ -38,3 +38,40 @@ gore/bloodrun
 		alphaGen vertex
 	}
 }
+
+// Extreme: close-range blood on the screen (drawn in 2D)
+gore/screensplat1
+{
+	nopicmip
+	nomipmaps
+	{
+		clampmap gore/screensplat1.tga
+		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+		rgbGen vertex
+		alphaGen vertex
+	}
+}
+
+gore/screensplat2
+{
+	nopicmip
+	nomipmaps
+	{
+		clampmap gore/screensplat2.tga
+		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+		rgbGen vertex
+		alphaGen vertex
+	}
+}
+
+gore/screensplat3
+{
+	nopicmip
+	nomipmaps
+	{
+		clampmap gore/screensplat3.tga
+		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+		rgbGen vertex
+		alphaGen vertex
+	}
+}

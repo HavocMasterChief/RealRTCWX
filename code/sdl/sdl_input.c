@@ -59,6 +59,27 @@ static int in_eventTime = 0;
 
 static SDL_Window *SDL_window = NULL;
 
+#ifdef RTCW_UWP
+/*
+===============
+IN_Rumble
+
+Controller vibration (Xbox). low/high are the two body motors, trigger the
+right-trigger motor; all 0..1.
+===============
+*/
+void IN_Rumble( float low, float high, float trigger, int ms ) {
+	Uint16 l = (Uint16)( low * 65535.0f ), h = (Uint16)( high * 65535.0f );
+	if ( ms < 0 ) ms = 0;
+	if ( gamepad ) {
+		SDL_RumbleGamepad( gamepad, l, h, (Uint32)ms );
+		SDL_RumbleGamepadTriggers( gamepad, 0, (Uint16)( trigger * 65535.0f ), (Uint32)( ms > 200 ? 200 : ms ) );
+	} else if ( stick ) {
+		SDL_RumbleJoystick( stick, l, h, (Uint32)ms );
+	}
+}
+#endif
+
 #define CTRL(a) ((a)-'a'+1)
 
 /*
@@ -1172,6 +1193,11 @@ static void IN_ProcessEvents( void )
 			case SDL_EVENT_WINDOW_MAXIMIZED :    Cvar_SetValue( "com_minimized", 0 ); break;
 			case SDL_EVENT_WINDOW_FOCUS_LOST :   Cvar_SetValue( "com_unfocused", 1 ); break;
 			case SDL_EVENT_WINDOW_FOCUS_GAINED : Cvar_SetValue( "com_unfocused", 0 ); break;
+#ifdef RTCW_UWP
+			case SDL_EVENT_WILL_ENTER_BACKGROUND :
+			case SDL_EVENT_DID_ENTER_BACKGROUND :  CL_UWP_Background( qtrue ); break;
+			case SDL_EVENT_DID_ENTER_FOREGROUND :  CL_UWP_Background( qfalse ); break;
+#endif
 
 			default:
 				break;

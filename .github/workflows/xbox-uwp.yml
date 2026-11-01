@@ -154,6 +154,8 @@ jobs:
           New-Item -ItemType Directory -Force $pkg | Out-Null
           Copy-Item -Recurse build\out\* $pkg
           Copy-Item mesa\*.dll $pkg
+          # RealRTCW's loose data (configs, menus, scripts) from the repo's main/ folder.
+          Copy-Item -Recurse -Force main\* "$pkg\main\"
           Copy-Item -Recurse misc\uwp\Assets "$pkg\Assets"
           $version = "1.0.${{ github.run_number }}.0"
           (Get-Content misc\uwp\AppxManifest.xml -Raw).Replace('__VERSION__', $version) |

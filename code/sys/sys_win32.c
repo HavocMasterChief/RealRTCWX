@@ -39,6 +39,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <psapi.h>
 #include <float.h>
 
+#ifdef RTCW_UWP
+#include "SDL3/SDL.h"
+#endif
+
 #ifndef KEY_WOW64_32KEY
 #define KEY_WOW64_32KEY 0x0200
 #endif
@@ -746,6 +750,9 @@ void Sys_ErrorDialog( const char *error )
 	Sys_Mkdir( homepath );
 	Sys_Mkdir( dirpath );
 
+	// Put the error itself in the log, not just what led up to it.
+	CON_LogWrite( va( "\n********************\nERROR: %s\n********************\n", error ) );
+
 	// avoid FS_FOpenFileWrite() in case we're crashing due to a maxed-out file handle table
 	f = fopen( ospath, "wb" );
 	if( f )
@@ -756,7 +763,11 @@ void Sys_ErrorDialog( const char *error )
 		fclose( f );
 	}
 
-#ifndef DEDICATED
+#if defined( RTCW_UWP )
+	// No folders to open on Xbox: just show the message on screen.
+	Sys_Dialog( DT_ERROR, va( "%s\n\nA crash log has been saved to LocalState\\%s\\crashlog.txt",
+		error, gamedir ), "RealRTCW Error" );
+#elif !defined( DEDICATED )
 	if( Sys_Dialog( DT_YES_NO, va( "%s.\n\nA crash log has been saved to:\n%s\n\nOpen the containing folder now?",
 			error, ospath ), "RealRTCW Error" ) == DR_YES )
 		ShellExecute( NULL, "open", dirpath, NULL, NULL, SW_SHOWNORMAL );
@@ -772,6 +783,17 @@ Display a win32 dialog box
 */
 dialogResult_t Sys_Dialog( dialogType_t type, const char *message, const char *title )
 {
+#ifdef RTCW_UWP
+	// Win32 MessageBox doesn't exist on Xbox; SDL3-uwp has a WinRT one.
+	SDL_MessageBoxFlags flags = SDL_MESSAGEBOX_INFORMATION;
+	if ( type == DT_ERROR ) {
+		flags = SDL_MESSAGEBOX_ERROR;
+	} else if ( type == DT_WARNING || type == DT_OK_CANCEL ) {
+		flags = SDL_MESSAGEBOX_WARNING;
+	}
+	SDL_ShowSimpleMessageBox( flags, title, message, NULL );
+	return ( type == DT_YES_NO ) ? DR_NO : DR_OK;
+#else
 	UINT uType;
 
 	switch( type )
@@ -792,6 +814,7 @@ dialogResult_t Sys_Dialog( dialogType_t type, const char *message, const char *t
 		case IDYES:     return DR_YES;
 		case IDNO:      return DR_NO;
 	}
+#endif
 }
 
 /*

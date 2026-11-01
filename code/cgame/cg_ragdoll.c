@@ -32,7 +32,15 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 #define RD_SEGS         11
 #define RD_STEP         ( 1.0f / 60.0f )
 #define RD_ITER         8
-#define RD_GRAVITY      800.0f
+#define RD_GRAVITY      560.0f  // a little under the game's 800: bodies read heavy, not floaty
+#define RD_AIRDRAG      0.988f  // velocity kept per step
+// "muscle tone": joints are pulled toward the death pose (relative to the
+// pelvis) so limbs don't flop like rope; strong at first, fading to a light
+// stiffness that stays
+#define RD_MUSCLE_START 0.10f
+#define RD_MUSCLE_END   0.012f
+#define RD_MUSCLE_FADE  1.4f    // seconds
+#define RD_HIT_WINDOW   1200    // ms: a hit this recent shapes the fall
 
 enum {
 	J_PELVIS, J_CHEST, J_HEAD,
@@ -114,6 +122,8 @@ typedef struct {
 	float stick[RD_NUM_STICKS];
 	float limit[RD_NUM_LIMITS];
 	float accum;
+	int steps;
+	vec3_t restFrame[3];    // pelvis frame of the frozen pose (model space)
 	int stillSteps;
 	qboolean sleeping;
 	float data[RD_SEGS][12];
@@ -121,6 +131,42 @@ typedef struct {
 
 static ragdoll_t rdBodies[RD_MAX];
 static int rdStamp;
+
+// the last bullet that hit each entity (where, which way, when)
+static struct {
+	int time;
+	vec3_t point, dir;
+} rdHits[MAX_GENTITIES];
+
+/*
+===============
+CG_RagdollNoteHit
+
+Called for every bullet that hits flesh, so a body that dies from it can
+be thrown the way the shot went, from where it struck.
+===============
+*/
+void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter ) {
+	vec3_t from, dir;
+	if ( entityNum < 0 || entityNum >= MAX_GENTITIES ) {
+		return;
+	}
+	if ( shooter == cg.snap->ps.clientNum ) {
+		VectorCopy( cg.refdef.vieworg, from );
+	} else if ( shooter >= 0 && shooter < MAX_GENTITIES ) {
+		VectorCopy( cg_entities[shooter].lerpOrigin, from );
+		from[2] += 40;  // roughly the gun's height
+	} else {
+		return;
+	}
+	VectorSubtract( point, from, dir );
+	if ( VectorNormalize( dir ) < 1 ) {
+		return;
+	}
+	rdHits[entityNum].time = cg.time;
+	VectorCopy( point, rdHits[entityNum].point );
+	VectorCopy( dir, rdHits[entityNum].dir );
+}
 
 /*
 ===============
@@ -135,6 +181,7 @@ void CG_RagdollReset( void ) {
 		}
 	}
 	memset( rdBodies, 0, sizeof( rdBodies ) );
+	memset( rdHits, 0, sizeof( rdHits ) );
 }
 
 static ragdoll_t *CG_RagdollFind( int entityNum ) {
@@ -177,6 +224,17 @@ static qboolean CG_RagdollEligible( centity_t *cent ) {
 	default:
 		return qtrue;
 	}
+}
+
+static void CG_RagdollFrame( const vec3_t prim, const vec3_t helper, const vec3_t helper2, vec3_t f[3] );
+
+// the pelvis frame (axes as rows) from joint positions
+static void CG_RagdollPelvisFrame( vec3_t j[J_NUM], vec3_t f[3] ) {
+	vec3_t prim, side, fwd;
+	VectorSubtract( j[J_CHEST], j[J_PELVIS], prim );
+	VectorSubtract( j[J_RHIP], j[J_LHIP], side );
+	VectorSubtract( j[J_RSHOULDER], j[J_LSHOULDER], fwd );
+	CG_RagdollFrame( prim, side, fwd, f );
 }
 
 static void CG_RagdollToWorld( const refEntity_t *ref, const vec3_t m, vec3_t out ) {
@@ -249,32 +307,53 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->stillSteps = 0;
 	rd->sleeping = qfalse;
 
-	// a push away from the player (most deaths come from you), plus the
-	// body's own movement; upper body more, so it topples rather than slides
-	VectorSubtract( cent->lerpOrigin, cg.refdef.vieworg, toBody );
-	toBody[2] = 0;
-	if ( VectorNormalize( toBody ) < 1 ) {
-		VectorSet( toBody, 1, 0, 0 );
-	}
+	rd->steps = 0;
+
 	for ( i = 0; i < J_NUM; i++ ) {
-		float k;
 		CG_RagdollToWorld( &pose, rd->rest[i], rd->p[i] );
-		switch ( i ) {
-		case J_CHEST: case J_HEAD: case J_LSHOULDER: case J_RSHOULDER:
-		case J_LELBOW: case J_RELBOW: case J_LHAND: case J_RHAND:
-			k = 1.0f;
-			break;
-		case J_PELVIS: case J_LHIP: case J_RHIP:
-			k = 0.45f;
-			break;
-		default:
-			k = 0.1f;
-			break;
+	}
+	CG_RagdollPelvisFrame( rd->rest, rd->restFrame );
+
+	if ( cg.time - rdHits[rd->entityNum].time < RD_HIT_WINDOW && rdHits[rd->entityNum].time ) {
+		// shot: the joints near the wound take the hit along the bullet's
+		// path, the rest of the body follows a little (a head shot snaps
+		// the head back, a leg shot takes the legs out)
+		const float *hp = rdHits[rd->entityNum].point, *hd = rdHits[rd->entityNum].dir;
+		for ( i = 0; i < J_NUM; i++ ) {
+			float d2 = DistanceSquared( rd->p[i], hp );
+			float w = exp( -d2 / ( 2.0f * 14.0f * 14.0f ) );
+			VectorScale( hd, 45 + 190 * w, push );
+			push[2] += 20 + 25 * w;
+			VectorAdd( push, cent->currentState.pos.trDelta, push );
+			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
 		}
-		VectorScale( toBody, ( 90 + random() * 70 ) * k, push );
-		push[2] = 30 * k;
-		VectorAdd( push, cent->currentState.pos.trDelta, push );
-		VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
+	} else {
+		// no recent bullet (explosion, melee...): a push away from the
+		// player, upper body more so it topples rather than slides
+		VectorSubtract( cent->lerpOrigin, cg.refdef.vieworg, toBody );
+		toBody[2] = 0;
+		if ( VectorNormalize( toBody ) < 1 ) {
+			VectorSet( toBody, 1, 0, 0 );
+		}
+		for ( i = 0; i < J_NUM; i++ ) {
+			float k;
+			switch ( i ) {
+			case J_CHEST: case J_HEAD: case J_LSHOULDER: case J_RSHOULDER:
+			case J_LELBOW: case J_RELBOW: case J_LHAND: case J_RHAND:
+				k = 1.0f;
+				break;
+			case J_PELVIS: case J_LHIP: case J_RHIP:
+				k = 0.45f;
+				break;
+			default:
+				k = 0.1f;
+				break;
+			}
+			VectorScale( toBody, ( 70 + random() * 50 ) * k, push );
+			push[2] = 25 * k;
+			VectorAdd( push, cent->currentState.pos.trDelta, push );
+			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
+		}
 	}
 	for ( i = 0; i < (int)RD_NUM_STICKS; i++ ) {
 		rd->stick[i] = Distance( rd->p[rdSticks[i][0]], rd->p[rdSticks[i][1]] );
@@ -301,10 +380,39 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 	for ( i = 0; i < J_NUM; i++ ) {
 		VectorCopy( rd->p[i], start[i] );
 		VectorSubtract( rd->p[i], rd->old[i], v );
-		VectorScale( v, 0.995f, v );
+		VectorScale( v, RD_AIRDRAG, v );
 		VectorCopy( rd->p[i], rd->old[i] );
 		VectorAdd( rd->p[i], v, rd->p[i] );
 		rd->p[i][2] -= RD_GRAVITY * RD_STEP * RD_STEP;
+	}
+
+	// muscle tone: pull each joint toward where the death pose puts it,
+	// relative to the pelvis as it is now
+	{
+		float age = rd->steps * RD_STEP, s, f;
+		vec3_t cur[3], local, target, rel;
+		f = 1.0f - age / RD_MUSCLE_FADE;
+		if ( f < 0 ) {
+			f = 0;
+		}
+		s = RD_MUSCLE_END + ( RD_MUSCLE_START - RD_MUSCLE_END ) * f;
+		CG_RagdollPelvisFrame( rd->p, cur );
+		for ( i = 0; i < J_NUM; i++ ) {
+			if ( i == J_PELVIS ) {
+				continue;
+			}
+			VectorSubtract( rd->rest[i], rd->rest[J_PELVIS], rel );
+			local[0] = DotProduct( rel, rd->restFrame[0] );
+			local[1] = DotProduct( rel, rd->restFrame[1] );
+			local[2] = DotProduct( rel, rd->restFrame[2] );
+			VectorCopy( rd->p[J_PELVIS], target );
+			VectorMA( target, local[0], cur[0], target );
+			VectorMA( target, local[1], cur[1], target );
+			VectorMA( target, local[2], cur[2], target );
+			VectorSubtract( target, rd->p[i], rel );
+			VectorMA( rd->p[i], s, rel, rd->p[i] );
+		}
+		rd->steps++;
 	}
 
 	// constraints

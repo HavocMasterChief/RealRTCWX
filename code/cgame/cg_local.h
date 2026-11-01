@@ -2363,6 +2363,7 @@ void CG_ClearBloodMarks( void );
 void CG_RagdollBody( centity_t *cent, refEntity_t *body );
 void CG_RagdollReset( void );
 qboolean CG_RagdollPelvis( int entityNum, vec3_t out );
+void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter );
 void CG_AddGore( void );
 void CG_GoreReset( void );
 void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal );

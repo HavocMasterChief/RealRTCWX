@@ -7166,6 +7166,10 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 	vec3_t start, trend, tmp;      // JPW
 	static int lastBloodSpat;
 
+	if ( flesh ) {
+		CG_RagdollNoteHit( fleshEntityNum, end, sourceEntityNum );
+	}
+
 	// if the shooter is currently valid, calc a source point and possibly
 	// do trail effects
 	if ( sourceEntityNum >= 0 && cg_tracerChance.value > 0 ) {

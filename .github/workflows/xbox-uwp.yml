@@ -74,6 +74,12 @@ jobs:
           git -C $src remote add origin $env:SDL3_UWP_REPO
           git -C $src fetch -q --depth 1 origin $env:SDL3_UWP_COMMIT
           git -C $src checkout -q FETCH_HEAD
+          # Local fixes for Xbox (see the header of each patch).
+          foreach ($p in Get-ChildItem "${{ github.workspace }}\patches" -Filter "sdl3-uwp-*.patch") {
+            git -C $src apply --whitespace=nowarn $p.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Failed to apply $($p.Name)" }
+            "Applied $($p.Name)"
+          }
           msbuild "$src\VisualC-WinRT\SDL-UWP.vcxproj" /m /p:Configuration=Release /p:Platform=x64 /v:minimal 2>&1 | Tee-Object -FilePath sdl.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

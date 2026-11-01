@@ -1,0 +1,121 @@
+SDL3-uwp: fix WASAPI audio hangs on Xbox (UWP).
+
+SDL3-uwp runs the app on the view (UI) thread. WASAPI device enumeration and
+activation wait on events that are delivered through that same thread's
+dispatcher, so SDL_Init(SDL_INIT_AUDIO) blocks forever on Xbox. Cap those
+waits, and fix the management-thread check that could self-deadlock.
+
+Adapted from jajdp/ctr-xbox (patches/sdl3-uwp-audio-wasapi.patch, GPL-3.0),
+messages translated to English.
+Applies to XboxEmulationHub/SDL3-uwp @ b3852a0076c358f65ee19765e85ef9eded6e50df.
+
+diff --git a/src/audio/wasapi/SDL_wasapi.c b/src/audio/wasapi/SDL_wasapi.c
+index 122fc8f..f9dffac 100644
+--- a/src/audio/wasapi/SDL_wasapi.c
++++ b/src/audio/wasapi/SDL_wasapi.c
+@@ -31,6 +31,7 @@
+ #include <audioclient.h>
+ 
+ #include "SDL_wasapi.h"
++#include <stdio.h>
+ 
+ // These constants aren't available in older SDKs
+ #ifndef AUDCLNT_STREAMFLAGS_RATEADJUST
+@@ -94,6 +95,8 @@ typedef struct ManagementThreadPendingTask
+ } ManagementThreadPendingTask;
+ 
+ static SDL_Thread *ManagementThread = NULL;
++// the management thread stamps its own id here; see WASAPI_ProxyToManagementThread
++static SDL_ThreadID ManagementThreadID = 0;
+ static ManagementThreadPendingTask *ManagementThreadPendingTasks = NULL;
+ static SDL_Mutex *ManagementThreadLock = NULL;
+ static SDL_Condition *ManagementThreadCondition = NULL;
+@@ -125,7 +128,7 @@ static void ManagementThreadMainloop(void)
+ bool WASAPI_ProxyToManagementThread(ManagementThreadTask task, void *userdata, bool *wait_on_result)
+ {
+     // We want to block for a result, but we are already running from the management thread! Just run the task now so we don't deadlock.
+-    if ((wait_on_result) && (SDL_GetCurrentThreadID() == SDL_GetThreadID(ManagementThread))) {
++    if ((wait_on_result) && (SDL_GetCurrentThreadID() == ManagementThreadID)) {
+         *wait_on_result = task(userdata);
+         return true;  // completed!
+     }
+@@ -171,7 +174,10 @@ bool WASAPI_ProxyToManagementThread(ManagementThreadTask task, void *userdata, b
+     SDL_UnlockMutex(ManagementThreadLock);
+ 
+     if (wait_on_result) {
+-        SDL_WaitSemaphore(pending->task_complete_sem);
++        if (!SDL_WaitSemaphoreTimeout(pending->task_complete_sem, 6000)) {
++            fprintf(stderr, "[SDL WASAPI] task %p did not finish within 6000 ms\n", (void *)task);
++            fflush(stderr);
++        }
+         SDL_DestroySemaphore(pending->task_complete_sem);
+         *wait_on_result = pending->result;
+         if (pending->errorstr) {
+@@ -262,6 +268,8 @@ static int ManagementThreadEntry(void *userdata)
+ {
+     ManagementThreadEntryData *data = (ManagementThreadEntryData *)userdata;
+ 
++    ManagementThreadID = SDL_GetCurrentThreadID();
++
+     if (!ManagementThreadPrepare()) {
+         data->errorstr = SDL_strdup(SDL_GetError());
+         SDL_SignalSemaphore(data->ready_sem); // unblock calling thread.
+diff --git a/src/audio/wasapi/SDL_wasapi_winrt.cpp b/src/audio/wasapi/SDL_wasapi_winrt.cpp
+index 3ef3cb2..4e859d7 100644
+--- a/src/audio/wasapi/SDL_wasapi_winrt.cpp
++++ b/src/audio/wasapi/SDL_wasapi_winrt.cpp
+@@ -30,6 +30,14 @@
+ #include <windows.media.devices.h>
+ #include <wrl/implements.h>
+ #include <collection.h>
++#include <stdio.h>
++
++// how long to wait for a DeviceWatcher to finish its first pass before giving
++// up on it; see SDL_WasapiDeviceEventHandler::WaitForCompletion
++#define SDL_WASAPI_ENUM_TIMEOUT_MS 3000
++
++// same idea for ActivateAudioInterfaceAsync; see WASAPI_ActivateDevice
++#define SDL_WASAPI_ACTIVATE_TIMEOUT_MS 4000
+ 
+ extern "C" {
+ #include "../../core/windows/SDL_windows.h"
+@@ -202,7 +210,16 @@ void SDL_WasapiDeviceEventHandler::OnDefaultCaptureDeviceChanged(Platform::Objec
+ void SDL_WasapiDeviceEventHandler::WaitForCompletion()
+ {
+     if (this->completed_semaphore) {
+-        SDL_WaitSemaphore(this->completed_semaphore);
++        // A DeviceWatcher delivers its events through the dispatcher of the
++        // thread that created it. An app whose main loop runs on the view
++        // thread (which is what SDL_WinRTApp::Run does) blocks here forever:
++        // the EnumerationCompleted event cannot be delivered while we wait for
++        // it. Cap the wait and carry on with whatever devices did arrive.
++        if (!SDL_WaitSemaphoreTimeout(this->completed_semaphore, SDL_WASAPI_ENUM_TIMEOUT_MS)) {
++            fprintf(stderr, "[SDL WASAPI] %s device enumeration did not finish within %d ms; continuing\n",
++                    this->recording ? "recording" : "playback", SDL_WASAPI_ENUM_TIMEOUT_MS);
++            fflush(stderr);
++        }
+         SDL_DestroySemaphore(this->completed_semaphore);
+         this->completed_semaphore = nullptr;
+     }
+@@ -270,7 +287,12 @@ private:
+ void SDL_WasapiActivationHandler::WaitForCompletion()
+ {
+     if (completion_semaphore) {
+-        SDL_WaitSemaphore(completion_semaphore);
++        // the FIXME below is real: this used to block for good on Xbox UWP.
++        // Cap it so a device that never answers cannot hang the whole app.
++        if (!SDL_WaitSemaphoreTimeout(completion_semaphore, SDL_WASAPI_ACTIVATE_TIMEOUT_MS)) {
++            fprintf(stderr, "[SDL WASAPI] device activation did not answer within %d ms\n", SDL_WASAPI_ACTIVATE_TIMEOUT_MS);
++            fflush(stderr);
++        }
+         SDL_DestroySemaphore(completion_semaphore);
+         completion_semaphore = NULL;
+     }
+@@ -316,6 +338,7 @@ bool WASAPI_ActivateDevice(SDL_AudioDevice *device)
+     // !!! FIXME: the problems in SDL2 that needed this to be synchronous are _probably_ solved by SDL3, and this can block indefinitely if a user prompt is shown to get permission to use a microphone.
+     handler.Get()->WaitForCompletion();  // block here until we have an answer, so this is synchronous to us after all.
+ 
++
+     HRESULT activateRes = S_OK;
+     IUnknown *iunknown = nullptr;
+     const HRESULT getActivateRes = async->GetActivateResult(&activateRes, &iunknown);

@@ -827,6 +827,10 @@ Z_Malloc
 */
 void *Z_Malloc( int size ) {
 	void *buf = malloc( size );
+	if ( !buf ) {
+		// Fail with a clear message instead of crashing in memset.
+		Com_Error( ERR_FATAL, "Z_Malloc: out of memory allocating %d bytes", size );
+	}
 	Com_Memset( buf, 0, size );
 	return buf;
 }
@@ -1259,6 +1263,9 @@ void Hunk_Clear( void ) {
 
 	Cvar_Set( "com_hunkused", va( "%i", hunk_low.permanent + hunk_high.permanent ) );
 	Com_Printf( "Hunk_Clear: reset the hunk ok\n" );
+#ifdef RTCW_UWP
+	Sys_UWP_LogMemory( "after Hunk_Clear" );
+#endif
 	VM_Clear(); // (SA) FIXME:TODO: was commented out in wolf
 #ifdef HUNK_DEBUG
 	hunkblocks = NULL;

@@ -1077,6 +1077,12 @@ void CL_InitCGame( void ) {
 
 	Com_Printf( "CL_InitCGame: %5.2f seconds\n", ( t2 - t1 ) / 1000.0 );
 
+	#ifdef RTCW_UWP
+
+	Sys_UWP_LogMemory( "level loaded" );
+
+	#endif
+
 	// have the renderer touch all its images, so they are present
 	// on the card even if the driver does deferred loading
 	re.EndRegistration();

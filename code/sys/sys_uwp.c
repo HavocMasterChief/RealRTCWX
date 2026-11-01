@@ -136,6 +136,28 @@ void Sys_UWP_KeepAlive( void ) {
 
 /*
 =================
+Sys_UWP_LogMemory
+
+Prints how much memory the process has committed; the Xbox kills or starves
+apps that go over their budget, so this shows how close we are.
+=================
+*/
+#include <psapi.h>
+void Sys_UWP_LogMemory( const char *where ) {
+	PROCESS_MEMORY_COUNTERS_EX pmc;
+	extern void __cdecl Com_Printf( const char *fmt, ... );
+
+	memset( &pmc, 0, sizeof( pmc ) );
+	pmc.cb = sizeof( pmc );
+	if ( K32GetProcessMemoryInfo( GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS *)&pmc, sizeof( pmc ) ) ) {
+		Com_Printf( "memory (%s): %u MB committed, %u MB peak, %u MB working set\n", where,
+			(unsigned)( pmc.PrivateUsage >> 20 ), (unsigned)( pmc.PeakPagefileUsage >> 20 ),
+			(unsigned)( pmc.WorkingSetSize >> 20 ) );
+	}
+}
+
+/*
+=================
 UWP_ExceptionLogger
 
 Vectored handler: sees crashes before WinRT or the C runtime can swallow
@@ -381,6 +403,11 @@ static int SDLCALL UWP_SDLMain( int argc, char **argv ) {
 	// The render-to-texture path (bloom etc.) crashes in FBO_Init on Mesa's
 	// D3D12 driver; render straight to the window until that's sorted out.
 	args[ n++ ] = "+set"; args[ n++ ] = "r_fbo"; args[ n++ ] = "0";
+	// RealRTCW reserves a 1 GB hunk up front, which together with the HD
+	// textures and Mesa's own allocations runs the Xbox out of memory while
+	// loading a level. Half of that is still far more than the original game
+	// needed.
+	args[ n++ ] = "+set"; args[ n++ ] = "com_hunkMegs"; args[ n++ ] = "512";
 	// Flush every console line to LocalState/main/qconsole.log so a crash
 	// still leaves a usable log to pull from Device Portal.
 	args[ n++ ] = "+set"; args[ n++ ] = "logfile"; args[ n++ ] = "2";

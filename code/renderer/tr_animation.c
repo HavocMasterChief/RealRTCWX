@@ -133,6 +133,10 @@ static float RB_ProjectRadius( float r, vec3_t location ) {
 	return pr;
 }
 
+// only a live ragdoll slot counts; callers may pass refEntity_ts with junk
+// in the field (cgame builds some on the stack without clearing them)
+static qboolean R_RagdollActive( const refEntity_t *e );
+
 /*
 =============
 R_CullModel
@@ -147,7 +151,7 @@ static int R_CullModel( mdsHeader_t *header, trRefEntity_t *ent ) {
 
 	cullSphere = qtrue;
 
-	if ( ent->e.ragdoll ) {
+	if ( R_RagdollActive( &ent->e ) ) {
 		return CULL_CLIP;   // the body no longer matches the frame's bounds
 	}
 
@@ -906,7 +910,7 @@ void R_CalcBones( mdsHeader_t *header, const refEntity_t *refent, int *boneList,
 	// ragdoll: always rebuild the whole skeleton in order (parents before
 	// children) from the plain animation pose, so no bone is ever computed
 	// from a parent that was already moved by the ragdoll
-	if ( refent->ragdoll ) {
+	if ( R_RagdollActive( refent ) ) {
 		static int fullList[MDS_MAX_BONES];
 		for ( i = 0; i < header->numBones; i++ ) {
 			fullList[i] = i;
@@ -1055,7 +1059,7 @@ void R_CalcBones( mdsHeader_t *header, const refEntity_t *refent, int *boneList,
 
 	// ragdoll: move each bone with its body part (after the backup, so the
 	// cache keeps the plain animation pose)
-	if ( refent->ragdoll ) {
+	if ( R_RagdollActive( refent ) ) {
 		R_ApplyRagdoll( header, refent, boneList, numBones );
 	}
 }
@@ -1888,6 +1892,10 @@ and gear attached to tags follow automatically.
 
 static float rd_data[RD_MAX_SLOTS + 1][RD_NUM_SEGS][12];   // R[3][3] row-major, t[3]
 static qboolean rd_valid[RD_MAX_SLOTS + 1];
+
+static qboolean R_RagdollActive( const refEntity_t *e ) {
+	return e->ragdoll >= 1 && e->ragdoll <= RD_MAX_SLOTS && rd_valid[e->ragdoll];
+}
 
 typedef struct {
 	const mdsHeader_t *mds;

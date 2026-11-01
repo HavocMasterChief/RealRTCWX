@@ -193,6 +193,7 @@ void CG_CalcMoveSpeeds( clientInfo_t *ci ) {
 	qboolean isStrafe;
 	orientation_t o[2];
 
+	memset( &refent, 0, sizeof( refent ) );
 	refent.hModel = ci->legsModel;
 
 	for ( i = 0, anim = ci->modelInfo->animations; i < ci->modelInfo->numAnimations; i++, anim++ ) {

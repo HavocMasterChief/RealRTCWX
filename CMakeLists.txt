@@ -64,7 +64,7 @@ if(RTCW_UWP)
   set(PLATFORM_SRC code/sys/sys_uwp.c code/sys/uwp_display.cpp)
   # C++/WinRT (TV refresh rate switching)
   set_source_files_properties(code/sys/uwp_display.cpp PROPERTIES
-    COMPILE_OPTIONS "/std:c++17;/EHsc;/permissive-;/bigobj")
+    COMPILE_OPTIONS "/std:c++20;/EHsc;/permissive-;/bigobj")
   set(_cppwinrt "C:/Program Files (x86)/Windows Kits/10/Include/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/cppwinrt")
   if(EXISTS "${_cppwinrt}")
     set_property(SOURCE code/sys/uwp_display.cpp APPEND PROPERTY INCLUDE_DIRECTORIES "${_cppwinrt}")

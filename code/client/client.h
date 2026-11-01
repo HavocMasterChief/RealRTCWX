@@ -483,6 +483,7 @@ extern cvar_t *j_aimassist_recoil;
 extern cvar_t *j_invertLook; 
 
 extern cvar_t   *j_uiSpeed;
+extern cvar_t   *ui_padNav;
 extern cvar_t   *j_uiExpo;
 extern cvar_t   *j_uiDeadzone;
 

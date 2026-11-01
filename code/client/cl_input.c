@@ -542,6 +542,9 @@ void CL_GamepadUIMouseMove( void ) {
     if ( !(Key_GetCatcher() & KEYCATCH_UI) ) {
         return;
     }
+    if ( ui_padNav && ui_padNav->integer ) {
+        return;     // menus are navigated by focus, not a cursor
+    }
 
 float lx = cl.joystickAxis[0];
 float ly = cl.joystickAxis[1];

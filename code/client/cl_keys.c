@@ -2209,6 +2209,29 @@ void CL_ParseBinding( int key, qboolean down, unsigned time )
 	}
 }
 
+
+/*
+===================
+CL_PadNavKey
+
+With ui_padNav on, the left stick acts like the D-pad inside menus, and A
+is passed through as a "select the focused item" key instead of being
+turned into a mouse click at the cursor.
+===================
+*/
+static int CL_PadNavKey( int key ) {
+	if ( !ui_padNav || !ui_padNav->integer || !( Key_GetCatcher() & KEYCATCH_UI ) ) {
+		return key;
+	}
+	switch ( key ) {
+	case K_PAD0_LEFTSTICK_UP:    return K_PAD0_DPAD_UP;
+	case K_PAD0_LEFTSTICK_DOWN:  return K_PAD0_DPAD_DOWN;
+	case K_PAD0_LEFTSTICK_LEFT:  return K_PAD0_DPAD_LEFT;
+	case K_PAD0_LEFTSTICK_RIGHT: return K_PAD0_DPAD_RIGHT;
+	default:                     return key;
+	}
+}
+
 /*
 ===================
 CL_KeyDownEvent
@@ -2342,6 +2365,14 @@ void CL_KeyDownEvent( int key, unsigned time )
 		return;
 	}
 
+	if ( ui_padNav && ui_padNav->integer && ( Key_GetCatcher() & KEYCATCH_UI ) ) {
+		int navKey = CL_PadNavKey( key );
+		if ( navKey != key || key == K_PAD0_A ) {
+			VM_Call( uivm, UI_KEY_EVENT, navKey, qtrue );
+			return;
+		}
+	}
+
 	if ((Key_GetCatcher() & KEYCATCH_UI) && key == K_PAD0_A)
 	{
 		VM_Call(uivm, UI_KEY_EVENT, K_MOUSE1, qtrue);
@@ -2420,6 +2451,14 @@ void CL_KeyUpEvent( int key, unsigned time )
 	// don't process key-up events for the console key
 	if ( key == K_CONSOLE || ( key == K_ESCAPE && keys[K_SHIFT].down ) )
 		return;
+
+	if ( ui_padNav && ui_padNav->integer && ( Key_GetCatcher() & KEYCATCH_UI ) ) {
+		int navKey = CL_PadNavKey( key );
+		if ( navKey != key || key == K_PAD0_A ) {
+			VM_Call( uivm, UI_KEY_EVENT, navKey, qfalse );
+			return;
+		}
+	}
 
 	if ((Key_GetCatcher() & KEYCATCH_UI) && key == K_PAD0_A)
 	{

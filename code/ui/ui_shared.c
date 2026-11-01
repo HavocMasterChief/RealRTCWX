@@ -84,6 +84,22 @@ int BindingIDFromName( const char *name );
 qboolean Item_Bind_HandleKey( itemDef_t *item, int key, qboolean down );
 itemDef_t *Menu_SetPrevCursorItem( menuDef_t *menu );
 itemDef_t *Menu_SetNextCursorItem( menuDef_t *menu );
+
+// Console-style menu navigation (cvar ui_padNav): focus moves between items
+// with the D-pad / left stick and A selects; there is no mouse cursor.
+static qboolean g_padNavFocus = qfalse;
+
+static qboolean UI_PadNavEnabled( void ) {
+	return ( DC && DC->getCVarValue && DC->getCVarValue( "ui_padNav" ) != 0 ) ? qtrue : qfalse;
+}
+
+static void UI_PadNavMoveCursorTo( itemDef_t *item ) {
+	// Park the (hidden) cursor on the item so code that still checks the
+	// cursor position agrees with the focused item.
+	rectDef_t *r = ( item->type == ITEM_TYPE_TEXT && item->textRect.w > 0 ) ? &item->textRect : &item->window.rect;
+	DC->cursorx = (int)( r->x + r->w * 0.5f );
+	DC->cursory = (int)( item->type == ITEM_TYPE_TEXT ? r->y - r->h * 0.5f : r->y + r->h * 0.5f );
+}
 static qboolean Menu_OverActiveItem( menuDef_t *menu, float x, float y );
 
 #ifdef CGAME
@@ -1760,7 +1776,7 @@ qboolean Item_SetFocus( itemDef_t *item, float x, float y ) {
 		rectDef_t r;
 		r = item->textRect;
 		r.y -= r.h;
-		if ( Rect_ContainsPoint( &r, x, y ) ) {
+		if ( g_padNavFocus || Rect_ContainsPoint( &r, x, y ) ) {
 			item->window.flags |= WINDOW_HASFOCUS;
 			if ( item->focusSound ) {
 				sfx = &item->focusSound;
@@ -2902,6 +2918,17 @@ itemDef_t *Menu_SetPrevCursorItem( menuDef_t *menu ) {
 			menu->cursorItem = menu->itemCount - 1;
 		}
 
+		if ( UI_PadNavEnabled() ) {
+			qboolean focused;
+			g_padNavFocus = qtrue;
+			focused = Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory );
+			g_padNavFocus = qfalse;
+			if ( focused ) {
+				UI_PadNavMoveCursorTo( menu->items[menu->cursorItem] );
+				return menu->items[menu->cursorItem];
+			}
+			continue;
+		}
 		if ( Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory ) ) {
 			Menu_HandleMouseMove( menu, menu->items[menu->cursorItem]->window.rect.x + 1, menu->items[menu->cursorItem]->window.rect.y + 1 );
 			return menu->items[menu->cursorItem];
@@ -2935,6 +2962,17 @@ itemDef_t *Menu_SetNextCursorItem( menuDef_t *menu ) {
 			}
 		}
 
+		if ( UI_PadNavEnabled() ) {
+			qboolean focused;
+			g_padNavFocus = qtrue;
+			focused = Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory );
+			g_padNavFocus = qfalse;
+			if ( focused ) {
+				UI_PadNavMoveCursorTo( menu->items[menu->cursorItem] );
+				return menu->items[menu->cursorItem];
+			}
+			continue;
+		}
 		if ( Item_SetFocus( menu->items[menu->cursorItem], DC->cursorx, DC->cursory ) ) {
 			Menu_HandleMouseMove( menu, menu->items[menu->cursorItem]->window.rect.x + 1, menu->items[menu->cursorItem]->window.rect.y + 1 );
 			return menu->items[menu->cursorItem];
@@ -4863,6 +4901,23 @@ void Menu_Paint( menuDef_t *menu, qboolean forcePaint ) {
 
 	if ( forcePaint ) {
 		menu->window.flags |= WINDOW_FORCED;
+	}
+
+	// With pad navigation there's no cursor to hover with, so make sure the
+	// active menu always has a focused item to act on.
+	if ( ( menu->window.flags & WINDOW_HASFOCUS ) && !forcePaint && UI_PadNavEnabled() ) {
+		qboolean anyFocus = qfalse;
+		for ( i = 0; i < menu->itemCount; i++ ) {
+			if ( menu->items[i]->window.flags & WINDOW_HASFOCUS ) {
+				anyFocus = qtrue;
+				break;
+			}
+		}
+		if ( !anyFocus && menu->itemCount > 0 ) {
+			// start from the last item so the search wraps to item 0 first
+			menu->cursorItem = menu->itemCount - 1;
+			Menu_SetNextCursorItem( menu );
+		}
 	}
 
 	// draw the background if necessary

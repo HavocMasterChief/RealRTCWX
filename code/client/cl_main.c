@@ -136,6 +136,7 @@ cvar_t *j_aimassist_turnrate_ads;
 cvar_t *j_aimassist_recoil;
 
 cvar_t *j_uiSpeed;
+cvar_t *ui_padNav;
 cvar_t *j_uiExpo;
 cvar_t *j_uiDeadzone;
 
@@ -3783,6 +3784,13 @@ void CL_Init( void ) {
 	j_up_axis =      Cvar_Get ("j_up_axis",      "4", CVAR_ARCHIVE);
 
 	j_uiSpeed =     Cvar_Get ("j_uiSpeed",      "700", CVAR_ARCHIVE);
+	// Console-style menu navigation: D-pad / left stick move between menu
+	// items, A selects, B goes back, no mouse cursor. Default on for Xbox.
+#ifdef RTCW_UWP
+	ui_padNav =     Cvar_Get ("ui_padNav",      "1", CVAR_ARCHIVE);
+#else
+	ui_padNav =     Cvar_Get ("ui_padNav",      "0", CVAR_ARCHIVE);
+#endif
 	j_uiExpo =	    Cvar_Get ("j_uiExpo",      "1.6", CVAR_ARCHIVE);
 	j_uiDeadzone =	Cvar_Get ("j_uiDeadzone",   "0.18", CVAR_ARCHIVE);
 

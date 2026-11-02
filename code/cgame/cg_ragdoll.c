@@ -1182,6 +1182,36 @@ Called for every skeletal character just before it's added to the scene.
 For dead (eligible) characters it runs the ragdoll and replaces the pose.
 ===============
 */
+// RealRTCWX: frame-rate watch (see CG_RagdollPerfFrame)
+static int rdPerfBodies, rdPerfMoving, rdPerfSteps, rdPerfMs;
+
+// every frame: if the game ran under 45 FPS over the last 2 s, log what
+// the bodies cost
+void CG_RagdollPerfFrame( void ) {
+	static int start, frames, bodies, moving, steps, ms, last;
+	int now = trap_Milliseconds();
+
+	frames++;
+	bodies += rdPerfBodies;
+	moving += rdPerfMoving;
+	steps += rdPerfSteps;
+	ms += rdPerfMs;
+	rdPerfBodies = rdPerfMoving = rdPerfSteps = rdPerfMs = 0;
+	last = now;
+	if ( !start ) {
+		start = now;
+	}
+	if ( now - start >= 2000 ) {
+		float avg = (float)( now - start ) / frames;
+		if ( avg > 22.0f ) {
+			CG_Printf( "perf(cgame): %.0f FPS | bodies drawn %.1f, moving %.1f, %.1f sim steps, ragdoll %.1f ms a frame\n",
+					   1000.0f / avg, (float)bodies / frames, (float)moving / frames, (float)steps / frames, (float)ms / frames );
+		}
+		start = now;
+		frames = bodies = moving = steps = ms = 0;
+	}
+}
+
 void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	ragdoll_t *rd;
 	float dt;
@@ -1255,6 +1285,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 		}
 	}
 	rd->lastSeen = cg.time;
+	rdPerfBodies++;
 
 	CG_RagdollRide( rd );
 	CG_RagdollPlayerContact( rd );
@@ -1266,9 +1297,15 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			dt = 0.1f;
 		}
 		rd->accum += dt;
-		while ( rd->accum >= RD_STEP && !rd->sleeping ) {
-			CG_RagdollStep( rd );
-			rd->accum -= RD_STEP;
+		rdPerfMoving++;
+		{
+			int t0 = trap_Milliseconds();
+			while ( rd->accum >= RD_STEP && !rd->sleeping ) {
+				CG_RagdollStep( rd );
+				rd->accum -= RD_STEP;
+				rdPerfSteps++;
+			}
+			rdPerfMs += trap_Milliseconds() - t0;
 		}
 		// blown up (bad numbers, or flung far out of the level): give up
 		// on this one rather than drawing garbage

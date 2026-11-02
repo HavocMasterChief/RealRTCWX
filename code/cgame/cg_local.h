@@ -2365,6 +2365,7 @@ void CG_RagdollReset( void );
 qboolean CG_RagdollPelvis( int entityNum, vec3_t out );
 qboolean CG_RagdollWound( int entityNum, vec3_t out );
 void CG_RagdollCheckSave( void );
+void CG_RagdollPerfFrame( void );
 void CG_AchInit( void );
 void CG_AchUnlock( const char *id );
 void CG_AchReset_f( void );

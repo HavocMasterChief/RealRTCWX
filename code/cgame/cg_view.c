@@ -1800,6 +1800,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		CG_AddLocalEntities();
 		CG_AddFlashlight();
 		CG_RagdollCheckSave();
+		CG_RagdollPerfFrame();
 
 		DEBUGTIME
 

@@ -1133,6 +1133,8 @@ void RE_AddWound( int entityNum, const vec3_t pos, const vec3_t dir ) {
 	p->bestDist = 1e9f;
 }
 
+int tr_perfMdsVerts, tr_perfWoundVerts, tr_perfWoundMs;
+
 static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surface, int baseVertex, int count ) {
 	rdEntWounds_t *ew;
 	int i, j, k;
@@ -1366,8 +1368,12 @@ void RB_SurfaceAnim( mdsSurface_t *surface ) {
 	}
 
 	// RealRTCWX: bullet wounds recorded on this character
+	tr_perfMdsVerts += render_count;
 	if ( refent->reFlags & REFLAG_WOUNDS ) {
+		int t0 = ri.Milliseconds();
 		R_ApplyWounds( refent, surface, baseVertex, render_count );
+		tr_perfWoundMs += ri.Milliseconds() - t0;
+		tr_perfWoundVerts += render_count;
 	}
 
 	DBG_SHOWTIME

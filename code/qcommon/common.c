@@ -128,6 +128,9 @@ cvar_t  *com_hunkused;      // Ridah
 int time_game;
 int time_frontend;          // renderer frontend time
 int time_backend;           // renderer backend time
+#ifdef RTCW_UWP
+static int com_uwpServerMs, com_uwpClientMs;
+#endif
 
 int com_frameTime;
 int com_frameNumber;
@@ -2867,7 +2870,15 @@ void Com_Frame( void ) {
 		timeBeforeServer = Sys_Milliseconds();
 	}
 
+#ifdef RTCW_UWP
+	{
+		int t0 = Sys_Milliseconds();
+		SV_Frame( msec );
+		com_uwpServerMs += Sys_Milliseconds() - t0;
+	}
+#else
 	SV_Frame( msec );
+#endif
 
 	// if "dedicated" has been modified, start up
 	// or shut down the client system.
@@ -2905,7 +2916,32 @@ void Com_Frame( void ) {
 		timeBeforeClient = Sys_Milliseconds ();
 	}
 
+#ifdef RTCW_UWP
+	{
+		int t0 = Sys_Milliseconds(), now;
+		static int start, frames;
+		CL_Frame( msec );
+		now = Sys_Milliseconds();
+		com_uwpClientMs += now - t0;
+		// RealRTCWX: under 45 FPS over 2 s: log the server (AI, game) and
+		// client (cgame, UI, renderer) shares of the frame
+		frames++;
+		if ( !start ) {
+			start = now;
+		}
+		if ( now - start >= 2000 ) {
+			float avg = (float)( now - start ) / frames;
+			if ( avg > 22.0f && com_sv_running && com_sv_running->integer ) {
+				Com_Printf( "perf(frame): %.0f FPS | game/AI %.1f ms, client+render %.1f ms a frame\n",
+							1000.0f / avg, (float)com_uwpServerMs / frames, (float)com_uwpClientMs / frames );
+			}
+			start = now;
+			frames = com_uwpServerMs = com_uwpClientMs = 0;
+		}
+	}
+#else
 	CL_Frame( msec );
+#endif
 
 	if ( com_speeds->integer ) {
 		timeAfter = Sys_Milliseconds ();

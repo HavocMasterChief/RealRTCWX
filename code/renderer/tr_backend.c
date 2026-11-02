@@ -28,6 +28,13 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "tr_local.h"
 #include "qgl.h"
+#ifdef RTCW_UWP
+#ifdef USE_LOCAL_HEADERS
+#	include "SDL3/SDL_video.h"
+#else
+#	include <SDL3/SDL_video.h>
+#endif
+#endif
 
 backEndData_t  *backEndData;
 backEndState_t backEnd;
@@ -1672,9 +1679,54 @@ const void  *RB_SwapBuffers( const void *data ) {
 #ifdef RTCW_UWP
 	{
 		extern int tr_perfSwapMs;
-		int t0 = ri.Milliseconds();
+		extern float tr_perfGpuMs;
+		// GPU time of each frame (swap to swap), read back a few frames
+		// later so nothing waits for it
+#define UWP_GPUQ 4
+		static GLuint q[UWP_GPUQ];
+		static int qn, qInit, qOpen, used[UWP_GPUQ];
+		int t0;
+		// the fixed-function GL setup doesn't load the query functions:
+		// fetch them here
+		static void ( APIENTRY *genQ )( GLsizei, GLuint * );
+		static void ( APIENTRY *beginQ )( GLenum, GLuint );
+		static void ( APIENTRY *endQ )( GLenum );
+		static void ( APIENTRY *getQ )( GLuint, GLenum, GLuint * );
+		if ( !qInit ) {
+			genQ = ( void ( APIENTRY * )( GLsizei, GLuint * ) )SDL_GL_GetProcAddress( "glGenQueries" );
+			beginQ = ( void ( APIENTRY * )( GLenum, GLuint ) )SDL_GL_GetProcAddress( "glBeginQuery" );
+			endQ = ( void ( APIENTRY * )( GLenum ) )SDL_GL_GetProcAddress( "glEndQuery" );
+			getQ = ( void ( APIENTRY * )( GLuint, GLenum, GLuint * ) )SDL_GL_GetProcAddress( "glGetQueryObjectuiv" );
+			qInit = ( genQ && beginQ && endQ && getQ ) ? 1 : -1;
+			if ( qInit > 0 ) {
+				genQ( UWP_GPUQ, q );
+			}
+			ri.Printf( PRINT_ALL, "perf: GPU timer queries %s\n", qInit > 0 ? "on" : "not available" );
+		}
+		if ( qInit > 0 ) {
+			GLuint avail = 0, ns = 0;
+			if ( qOpen ) {
+				endQ( 0x88BF /* GL_TIME_ELAPSED */ );
+				qOpen = 0;
+				used[qn] = 1;
+			}
+			qn = ( qn + 1 ) % UWP_GPUQ;
+			// the oldest one (3 frames back): read it if the GPU is done
+			if ( used[qn] ) {
+				getQ( q[qn], 0x8867 /* GL_QUERY_RESULT_AVAILABLE */, &avail );
+				if ( avail ) {
+					getQ( q[qn], 0x8866 /* GL_QUERY_RESULT */, &ns );
+					tr_perfGpuMs = ns / 1000000.0f;
+				}
+			}
+		}
+		t0 = ri.Milliseconds();
 		GLimp_EndFrame();
 		tr_perfSwapMs = ri.Milliseconds() - t0;
+		if ( qInit > 0 ) {
+			beginQ( 0x88BF, q[qn] );
+			qOpen = 1;
+		}
 	}
 #else
 	GLimp_EndFrame();

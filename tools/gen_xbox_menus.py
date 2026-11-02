@@ -133,9 +133,20 @@ def mode_items(name, group, x, y):
 	itemDef {{
 		name {name}
 		group {group}
+		type ITEM_TYPE_MULTI
+		text "Resolution Test"
+		cvar "r_xbResTest"
+		cvarFloatList {{ "Off" 0 "75%" 1 "50%" 2 }}
+		rect {x} {y + 45} 290 12
+		textalign ITEM_ALIGN_RIGHT
+{style}	}}
+
+	itemDef {{
+		name {name}
+		group {group}
 		type ITEM_TYPE_TEXT
 		text "Quality: HD textures and full effects, capped at 60 FPS."
-		rect {x} {y + 55} 290 12
+		rect {x} {y + 65} 290 12
 		textalign ITEM_ALIGN_LEFT
 {note}	}}
 
@@ -144,7 +155,7 @@ def mode_items(name, group, x, y):
 		group {group}
 		type ITEM_TYPE_TEXT
 		text "Performance: up to 120 FPS (switches a 120 Hz TV to 120 Hz)."
-		rect {x} {y + 70} 290 12
+		rect {x} {y + 80} 290 12
 		textalign ITEM_ALIGN_LEFT
 {note}	}}
 '''

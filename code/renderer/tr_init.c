@@ -144,6 +144,9 @@ cvar_t  *r_uiFullScreen;
 cvar_t  *r_shadows;
 cvar_t  *r_portalsky;   //----(SA)	added
 cvar_t  *r_flares;
+#ifdef RTCW_UWP
+cvar_t  *r_xbResTest;     // diagnostic: 0 full, 1 75%, 2 50% 3D view (tr_scene.c)
+#endif
 cvar_t  *r_mode;
 cvar_t  *r_nobind;
 cvar_t  *r_singleShader;
@@ -1319,6 +1322,9 @@ void R_Register( void ) {
 	r_lodCurveError = ri.Cvar_Get( "r_lodCurveError", "250", CVAR_ARCHIVE );
 	r_lodbias = ri.Cvar_Get( "r_lodbias", "0", CVAR_ARCHIVE );
 	r_flares = ri.Cvar_Get( "r_flares", "1", CVAR_ARCHIVE );
+#ifdef RTCW_UWP
+	r_xbResTest = ri.Cvar_Get( "r_xbResTest", "0", 0 );
+#endif
 	r_znear = ri.Cvar_Get( "r_znear", "2", CVAR_CHEAT );
 	ri.Cvar_CheckRange( r_znear, 0.001f, 200, qfalse );
 	r_zproj = ri.Cvar_Get( "r_zproj", "64", CVAR_ARCHIVE );

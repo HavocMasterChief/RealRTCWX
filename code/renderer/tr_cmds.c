@@ -34,6 +34,12 @@ R_PerformanceCounters
 =====================
 */
 #ifdef RTCW_UWP
+#ifdef USE_LOCAL_HEADERS
+#	include "SDL3/SDL_timer.h"
+#else
+#	include <SDL3/SDL_timer.h>
+#endif
+extern cvar_t *r_xbResTest;
 /*
 RealRTCWX: frame-rate drops on the console. Every 2 s, if the game ran under
 45 FPS, one line goes in the console log with where the time went.
@@ -42,7 +48,13 @@ front means the GPU (or the D3D12 translation) is the limit.
 */
 extern int tr_perfMdsVerts, tr_perfWoundVerts, tr_perfWoundMs;
 int tr_perfBackMs, tr_perfSwapMs;      // last frame's back end (and its swap), see RE_EndFrame / RB_SwapBuffers
+float tr_perfGpuMs;                    // GPU time of a recent frame (timer query, RB_SwapBuffers)
+extern int tr_perfDraws;
+extern Uint64 tr_perfDrawTicks;
 static void R_UWP_PerfWatch( void ) {
+	static float gpu;
+	static Uint64 drawTicks;
+	static int draws;
 	static int start, frames, front, back, swap, shaders, surfs, verts, tris, dlv, flares, mds, wv, wms, ents, dls, maxms, last;
 	int now = ri.Milliseconds(), ms;
 
@@ -54,6 +66,11 @@ static void R_UWP_PerfWatch( void ) {
 	frames++;
 	front += tr.frontEndMsec;
 	back += tr_perfBackMs;
+	gpu += tr_perfGpuMs;
+	draws += tr_perfDraws;
+	drawTicks += tr_perfDrawTicks;
+	tr_perfDraws = 0;
+	tr_perfDrawTicks = 0;
 	swap += tr_perfSwapMs;
 	shaders += backEnd.pc.c_shaders;
 	surfs += backEnd.pc.c_surfaces;
@@ -74,6 +91,10 @@ static void R_UWP_PerfWatch( void ) {
 	if ( now - start >= 2000 ) {
 		float avg = (float)( now - start ) / frames;
 		if ( avg > 22.0f ) {
+			ri.Printf( PRINT_ALL, "perf(gpu): %.0f FPS | GPU %.1f ms a frame | %i draw calls, %.1f ms CPU issuing them | resolution test %s\n",
+					   1000.0f / avg, gpu / frames, draws / frames,
+					   (float)( (double)drawTicks * 1000.0 / (double)SDL_GetPerformanceFrequency() ) / frames,
+					   r_xbResTest && r_xbResTest->integer == 1 ? "75%" : r_xbResTest && r_xbResTest->integer == 2 ? "50%" : "off" );
 			ri.Printf( PRINT_ALL, "perf: %.0f FPS (worst %i ms) | front %.1f back %.1f (swap/GPU wait %.1f) ms | %i batches %i surfs %ik verts %ik tris | "
 					   "%i ents %i dlights %i dlight-verts %i flares | models %ik verts, wounds %ik verts %.1f ms\n",
 					   1000.0f / avg, maxms, (float)front / frames, (float)back / frames, (float)swap / frames,
@@ -82,6 +103,9 @@ static void R_UWP_PerfWatch( void ) {
 					   mds / frames / 1000, wv / frames / 1000, (float)wms / frames );
 		}
 		start = now;
+		gpu = 0;
+		draws = 0;
+		drawTicks = 0;
 		frames = front = back = swap = shaders = surfs = verts = tris = dlv = flares = mds = wv = wms = ents = dls = maxms = 0;
 	}
 }

@@ -176,7 +176,28 @@ instead of using the single glDrawElements call that may be inefficient
 without compiled vertex arrays.
 ==================
 */
+#ifdef RTCW_UWP
+#ifdef USE_LOCAL_HEADERS
+#	include "SDL3/SDL_timer.h"
+#else
+#	include <SDL3/SDL_timer.h>
+#endif
+// RealRTCWX perf log: draw calls and the CPU time spent issuing them
+// (see R_UWP_PerfWatch in tr_cmds.c)
+int tr_perfDraws;
+Uint64 tr_perfDrawTicks;
+#endif
+
 void R_DrawElements( int numIndexes, const glIndex_t *indexes ) {
+#ifdef RTCW_UWP
+	{
+		Uint64 t0 = SDL_GetPerformanceCounter();
+		qglDrawElements( GL_TRIANGLES, numIndexes, GL_INDEX_TYPE, indexes );
+		tr_perfDrawTicks += SDL_GetPerformanceCounter() - t0;
+		tr_perfDraws++;
+		return;
+	}
+#endif
 #ifdef USE_OPENGLES
 	qglDrawElements( GL_TRIANGLES, 
 						numIndexes,

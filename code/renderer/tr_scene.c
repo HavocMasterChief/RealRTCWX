@@ -28,6 +28,9 @@ If you have questions concerning this license or the applicable additional terms
 
 
 #include "tr_local.h"
+#ifdef RTCW_UWP
+extern cvar_t *r_xbResTest;
+#endif
 
 int r_firstSceneDrawSurf;
 
@@ -431,6 +434,18 @@ void RE_RenderScene( const refdef_t *fd ) {
 	tr.refdef.y = fd->y;
 	tr.refdef.width = fd->width;
 	tr.refdef.height = fd->height;
+#ifdef RTCW_UWP
+	// RealRTCWX diagnostic: draw the 3D view smaller, in the middle, to see
+	// whether the frame rate follows the pixel count (GPU) or not (CPU)
+	if ( r_xbResTest && r_xbResTest->integer && !( fd->rdflags & RDF_NOWORLDMODEL ) ) {
+		float sc = r_xbResTest->integer == 1 ? 0.75f : 0.5f;
+		int w = fd->width * sc, h = fd->height * sc;
+		tr.refdef.x = fd->x + ( fd->width - w ) / 2;
+		tr.refdef.y = fd->y + ( fd->height - h ) / 2;
+		tr.refdef.width = w;
+		tr.refdef.height = h;
+	}
+#endif
 	tr.refdef.fov_x = fd->fov_x;
 	tr.refdef.fov_y = fd->fov_y;
 

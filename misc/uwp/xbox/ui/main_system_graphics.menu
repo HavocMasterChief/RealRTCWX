@@ -117,9 +117,28 @@
 	itemDef {
 		name iortcwgraphics
 		group system
+		type ITEM_TYPE_MULTI
+		text "Resolution Test"
+		cvar "r_xbResTest"
+		cvarFloatList { "Off" 0 "75%" 1 "50%" 2 }
+		rect 300 185 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textfont UI_FONT_BIG
+		textalignx 142
+		textaligny 10
+		textscale .22
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 0
+	}
+
+	itemDef {
+		name iortcwgraphics
+		group system
 		type ITEM_TYPE_TEXT
 		text "Quality: HD textures and full effects, capped at 60 FPS."
-		rect 300 195 290 12
+		rect 300 205 290 12
 		textalign ITEM_ALIGN_LEFT
 		textfont UI_FONT_BIG
 		textalignx 4
@@ -135,7 +154,7 @@
 		group system
 		type ITEM_TYPE_TEXT
 		text "Performance: up to 120 FPS (switches a 120 Hz TV to 120 Hz)."
-		rect 300 210 290 12
+		rect 300 220 290 12
 		textalign ITEM_ALIGN_LEFT
 		textfont UI_FONT_BIG
 		textalignx 4

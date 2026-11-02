@@ -1470,7 +1470,7 @@ void G_LoadGame( char *filename ) {
 		// "current" save before loading, but not its .cht)
 		trap_Cvar_VariableStringBuffer( "savegame_filename", cht, sizeof( cht ) );
 		if ( !cht[0] ) {
-			Q_strncpyz( cht, filename, sizeof( cht ) );
+			Q_strncpyz( cht, filename ? filename : "save\\current_realrtcw.svg", sizeof( cht ) );
 		}
 		dot = strrchr( cht, '.' );
 		if ( dot ) {
@@ -1484,7 +1484,9 @@ void G_LoadGame( char *filename ) {
 			trap_FS_FCloseFile( cf );
 		}
 		trap_Cvar_Set( "g_cheatedRun", c == '1' ? "1" : "0" );
-		trap_Cvar_Set( "g_xbcheats", "0" );
+		if ( filename ) {
+			trap_Cvar_Set( "g_xbcheats", "0" );   // a different save; a death reload keeps the toggles
+		}
 	}
 
 	// enforce the "current" savegame, since that is used for all loads

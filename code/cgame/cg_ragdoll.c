@@ -1090,7 +1090,7 @@ void CG_RagdollExplosion( const vec3_t origin, float radius, float strength ) {
 // the player walking into a body nudges the parts in the way
 static void CG_RagdollPlayerContact( ragdoll_t *rd ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
-	vec3_t mins = { -18, -18, -24 }, maxs = { 18, 18, 40 };
+	vec3_t mins = { -16, -16, -24 }, maxs = { 16, 16, 40 };
 	float speed;
 	int i;
 
@@ -1098,18 +1098,22 @@ static void CG_RagdollPlayerContact( ragdoll_t *rd ) {
 		return;
 	}
 	speed = sqrt( ps->velocity[0] * ps->velocity[0] + ps->velocity[1] * ps->velocity[1] );
-	if ( speed < 40 ) {
-		return;     // standing on or next to a body doesn't move it
+	if ( speed < 90 ) {
+		return;     // standing, creeping or walking slowly over a body doesn't move it
 	}
 	for ( i = 0; i < J_NUM; i++ ) {
 		vec3_t rel, out;
-		float r = rdRadius[i], ox, oy;
+		float r, ox, oy, push;
+		// the heavy core (pelvis, spine, chest) stays put; only limbs and head get nudged
+		if ( i == J_PELVIS || i == J_CHEST ) {
+			continue;
+		}
+		r = rdRadius[i] * 0.5f;
 		VectorSubtract( rd->p[i], ps->origin, rel );
 		if ( rel[0] < mins[0] - r || rel[0] > maxs[0] + r || rel[1] < mins[1] - r || rel[1] > maxs[1] + r ||
 			 rel[2] < mins[2] - r || rel[2] > maxs[2] + r ) {
 			continue;
 		}
-		// push out sideways, the short way, and pass on some of the walk
 		ox = rel[0] > 0 ? ( maxs[0] + r - rel[0] ) : ( mins[0] - r - rel[0] );
 		oy = rel[1] > 0 ? ( maxs[1] + r - rel[1] ) : ( mins[1] - r - rel[1] );
 		VectorClear( out );
@@ -1118,11 +1122,16 @@ static void CG_RagdollPlayerContact( ragdoll_t *rd ) {
 		} else {
 			out[1] = oy;
 		}
+		// a gentle shove: at most a couple of units a frame, no momentum handed over
+		push = VectorLength( out );
+		if ( push > 2.0f ) {
+			VectorScale( out, 2.0f / push, out );
+		}
 		CG_RagdollWake( rd );
 		VectorAdd( rd->p[i], out, rd->p[i] );
 		VectorAdd( rd->old[i], out, rd->old[i] );
-		VectorMA( rd->old[i], -RD_STEP * 0.5f, ps->velocity, rd->old[i] );
-		rd->old[i][2] = rd->p[i][2] - ( rd->p[i][2] - rd->old[i][2] ) * 0.3f;   // don't fling it upward
+		VectorMA( rd->old[i], -RD_STEP * 0.08f, ps->velocity, rd->old[i] );
+		rd->old[i][2] = rd->p[i][2];   // never lift it
 	}
 }
 
@@ -1313,7 +1322,7 @@ save is in savegame_filename when cgame starts.
 */
 static void CG_RagdollSaveName( const char *in, char *out, int outSize ) {
 	char *dot;
-	Q_strncpyz( out, in, outSize );
+	Q_strncpyz( out, in ? in : "", outSize );
 	dot = strrchr( out, '.' );
 	if ( dot && !Q_stricmp( dot, ".svg" ) ) {
 		*dot = 0;

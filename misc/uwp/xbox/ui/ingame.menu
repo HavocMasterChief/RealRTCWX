@@ -152,6 +152,77 @@ menuDef
 		decoration
 	}
 
+	
+	itemDef
+	{
+		name realrtcw_ingame_save
+		style WINDOW_STYLE_SHADER
+		rect 245 150 224 14
+		background "ui/assets/xbox_desc_save.tga"
+		visible 1
+		decoration
+	}
+
+	itemDef
+	{
+		name realrtcw_ingame_load
+		style WINDOW_STYLE_SHADER
+		rect 245 183 224 14
+		background "ui/assets/xbox_desc_load.tga"
+		visible 1
+		decoration
+	}
+
+	itemDef
+	{
+		name realrtcw_ingame_controls
+		style WINDOW_STYLE_SHADER
+		rect 245 216 224 14
+		background "ui/assets/xbox_desc_controls.tga"
+		visible 1
+		decoration
+	}
+
+	itemDef
+	{
+		name realrtcw_ingame_game
+		style WINDOW_STYLE_SHADER
+		rect 245 249 224 14
+		background "ui/assets/xbox_desc_game.tga"
+		visible 1
+		decoration
+	}
+
+	itemDef
+	{
+		name realrtcw_ingame_system
+		style WINDOW_STYLE_SHADER
+		rect 245 282 224 14
+		background "ui/assets/xbox_desc_system.tga"
+		visible 1
+		decoration
+	}
+
+	itemDef
+	{
+		name realrtcw_ingame_main
+		style WINDOW_STYLE_SHADER
+		rect 245 315 224 14
+		background "ui/assets/xbox_desc_main.tga"
+		visible 1
+		decoration
+	}
+
+	itemDef
+	{
+		name realrtcw_ingame_quit
+		style WINDOW_STYLE_SHADER
+		rect 245 348 224 14
+		background "ui/assets/xbox_desc_quit.tga"
+		visible 1
+		decoration
+	}
+
 	itemDef
 	{
 	name save
@@ -282,7 +353,7 @@ menuDef {
 	focusColor 1 .75 0 1
 	style 1
 	border 1
-	onOpen {  }
+	onOpen { uiScript xbCheat refresh }
 	onESC { close ingame_cheats ; open ingame }
 
 	itemDef {
@@ -361,13 +432,13 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 .8 .5 1
 		visible 1
-		action { open xbox_cheat_confirm }
+		action { close ingame_cheats ; open xbox_cheat_confirm }
 	}
 
 	itemDef {
 		name cheat_god
 		type ITEM_TYPE_BUTTON
-		text "God mode"
+		cvar "ui_xbc_god"
 		cvarTest "g_cheatedRun"
 		showCvar { "1" }
 		rect 30 70 240 18
@@ -380,13 +451,13 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
-		action { exec "xbcheat god" }
+		action { uiScript xbCheat god }
 	}
 
 	itemDef {
 		name cheat_ammo
 		type ITEM_TYPE_BUTTON
-		text "Infinite ammo"
+		cvar "ui_xbc_ammo"
 		cvarTest "g_cheatedRun"
 		showCvar { "1" }
 		rect 30 91 240 18
@@ -399,13 +470,13 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
-		action { exec "xbcheat ammo" }
+		action { uiScript xbCheat ammo }
 	}
 
 	itemDef {
 		name cheat_onehit
 		type ITEM_TYPE_BUTTON
-		text "One-hit kills"
+		cvar "ui_xbc_onehit"
 		cvarTest "g_cheatedRun"
 		showCvar { "1" }
 		rect 30 112 240 18
@@ -418,13 +489,13 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
-		action { exec "xbcheat onehit" }
+		action { uiScript xbCheat onehit }
 	}
 
 	itemDef {
 		name cheat_noclip
 		type ITEM_TYPE_BUTTON
-		text "No clipping"
+		cvar "ui_xbc_noclip"
 		cvarTest "g_cheatedRun"
 		showCvar { "1" }
 		rect 30 133 240 18
@@ -437,13 +508,13 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
-		action { exec "xbcheat noclip" }
+		action { uiScript xbCheat noclip }
 	}
 
 	itemDef {
 		name cheat_weapons
 		type ITEM_TYPE_BUTTON
-		text "All weapons"
+		text "All weapons (on resume)"
 		cvarTest "g_cheatedRun"
 		showCvar { "1" }
 		rect 30 154 240 18
@@ -456,13 +527,13 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
-		action { exec "xbcheat weapons" }
+		action { uiScript xbCheat weapons }
 	}
 
 	itemDef {
 		name cheat_health
 		type ITEM_TYPE_BUTTON
-		text "Restore health and armour"
+		text "Restore health and armour (on resume)"
 		cvarTest "g_cheatedRun"
 		showCvar { "1" }
 		rect 30 175 240 18
@@ -475,7 +546,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
-		action { exec "xbcheat health" }
+		action { uiScript xbCheat health }
 	}
 
 	itemDef {
@@ -646,7 +717,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 .8 .5 1
 		visible 1
-		action { exec "xbcheat enable" ; close xbox_cheat_confirm ; open ingame_cheats }
+		action { uiScript xbCheat enable ; close xbox_cheat_confirm ; open ingame_cheats }
 	}
 
 	itemDef {

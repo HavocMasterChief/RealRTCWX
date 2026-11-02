@@ -3519,6 +3519,16 @@ void Menu_HandleKey( menuDef_t *menu, int key, qboolean down ) {
 		}
 		break;
 
+	case K_PAD0_X:
+		// X runs the menu's "padX" item (e.g. delete the highlighted save)
+		if ( UI_PadNavEnabled() ) {
+			itemDef_t *x = Menu_FindItemByName( menu, "padX" );
+			if ( x && x->action ) {
+				Item_RunScript( x, x->action );
+			}
+		}
+		break;
+
 	case K_PAD0_Y:
 		// Y runs the menu's "padY" item (e.g. Campaign Options)
 		if ( UI_PadNavEnabled() ) {

@@ -522,6 +522,13 @@ qboolean    ConsoleCommand( void ) {
 			}
 
 			if ( G_SaveGame( cmd ) ) {
+				// RealRTCWX: dying reloads the "current" save, so a manual or
+				// quick save becomes the one you go back to
+				if ( g_gametype.integer != GT_SURVIVAL && g_entities[0].health > 0 ) {
+					G_SaveGame( NULL );
+					G_SaveGame( "lastcheckpoint" );
+					trap_Cvar_Set( "g_checkpointReady", "1" );
+				}
 				//trap_SendServerCommand( -1, "cp gamesaved" );  // deletedgame
 				G_AddEvent( player, EV_GAME_SAVED, G_SoundIndex( "sound/misc/blank.wav" ) );
 			} else {

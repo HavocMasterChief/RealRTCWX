@@ -5186,6 +5186,111 @@ UI_RunMenuScript
 ==============
 */
 
+/*
+RealRTCWX: the Xbox save list (load screens and Campaign > Continue).
+Newest first, with the mission's name and whether that playthrough cheated.
+*/
+static const char *UI_XbMissionName( const char *map ) {
+	int i;
+	if ( !uiInfo.mapCount ) {
+		UI_LoadArenasIntoMapList();
+	}
+	for ( i = 0; i < uiInfo.mapCount; i++ ) {
+		if ( uiInfo.mapList[i].mapLoadName && !Q_stricmp( uiInfo.mapList[i].mapLoadName, map ) ) {
+			return uiInfo.mapList[i].mapName;
+		}
+	}
+	return String_Alloc( map );
+}
+
+static void UI_XbLoadSaves( void ) {
+	int i;
+
+	UI_LoadSavegames( NULL );
+	for ( i = 0; i < uiInfo.savegameCount; i++ ) {
+		savegameInfo *sg = &uiInfo.savegameList[i];
+		fileHandle_t f;
+		char c = '0';
+
+		sg->mission = UI_XbMissionName( sg->mapName ? sg->mapName : "" );
+		sg->cheated = 0;
+		if ( trap_FS_FOpenFile( va( "save/%s.cht", sg->savegameFile ), &f, FS_READ ) > 0 ) {
+			trap_FS_Read( &c, 1, f );
+			sg->cheated = ( c == '1' );
+		}
+		if ( f ) {
+			trap_FS_FCloseFile( f );
+		}
+		if ( !Q_stricmp( sg->savegameFile, "quicksave" ) ) {
+			sg->savegameName = "Quick Save";
+		} else if ( !Q_stricmp( sg->savegameFile, "lastcheckpoint" ) ) {
+			sg->savegameName = "Checkpoint";
+		} else if ( !Q_stricmp( sg->savegameFile, "xbox_suspend" ) ) {
+			sg->savegameName = "Suspended game";
+		}
+	}
+	trap_Cvar_Set( "ui_xbHasSave", uiInfo.savegameCount ? "1" : "0" );
+	if ( !uiInfo.savegameCount ) {
+		trap_Cvar_Set( "ui_savegameName", "" );
+		trap_Cvar_Set( "ui_savegameInfo", "No saved games yet" );
+		return;
+	}
+	uiInfo.savegameStatus.sortDir = 1;      // newest first
+	UI_SavegameSort( SORT_SAVETIME, qtrue );
+	UI_FeederSelection( FEEDER_SAVEGAMES, 0 );
+	Menu_SetFeederSelection( NULL, FEEDER_SAVEGAMES, 0, NULL );
+}
+
+// Campaign > Continue: the newest save
+static void UI_XbContinue( void ) {
+	UI_XbLoadSaves();
+	if ( uiInfo.savegameCount ) {
+		trap_Cmd_ExecuteText( EXEC_APPEND, va( "loadgame %s\n",
+			uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[0]].savegameFile ) );
+	}
+}
+
+/*
+RealRTCWX: cheats are switched here, in the UI, because the game is paused
+while the menu is up and commands to the server wait until it resumes.
+God / ammo / one-hit / noclip are bits in g_xbcheats, which the game applies
+every frame (G_XbCheatThink); weapons and health go to the server and land
+when the game resumes.
+*/
+static void UI_XbCheatLabels( void ) {
+	static const char *names[4] = { "God mode", "Infinite ammo", "One-hit kills", "No clipping" };
+	static const char *cvars[4] = { "ui_xbc_god", "ui_xbc_ammo", "ui_xbc_onehit", "ui_xbc_noclip" };
+	int bits = (int)trap_Cvar_VariableValue( "g_xbcheats" ), i;
+	for ( i = 0; i < 4; i++ ) {
+		trap_Cvar_Set( cvars[i], va( "%s:  %s", names[i], ( bits & ( 1 << i ) ) ? "ON" : "OFF" ) );
+	}
+}
+
+static void UI_XbCheat( const char *what ) {
+	int bits = (int)trap_Cvar_VariableValue( "g_xbcheats" ), bit = 0;
+
+	if ( !Q_stricmp( what, "refresh" ) ) {
+		UI_XbCheatLabels();
+		return;
+	}
+	trap_Cvar_Set( "g_cheatedRun", "1" );
+	if ( !Q_stricmp( what, "god" ) ) {
+		bit = 1;
+	} else if ( !Q_stricmp( what, "ammo" ) ) {
+		bit = 2;
+	} else if ( !Q_stricmp( what, "onehit" ) ) {
+		bit = 4;
+	} else if ( !Q_stricmp( what, "noclip" ) ) {
+		bit = 8;
+	} else if ( !Q_stricmp( what, "weapons" ) || !Q_stricmp( what, "health" ) ) {
+		trap_Cmd_ExecuteText( EXEC_APPEND, va( "xbcheat %s\n", what ) );
+	}
+	if ( bit ) {
+		trap_Cvar_Set( "g_xbcheats", va( "%i", bits ^ bit ) );
+	}
+	UI_XbCheatLabels();
+}
+
 static void UI_RunMenuScript( char **args ) {
 	const char *name, *name2;
 	char buff[1024];
@@ -5193,6 +5298,20 @@ static void UI_RunMenuScript( char **args ) {
 	if ( String_Parse( args, &name ) ) {
 		if ( Q_stricmp( name, "xbAchLoad" ) == 0 ) {     // RealRTCWX achievements browser
 			UI_XbAchLoad();
+			return;
+		}
+		if ( Q_stricmp( name, "xbLoadSaves" ) == 0 ) {
+			UI_XbLoadSaves();
+			return;
+		}
+		if ( Q_stricmp( name, "xbContinue" ) == 0 ) {
+			UI_XbContinue();
+			return;
+		}
+		if ( Q_stricmp( name, "xbCheat" ) == 0 ) {
+			if ( String_Parse( args, &name2 ) ) {
+				UI_XbCheat( name2 );
+			}
 			return;
 		}
 		//#ifdef MISSIONPACK			// NERVE - SMF - enabled for multiplayer
@@ -6902,6 +7021,13 @@ static const char *UI_FeederItemText( float feederID, int index, int column, qha
 			case SORT_SAVETIME:
 				return uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[index]].time;
 				break;
+			case 2:     // RealRTCWX: mission
+				{
+					const char *m = uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[index]].mission;
+					return m ? m : "";
+				}
+			case 3:     // RealRTCWX: cheats
+				return uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[index]].cheated ? "CHEATS" : "";
 
 			}
 		}

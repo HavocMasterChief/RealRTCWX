@@ -2258,8 +2258,7 @@ void CL_KeyDownEvent( int key, unsigned time )
 		 clc.state == CA_ACTIVE && !clc.demoplaying && !( Key_GetCatcher() & ( KEYCATCH_UI | KEYCATCH_CONSOLE ) ) ) {
 		if ( key == K_PAD0_DPAD_UP ) {
 			if ( cl.snap.ps.stats[STAT_HEALTH] > 0 && !cl.cameraMode ) {
-				Cbuf_AddText( "savegame quicksave\n" );
-				Cbuf_AddText( "xbviewcombo \"Quick saved\"\n" );
+				Cbuf_AddText( "savegame quicksave\n" );   // cgame shows GAME SAVED
 			} else {
 				Cbuf_AddText( "xbviewcombo \"Can't save now\"\n" );
 			}

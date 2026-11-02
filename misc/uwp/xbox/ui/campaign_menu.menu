@@ -13,7 +13,7 @@ menuDef {
 	style WINDOW_STYLE_FILLED
 	forecolor 0 0 0 0
 	backcolor 0 0 0 0
-	onOpen { setcvar g_gameskill 2 ; uiScript loadCampaignArenas }
+	onOpen { setcvar g_gameskill 2 ; uiScript loadCampaignArenas ; uiScript xbLoadSaves }
 	onEsc { close campaign_menu ; open play_menu }
 itemDef
 	{
@@ -75,6 +75,29 @@ itemDef
 	}
 
 	itemDef {
+		name xb_continue
+		text "CONTINUE"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .34
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 24
+		rect 40 170 240 32
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		cvarTest "ui_xbHasSave"
+		showCvar { "1" }
+		visible 1
+		mouseEnter { setitemcolor xb_continue backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_continue backcolor 1 1 1 .07 }
+		action { close campaign_menu ; uiScript xbContinue }
+	}
+
+	itemDef {
 		name xb_newgame
 		text "NEW GAME"
 		type ITEM_TYPE_BUTTON
@@ -89,6 +112,8 @@ itemDef
 		bordercolor .5 .5 .5 .3
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
+		cvarTest "ui_xbHasSave"
+		hideCvar { "1" }
 		visible 1
 		mouseEnter { setitemcolor xb_newgame backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_newgame backcolor 1 1 1 .07 }
@@ -110,9 +135,57 @@ itemDef
 		bordercolor .5 .5 .5 .3
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
+		cvarTest "ui_xbHasSave"
+		hideCvar { "1" }
 		visible 1
 		mouseEnter { setitemcolor xb_mission backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_mission backcolor 1 1 1 .07 }
+		action { close campaign_menu ; open xbox_missions }
+	}
+
+	itemDef {
+		name xb_newgame_s
+		text "NEW GAME"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .34
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 24
+		rect 40 212 240 32
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		cvarTest "ui_xbHasSave"
+		showCvar { "1" }
+		visible 1
+		mouseEnter { setitemcolor xb_newgame_s backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_newgame_s backcolor 1 1 1 .07 }
+		action { setcvar ui_camp_chapter 0 ; uiScript loadCampaignArenas ; close campaign_menu ; open xbox_difficulty_new }
+	}
+
+	itemDef {
+		name xb_mission_s
+		text "CHOOSE MISSION"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .34
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 24
+		rect 40 254 240 32
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		cvarTest "ui_xbHasSave"
+		showCvar { "1" }
+		visible 1
+		mouseEnter { setitemcolor xb_mission_s backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_mission_s backcolor 1 1 1 .07 }
 		action { close campaign_menu ; open xbox_missions }
 	}
 

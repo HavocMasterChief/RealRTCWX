@@ -2138,6 +2138,7 @@ starting a new campaign.
 #define XBCHEAT_GOD     1
 #define XBCHEAT_AMMO    2
 #define XBCHEAT_ONEHIT  4
+#define XBCHEAT_NOCLIP  8
 
 void G_UWP_Achievement( const char *id ) {
 	if ( !id || !id[0] || g_cheats.integer || trap_Cvar_VariableIntegerValue( "g_cheatedRun" ) ) {
@@ -2177,8 +2178,8 @@ static void Cmd_XbCheat_f( gentity_t *ent ) {
 		bits ^= XBCHEAT_ONEHIT;
 		trap_SendServerCommand( ent - g_entities, va( "cp \"One-hit kills %s\"", ( bits & XBCHEAT_ONEHIT ) ? "ON" : "OFF" ) );
 	} else if ( !Q_stricmp( name, "noclip" ) ) {
-		ent->client->noclip = !ent->client->noclip;
-		trap_SendServerCommand( ent - g_entities, va( "cp \"No clipping %s\"", ent->client->noclip ? "ON" : "OFF" ) );
+		bits ^= XBCHEAT_NOCLIP;
+		trap_SendServerCommand( ent - g_entities, va( "cp \"No clipping %s\"", ( bits & XBCHEAT_NOCLIP ) ? "ON" : "OFF" ) );
 	} else if ( !Q_stricmp( name, "weapons" ) ) {
 		for ( i = 0; i <= WP_M7; i++ ) {
 			COM_BitSet( ent->client->ps.weapons, i );
@@ -2197,12 +2198,24 @@ static void Cmd_XbCheat_f( gentity_t *ent ) {
 
 // every frame for the player: cheats that need keeping up
 void G_XbCheatThink( gentity_t *ent ) {
+	static int last;
 	int bits = G_XbCheats();
-	if ( !bits || !ent->client || ( ent->r.svFlags & SVF_CASTAI ) ) {
+	if ( !ent->client || ( ent->r.svFlags & SVF_CASTAI ) ) {
 		return;
 	}
+	// switched off (from the menu): undo what we were keeping up
+	if ( ( last & XBCHEAT_GOD ) && !( bits & XBCHEAT_GOD ) ) {
+		ent->flags &= ~FL_GODMODE;
+	}
+	if ( ( last & XBCHEAT_NOCLIP ) && !( bits & XBCHEAT_NOCLIP ) ) {
+		ent->client->noclip = qfalse;
+	}
+	last = bits;
 	if ( bits & XBCHEAT_GOD ) {
 		ent->flags |= FL_GODMODE;
+	}
+	if ( bits & XBCHEAT_NOCLIP ) {
+		ent->client->noclip = qtrue;
 	}
 	if ( ( bits & XBCHEAT_AMMO ) && ent->client->ps.weapon > WP_NONE && ent->client->ps.weapon < WP_NUM_WEAPONS ) {
 		int w = ent->client->ps.weapon;

@@ -489,6 +489,127 @@ struct
 } stick_state;
 
 
+#ifdef RTCW_UWP
+/*
+Controller turned off and back on (it sleeps after a while on a pause menu),
+or a different controller picked up: every connected pad stays open, and
+whichever one is being used drives the game.
+*/
+#define UWP_MAX_PADS 8
+static SDL_Gamepad *uwpPads[UWP_MAX_PADS];
+
+static void IN_UWP_ClosePads( void ) {
+	int i;
+	for ( i = 0; i < UWP_MAX_PADS; i++ ) {
+		if ( uwpPads[i] ) {
+			SDL_CloseGamepad( uwpPads[i] );
+			uwpPads[i] = NULL;
+		}
+	}
+}
+
+static void IN_UWP_OpenAllPads( void ) {
+	SDL_JoystickID *ids;
+	int n = 0, i, k = 0;
+
+	IN_UWP_ClosePads();
+	ids = SDL_GetGamepads( &n );
+	for ( i = 0; ids && i < n && k < UWP_MAX_PADS; i++ ) {
+		if ( ( uwpPads[k] = SDL_OpenGamepad( ids[i] ) ) != NULL ) {
+			k++;
+		}
+	}
+	SDL_free( ids );
+}
+
+static qboolean IN_UWP_PadBusy( SDL_Gamepad *p ) {
+	int b;
+	for ( b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; b++ ) {
+		if ( SDL_GetGamepadButton( p, (SDL_GamepadButton)b ) ) {
+			return qtrue;
+		}
+	}
+	for ( b = 0; b < SDL_GAMEPAD_AXIS_COUNT; b++ ) {
+		int v = SDL_GetGamepadAxis( p, (SDL_GamepadAxis)b );
+		if ( v > 20000 || v < -20000 ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+static void IN_UWP_UsePad( SDL_Gamepad *p ) {
+	SDL_JoystickID id = SDL_GetGamepadID( p );
+	if ( gamepad ) {
+		SDL_CloseGamepad( gamepad );
+	}
+	if ( stick ) {
+		SDL_CloseJoystick( stick );
+	}
+	gamepad = SDL_OpenGamepad( id );
+	stick = SDL_OpenJoystick( id );
+	memset( &stick_state, 0, sizeof( stick_state ) );
+	Key_ClearStates();      // nothing stays held from the old pad
+	Com_Printf( "UWP: using controller '%s'\n", SDL_GetGamepadName( p ) );
+}
+
+// every frame: switch to the pad that's actually in use
+static void IN_UWP_PickActivePad( void ) {
+	int i;
+	qboolean ok = gamepad && SDL_GamepadConnected( gamepad );
+
+	for ( i = 0; i < UWP_MAX_PADS; i++ ) {
+		SDL_Gamepad *p = uwpPads[i];
+		if ( !p || !SDL_GamepadConnected( p ) ) {
+			continue;
+		}
+		if ( gamepad && SDL_GetGamepadID( p ) == SDL_GetGamepadID( gamepad ) ) {
+			continue;
+		}
+		if ( !ok || IN_UWP_PadBusy( p ) ) {
+			IN_UWP_UsePad( p );
+			return;
+		}
+	}
+}
+
+/*
+Focus came back but no event said so (seen after the controller woke up on
+the pause menu: Guide opened and closed, the focus-back never arrived and the
+game stayed muted and frozen). If the window has input focus, or a pad is
+being pressed, we're in front.
+*/
+static void IN_UWP_FocusFromGamepad( const char *why );
+static void IN_UWP_FocusWatchdog( void ) {
+	static int since;
+	int i;
+
+	if ( !com_unfocused || !com_unfocused->integer ) {
+		since = 0;
+		return;
+	}
+	if ( !since ) {
+		since = Sys_Milliseconds();
+	}
+	if ( Sys_Milliseconds() - since < 1500 ) {
+		return;     // give the real event a chance
+	}
+	if ( SDL_GetWindowFlags( SDL_window ) & SDL_WINDOW_INPUT_FOCUS ) {
+		IN_UWP_FocusFromGamepad( "window has focus" );
+		since = 0;
+		return;
+	}
+	SDL_UpdateGamepads();
+	for ( i = 0; i < UWP_MAX_PADS; i++ ) {
+		if ( uwpPads[i] && SDL_GamepadConnected( uwpPads[i] ) && IN_UWP_PadBusy( uwpPads[i] ) ) {
+			IN_UWP_FocusFromGamepad( "controller input" );
+			since = 0;
+			return;
+		}
+	}
+}
+#endif
+
 /*
 ===============
 IN_InitJoystick
@@ -567,6 +688,20 @@ static void IN_InitJoystick( void )
 
 	in_joystickUseAnalog = Cvar_Get( "in_joystickUseAnalog", "1", CVAR_ARCHIVE );
 
+#ifdef RTCW_UWP
+	// the Xbox can list other devices (or a stale entry for a controller
+	// that just reconnected) ahead of the pad: use the first real gamepad
+	if ( !SDL_IsGamepad( sticks[in_joystickNo->integer] ) ) {
+		for ( i = 0; i < total; i++ ) {
+			if ( SDL_IsGamepad( sticks[i] ) ) {
+				Cvar_Set( "in_joystickNo", va( "%i", i ) );
+				break;
+			}
+		}
+	}
+	IN_UWP_OpenAllPads();
+#endif
+
 	stick = SDL_OpenJoystick( sticks[in_joystickNo->integer] );
 
 	if (stick == NULL) {
@@ -614,6 +749,9 @@ static void IN_ShutdownJoystick( void )
 		SDL_CloseJoystick(stick);
 		stick = NULL;
 	}
+#ifdef RTCW_UWP
+	IN_UWP_ClosePads();
+#endif
 
 	SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
 	SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
@@ -841,6 +979,10 @@ static void IN_JoyMove( void )
 	int total = 0;
 	int i = 0;
 
+#ifdef RTCW_UWP
+	SDL_UpdateGamepads();
+	IN_UWP_PickActivePad();
+#endif
 	if (gamepad)
 	{
 		IN_GamepadMove();
@@ -1229,10 +1371,7 @@ static void IN_ProcessEvents( void )
 				CL_UWP_Background( qtrue );     // pause, mute, stop rumble
 				break;
 			case SDL_EVENT_WINDOW_FOCUS_GAINED :
-				Com_Printf( "UWP: focus back\n" );
-				SNDDMA_UWP_Pause( qfalse );
-				Cvar_SetValue( "com_unfocused", 0 );
-				Cvar_SetValue( "com_minimized", 0 );     // the pause above set it
+				IN_UWP_FocusFromGamepad( "event" );
 				break;
 #else
 			case SDL_EVENT_WINDOW_FOCUS_LOST :   Cvar_SetValue( "com_unfocused", 1 ); break;
@@ -1249,6 +1388,15 @@ static void IN_ProcessEvents( void )
 		}
 	}
 }
+
+#ifdef RTCW_UWP
+static void IN_UWP_FocusFromGamepad( const char *why ) {
+	Com_Printf( "UWP: focus back (%s)\n", why );
+	SNDDMA_UWP_Pause( qfalse );
+	Cvar_SetValue( "com_unfocused", 0 );
+	Cvar_SetValue( "com_minimized", 0 );     // the pause above set it
+}
+#endif
 
 /*
 ===============
@@ -1286,6 +1434,9 @@ void IN_Frame( void )
 		IN_ActivateMouse( cls.glconfig.isFullscreen );
 
 	IN_ProcessEvents( );
+#ifdef RTCW_UWP
+	IN_UWP_FocusWatchdog();
+#endif
 
 	// Set event time for next frame to earliest possible time an event could happen
 	in_eventTime = Sys_Milliseconds( );

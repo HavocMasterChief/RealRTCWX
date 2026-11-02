@@ -308,17 +308,18 @@ def write_raw(name, text):
 # Reset achievements behind three confirmations. Appended to ingame.menu,
 # which holds several menuDefs like campaign_menu.menu.
 # ---------------------------------------------------------------------------
-def _btn(name, text, y, action, show=None, hide=None, w=240, x=30, color="1 1 1 1"):
+def _btn(name, text, y, action, show=None, hide=None, w=240, x=30, color="1 1 1 1", cvar=None):
     test = ""
     if show is not None:
         test = f'\t\tcvarTest "g_cheatedRun"\n\t\tshowCvar {{ "{show}" }}\n'
     elif hide is not None:
         test = f'\t\tcvarTest "g_cheatedRun"\n\t\thideCvar {{ "{hide}" }}\n'
+    label = f'cvar "{cvar}"' if cvar else f'text "{text}"'
     return f'''
 	itemDef {{
 		name {name}
 		type ITEM_TYPE_BUTTON
-		text "{text}"
+		{label}
 {test}		rect {x} {y} {w} 18
 		textfont UI_FONT_DEFAULT
 		textscale .24
@@ -405,12 +406,14 @@ menuDef {{
 def cheat_menus():
     back = "close ingame_cheats ; open ingame"
     body = _label("Using a cheat turns achievements off", 30) + _label("for this playthrough (all of its saves).", 44)
-    body += _btn("enable", "Enable cheats...", 70, "open xbox_cheat_confirm", hide="1", color="1 .8 .5 1")
-    rows = [("god", "God mode"), ("ammo", "Infinite ammo"), ("onehit", "One-hit kills"),
-            ("noclip", "No clipping"), ("weapons", "All weapons"), ("health", "Restore health and armour")]
+    body += _btn("enable", "Enable cheats...", 70, "close ingame_cheats ; open xbox_cheat_confirm", hide="1", color="1 .8 .5 1")
+    rows = [("god", "God mode", True), ("ammo", "Infinite ammo", True), ("onehit", "One-hit kills", True),
+            ("noclip", "No clipping", True), ("weapons", "All weapons (on resume)", False),
+            ("health", "Restore health and armour (on resume)", False)]
     y = 70
-    for cmd, text in rows:
-        body += _btn("cheat_" + cmd, text, y, f'exec "xbcheat {cmd}"', show="1")
+    for cmd, text, toggle in rows:
+        body += _btn("cheat_" + cmd, text, y, f"uiScript xbCheat {cmd}", show="1",
+                     cvar=f"ui_xbc_{cmd}" if toggle else None)
         y += 21
     body += _btn("hidegun", "Hide / show weapon (screenshots)", y, 'exec "toggle cg_drawGun"')
     y += 21
@@ -419,12 +422,12 @@ def cheat_menus():
     body += _btn("resetach", "Reset achievements...", y, "close ingame_cheats ; open xbox_achreset1", color="1 .55 .45 1")
     y += 21
     body += _btn("back", "Back", y, back)
-    out = _window("ingame_cheats", (190, 90, 300, y + 30), "CHEATS", body, back)
+    out = _window("ingame_cheats", (190, 90, 300, y + 30), "CHEATS", body, back, on_open="uiScript xbCheat refresh")
 
     # enable confirmation
     b = _label("Achievements won't unlock for the rest", 32) + _label("of this playthrough, in any of its saves.", 46)
     b += _label("Starting a new campaign clears this.", 60, ".2", ".7 .62 .5 1")
-    b += _btn("yes", "Enable cheats", 86, 'exec "xbcheat enable" ; close xbox_cheat_confirm ; open ingame_cheats', color="1 .8 .5 1")
+    b += _btn("yes", "Enable cheats", 86, "uiScript xbCheat enable ; close xbox_cheat_confirm ; open ingame_cheats", color="1 .8 .5 1")
     b += _btn("no", "Cancel", 107, "close xbox_cheat_confirm ; open ingame_cheats")
     out += _window("xbox_cheat_confirm", (190, 140, 300, 140), "TURN OFF ACHIEVEMENTS?", b,
                    "close xbox_cheat_confirm ; open ingame_cheats")
@@ -493,6 +496,26 @@ def cheats_button(t):
     j = t.index("}", t.index("mouseExit", i)) + 1      # end of its mouseExit { }
     j = t.index("}", j) + 1                             # end of the quit item
     t = t[:j] + "\n" + item + t[j:]
+    # descriptions beside the buttons rather than under them (where they ran
+    # into CHEATS / ACHIEVEMENTS); see tools/gen_ingame_desc.py. Same names
+    # as the highlight pictures, so the buttons' show/hide covers them too.
+    descs = ""
+    for n, y in (("save", 144), ("load", 177), ("controls", 210), ("game", 243),
+                 ("system", 276), ("main", 309), ("quit", 342)):
+        descs += f'''
+	itemDef
+	{{
+		name realrtcw_ingame_{n}
+		style WINDOW_STYLE_SHADER
+		rect 245 {y + 6} 224 14
+		background "ui/assets/xbox_desc_{n}.tga"
+		visible 1
+		decoration
+	}}
+'''
+    i = t.index("name save")
+    i = t.rindex("itemDef", 0, i)
+    t = t[:i] + descs + "\n\t" + t[i:]
     k = t.rindex("}")                                   # the file's outer brace
     menus = cheat_menus()
     menus += achievements_menu("ingame_achievements", "close ingame_achievements ; open ingame")

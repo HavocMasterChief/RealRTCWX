@@ -553,11 +553,28 @@ static void IN_UWP_UsePad( SDL_Gamepad *p ) {
 	Com_Printf( "UWP: using controller '%s'\n", SDL_GetGamepadName( p ) );
 }
 
-// every frame: switch to the pad that's actually in use
+// every frame: switch to the pad that's actually in use. Only when ours is
+// gone, or has sat idle while another one is being used: the console can
+// list one controller twice, and both copies are "busy" together - switching
+// on that alone flipped between them every frame (reopening the device each
+// time), which showed up as random frame-rate drops while moving.
 static void IN_UWP_PickActivePad( void ) {
-	int i;
+	static int idleSince;
+	int i, now = Sys_Milliseconds();
 	qboolean ok = gamepad && SDL_GamepadConnected( gamepad );
 
+	if ( ok && IN_UWP_PadBusy( gamepad ) ) {
+		idleSince = 0;
+		return;
+	}
+	if ( ok ) {
+		if ( !idleSince ) {
+			idleSince = now;
+		}
+		if ( now - idleSince < 1000 ) {
+			return;
+		}
+	}
 	for ( i = 0; i < UWP_MAX_PADS; i++ ) {
 		SDL_Gamepad *p = uwpPads[i];
 		if ( !p || !SDL_GamepadConnected( p ) ) {
@@ -568,6 +585,7 @@ static void IN_UWP_PickActivePad( void ) {
 		}
 		if ( !ok || IN_UWP_PadBusy( p ) ) {
 			IN_UWP_UsePad( p );
+			idleSince = 0;
 			return;
 		}
 	}
@@ -980,8 +998,7 @@ static void IN_JoyMove( void )
 	int i = 0;
 
 #ifdef RTCW_UWP
-	SDL_UpdateGamepads();
-	IN_UWP_PickActivePad();
+	IN_UWP_PickActivePad();     // last frame's pad state (IN_GamepadMove updates it)
 #endif
 	if (gamepad)
 	{

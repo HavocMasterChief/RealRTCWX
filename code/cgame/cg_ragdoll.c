@@ -32,7 +32,7 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 #define RD_SEGS         11
 #define RD_STEP         ( 1.0f / 60.0f )
 #define RD_ITER         8
-#define RD_GRAVITY      560.0f  // a little under the game's 800: bodies read heavy, not floaty
+#define RD_GRAVITY      386.0f  // real gravity: 1 unit ~ 1 inch (the game's 800 is for jumping)
 #define RD_AIRDRAG      0.988f  // velocity kept per step
 // "muscle tone": joints are pulled toward the death pose (relative to the
 // pelvis) so limbs don't flop like rope; strong at first, fading to a light
@@ -139,6 +139,8 @@ typedef struct {
 	float stick[RD_NUM_STICKS];
 	float limit[RD_NUM_LIMITS];
 	qboolean hingeOn[4];    // L knee, R knee, L elbow, R elbow
+	vec3_t limbNRest[4];    // bend-plane normal of each limb (L arm, R arm, L leg, R leg), model space
+	vec3_t limbN[4];        // same, tracked as the body moves (keeps the twist when a limb straightens)
 	int numPairs;
 	struct { short a, b; float minDist; } pair[RD_MAX_PAIRS];   // capsule pairs that collide
 	float accum;
@@ -273,6 +275,46 @@ static void CG_RagdollToModel( const refEntity_t *ref, const vec3_t w, vec3_t ou
 	out[2] = DotProduct( d, ref->axis[2] );
 }
 
+// limbs: root, hinge, end joint, and the body parts that roll with them
+static const struct { int a, k, b, seg0, seg1, side0, side1; } rdLimbs[4] = {
+	{ J_LSHOULDER, J_LELBOW, J_LHAND, 3, 4, J_LSHOULDER, J_RSHOULDER },
+	{ J_RSHOULDER, J_RELBOW, J_RHAND, 5, 6, J_LSHOULDER, J_RSHOULDER },
+	{ J_LHIP, J_LKNEE, J_LFOOT, 7, 8, J_LHIP, J_RHIP },
+	{ J_RHIP, J_RKNEE, J_RFOOT, 9, 10, J_LHIP, J_RHIP }
+};
+
+// a limb's bend-plane normal; when it's (nearly) straight there's no plane,
+// so keep the previous normal, squared up to the upper segment
+static void CG_RagdollLimbNormal( vec3_t j[J_NUM], int limb, vec3_t n ) {
+	vec3_t u1, u2, c;
+	float l1, l2, len;
+	VectorSubtract( j[rdLimbs[limb].k], j[rdLimbs[limb].a], u1 );
+	VectorSubtract( j[rdLimbs[limb].b], j[rdLimbs[limb].k], u2 );
+	l1 = VectorNormalize( u1 );
+	l2 = VectorNormalize( u2 );
+	CrossProduct( u1, u2, c );
+	len = VectorLength( c );
+	if ( l1 > 0.01f && l2 > 0.01f && len > 0.12f ) {
+		VectorScale( c, 1.0f / len, c );
+		if ( DotProduct( c, n ) < 0 && VectorLengthSquared( n ) > 0.5f ) {
+			VectorNegate( c, c );
+		}
+		VectorCopy( c, n );
+		return;
+	}
+	if ( VectorLengthSquared( n ) < 0.5f ) {
+		// no history: use the shoulder/hip line
+		vec3_t side;
+		VectorSubtract( j[rdLimbs[limb].side1], j[rdLimbs[limb].side0], side );
+		CrossProduct( u1, side, n );
+		CrossProduct( n, u1, n );   // perpendicular to the limb, in the side's direction
+	}
+	VectorMA( n, -DotProduct( n, u1 ), u1, n );
+	if ( VectorNormalize( n ) < 0.01f ) {
+		VectorSet( n, 0, 0, 1 );
+	}
+}
+
 /*
 ===============
 CG_RagdollStart
@@ -384,6 +426,11 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	}
 	CG_RagdollInitPairs( rd );
 	memset( rd->hingeOn, 0, sizeof( rd->hingeOn ) );
+	for ( i = 0; i < 4; i++ ) {
+		VectorClear( rd->limbNRest[i] );
+		CG_RagdollLimbNormal( rd->rest, i, rd->limbNRest[i] );
+		VectorCopy( rd->limbNRest[i], rd->limbN[i] );
+	}
 	return rd;
 }
 
@@ -602,7 +649,10 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 			VectorMA( target, local[1], cur[1], target );
 			VectorMA( target, local[2], cur[2], target );
 			VectorSubtract( target, rd->p[i], rel );
-			VectorMA( rd->p[i], s, rel, rd->p[i] );
+			// legs give out first: knees buckle, the body crumples down
+			// instead of toppling stiff as a plank
+			VectorMA( rd->p[i], ( i == J_LKNEE || i == J_LFOOT || i == J_RKNEE || i == J_RFOOT ) ? s * 0.3f : s,
+					  rel, rd->p[i] );
 		}
 		rd->steps++;
 	}
@@ -700,6 +750,10 @@ static void CG_RagdollPose( ragdoll_t *rd ) {
 	for ( i = 0; i < J_NUM; i++ ) {
 		CG_RagdollToModel( &rd->pose, rd->p[i], cur[i] );
 	}
+	// track each limb's twist through its bend plane
+	for ( i = 0; i < 4; i++ ) {
+		CG_RagdollLimbNormal( cur, i, rd->limbN[i] );
+	}
 	for ( s = 0; s < RD_SEGS; s++ ) {
 		vec3_t pr, hr, h2r, pc, hc, h2c, fr[3], fc[3], ra;
 		float *d = rd->data[s];
@@ -711,6 +765,13 @@ static void CG_RagdollPose( ragdoll_t *rd ) {
 		VectorSubtract( cur[rdSegs[s].p1], cur[rdSegs[s].p0], pc );
 		VectorSubtract( cur[rdSegs[s].s1], cur[rdSegs[s].s0], hc );
 		VectorSubtract( cur[J_CHEST], cur[J_PELVIS], h2c );
+		for ( i = 0; i < 4; i++ ) {
+			if ( s == rdLimbs[i].seg0 || s == rdLimbs[i].seg1 ) {
+				// limb part: roll follows the limb's bend plane
+				VectorCopy( rd->limbNRest[i], hr );
+				VectorCopy( rd->limbN[i], hc );
+			}
+		}
 		CG_RagdollFrame( pr, hr, h2r, fr );
 		CG_RagdollFrame( pc, hc, h2c, fc );
 

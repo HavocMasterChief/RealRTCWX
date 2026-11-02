@@ -47,7 +47,7 @@ itemDef {
 		type ITEM_TYPE_SLIDER
 		text "Aim Down Sights Sensitivity"
         cvarfloat "j_adsSens" 0.75 0.3 1.5
-		rect 82 50 290 12
+		rect 82 46 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -66,7 +66,7 @@ itemDef {
 		type ITEM_TYPE_SLIDER
 		text "Look Precision Curve"
         cvarfloat "j_lookCurve" 1.6 1.0 3.0
-		rect 82 68 290 12
+		rect 82 60 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -85,7 +85,7 @@ itemDef {
 		type ITEM_TYPE_SLIDER
 		text "@GAMEPAD_MOVESENS"
         cvarfloat "j_moveSens"  1.0   0.2   2.0
-		rect 82 86 290 12
+		rect 82 74 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -105,7 +105,7 @@ itemDef {
 		text "@GAMEPAD_ASSIST"
 		cvar "j_aimassist"
 		cvarFloatList { "@GAMEPAD_ASSIST_OFF" 0 "@GAMEPAD_ASSIST_WEAK" 1 "@GAMEPAD_ASSIST_MID" 2 "@GAMEPAD_ASSIST_STRONG" 3 }
-		rect 82 104 290 12
+		rect 82 88 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -122,7 +122,7 @@ itemDef {
 		type ITEM_TYPE_YESNO
 		text "@GAMEPAD_INVERTLOOK"
 		cvar "j_invertLook"
-		rect 82 122 290 12
+		rect 82 102 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textalignx 142
 		textaligny 10
@@ -139,7 +139,7 @@ itemDef {
 		type ITEM_TYPE_YESNO
 		text "Vibration"
 		cvar "xbox_vibration"
-		rect 82 140 290 12
+		rect 82 116 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textalignx 142
 		textaligny 10
@@ -156,7 +156,58 @@ itemDef {
 		type ITEM_TYPE_YESNO
 		text "Quick Turn"
 		cvar "j_quickTurn"
+		rect 82 130 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textalignx 142
+		textaligny 10
+		textscale .23 
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		backcolor 1 1 1 .07           
+		forecolor 1 1 1 1
+		visible 0 
+    }
+	itemDef {
+		name move
+		group grpControls
+		type ITEM_TYPE_YESNO
+		text "Toggle Crouch"
+		cvar "xbox_crouchToggle"
+		rect 82 144 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textalignx 142
+		textaligny 10
+		textscale .23 
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		backcolor 1 1 1 .07           
+		forecolor 1 1 1 1
+		visible 0 
+    }
+	itemDef {
+		name move
+		group grpControls
+		type ITEM_TYPE_YESNO
+		text "Toggle Sprint"
+		cvar "xbox_sprintToggle"
 		rect 82 158 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textalignx 142
+		textaligny 10
+		textscale .23 
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		backcolor 1 1 1 .07           
+		forecolor 1 1 1 1
+		visible 0 
+    }
+	itemDef {
+		name move
+		group grpControls
+		type ITEM_TYPE_YESNO
+		text "Hold to Aim"
+		cvar "xbox_aimHold"
+		rect 82 172 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textalignx 142
 		textaligny 10
@@ -173,7 +224,7 @@ itemDef {
 		type ITEM_TYPE_YESNO
 		text "@CONTROLS_AUTORELOAD"
 		cvar "cg_autoreload"
-		rect 82 176 290 12
+		rect 82 186 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textalignx 142
 		textaligny 10
@@ -192,7 +243,7 @@ itemDef {
 		type ITEM_TYPE_YESNO
 		text "@CONTROLS_AUTOPICKUP"
 		cvar "cg_autoactivate"
-		rect 82 194 290 12
+		rect 82 200 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textalignx 142
 		textaligny 10
@@ -212,7 +263,7 @@ itemDef {
 		text "@CONTROLS_AUTOSWITCH"
 		cvar "cg_autoswitch"
 		cvarFloatList { "@OFF" 0 "@CONTROLS_ALWAYSSWITCH" 1 "@CONTROLS_IFNEW" 2 "@CONTROLS_IFBETTER" 3 "@CONTROLS_NEWORBETTER" 4 "@CONTROLS_NEWANDBETTER" 5 }
-		rect 82 212 290 12
+		rect 82 214 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textalignx 142
 		textaligny 10

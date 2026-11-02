@@ -7221,6 +7221,9 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 
 	if ( flesh ) {
 		CG_RagdollNoteHit( fleshEntityNum, end, sourceEntityNum );
+		if ( CG_PointContents( end, -1 ) & CONTENTS_WATER ) {
+			CG_GoreWaterBlood( end, 2 );
+		}
 	}
 	// dead bodies can be shot (see cg_ragdoll.c)
 	{

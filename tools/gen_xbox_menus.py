@@ -282,8 +282,14 @@ def controls_set(prefix, group, img_rect, x, y0, header_note):
     rows.insert(1, ads)
     rows.insert(2, curve)
     rows.append(qt)
+    for label, cv in (("Toggle Crouch", "xbox_crouchToggle"), ("Toggle Sprint", "xbox_sprintToggle"),
+                      ("Hold to Aim", "xbox_aimHold")):
+        it = find_item(look, "j_invertLook")
+        it = re.sub(r'text "[^"]*"', f'text "{label}"', it, count=1)
+        rows.append(it.replace('cvar "j_invertLook"', f'cvar "{cv}"'))
     rows += [find_item(misc, c) for c in ("cg_autoreload", "cg_autoactivate", "cg_autoswitch")]
-    placed = [place(r, "move", x, y0 + 18 * i) for i, r in enumerate(rows)]
+    step = 18 if header_note else 14     # the in-game window is shorter
+    placed = [place(r, "move", x, y0 + step * i) for i, r in enumerate(rows)]
     out_move = split_items(move)[0][1] + retab(nth_item(move, 0), "Settings") + "\n" + "\n".join(placed) + "\n"
 
     empty = "// Key bindings are fixed on Xbox; see the Layout tab.\n"

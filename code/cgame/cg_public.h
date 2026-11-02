@@ -229,7 +229,8 @@ typedef enum {
 	// RealRTCWX
 	CG_R_LIGHTFORPOINT_X = 950,
 	CG_R_SETRAGDOLL_X,
-	CG_R_LERPBONE_X
+	CG_R_LERPBONE_X,
+	CG_R_ADDWOUND_X
 
 } cgameImport_t;
 

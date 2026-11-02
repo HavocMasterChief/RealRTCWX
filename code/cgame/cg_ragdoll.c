@@ -140,6 +140,7 @@ typedef struct {
 	int groundEnt;          // mover it's lying on (-1: none), carried along with it
 	vec3_t groundOrg;
 	int lastThud;
+	vec3_t lastSmear;
 	qhandle_t hModel;
 	refEntity_t pose;       // frozen death-animation pose + placement
 	vec3_t rest[J_NUM];     // joints in model space, frozen pose
@@ -162,6 +163,7 @@ typedef struct {
 static ragdoll_t rdBodies[RD_MAX];
 static byte rdDeclined[MAX_GENTITIES];   // dead bodies that keep their death animation
 static void CG_RagdollInitPairs( ragdoll_t *rd );
+static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t dir );
 static void CG_RagdollLoadSaved( void );
 static void CG_RagdollPose( ragdoll_t *rd );
 
@@ -213,6 +215,7 @@ void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter ) {
 	rdHits[entityNum].time = cg.time;
 	VectorCopy( point, rdHits[entityNum].point );
 	VectorCopy( dir, rdHits[entityNum].dir );
+	CG_RagdollAddWound( entityNum, point, dir );
 }
 
 /*
@@ -230,6 +233,7 @@ void CG_RagdollReset( void ) {
 	memset( rdBodies, 0, sizeof( rdBodies ) );
 	memset( rdHits, 0, sizeof( rdHits ) );
 	memset( rdDeclined, 0, sizeof( rdDeclined ) );
+	trap_R_AddWound( -1, NULL, NULL );
 	CG_RagdollLoadSaved();
 }
 
@@ -260,6 +264,34 @@ qboolean CG_RagdollPelvis( int entityNum, vec3_t out ) {
 	}
 	VectorCopy( rd->p[J_PELVIS], out );
 	return qtrue;
+}
+
+// characters that bleed (and get bullet wounds drawn on them)
+static qboolean CG_RagdollBleeds( int aiChar ) {
+	switch ( aiChar ) {
+	case AICHAR_ZOMBIE:
+	case AICHAR_ZOMBIE_SURV:
+	case AICHAR_ZOMBIE_FLAME:
+	case AICHAR_ZOMBIE_GHOST:
+	case AICHAR_WARZOMBIE:
+	case AICHAR_LOPER:
+	case AICHAR_LOPER_SPECIAL:
+	case AICHAR_PROTOSOLDIER:
+	case AICHAR_SUPERSOLDIER:
+	case AICHAR_SUPERSOLDIER_LAB:
+		return qfalse;
+	default:
+		return qtrue;
+	}
+}
+
+static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t dir ) {
+	if ( entityNum < 0 || entityNum >= MAX_CLIENTS || entityNum == cg.snap->ps.clientNum ||
+		 !cg_blood.integer || cg_bloodMode.integer == BLOODMODE_OFF ||
+		 !CG_RagdollBleeds( cg_entities[entityNum].currentState.aiChar ) ) {
+		return;
+	}
+	trap_R_AddWound( entityNum, point, dir );
 }
 
 static qboolean CG_RagdollEligible( centity_t *cent ) {
@@ -435,6 +467,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->groundEnt = -1;
 	rd->lastThud = 0;
 	rd->wound = J_PELVIS;
+	VectorSet( rd->lastSmear, 99999, 99999, 99999 );
 
 	rd->steps = 0;
 
@@ -740,6 +773,16 @@ static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
 			VectorSubtract( vel, vn, vt );
 			// floors grip, edges / step risers / slopes let it slide
 			keep = tr.plane.normal[2] > 0.9f ? 0.7f : 0.92f;
+			// a bleeding body sliding along the floor smears blood behind it
+			if ( ( i == J_PELVIS || i == J_CHEST || i == rd->wound ) && tr.plane.normal[2] > 0.6f &&
+				 VectorLength( vt ) > 0.8f && cg.time - rd->startTime < 25000 &&
+				 cg_blood.integer && cg_bloodMode.integer != BLOODMODE_OFF &&
+				 CG_RagdollBleeds( cg_entities[rd->entityNum].currentState.aiChar ) &&
+				 Distance( tr.endpos, rd->lastSmear ) > 7.0f ) {
+				VectorCopy( tr.endpos, rd->lastSmear );
+				CG_ImpactMark( CG_BloodDot(), tr.endpos, tr.plane.normal, random() * 360,
+							   1, 1, 1, 1, qfalse, 5 + random() * 4, qfalse, -1 );
+			}
 			// a heavy part landing hard: thud
 			if ( ( i == J_PELVIS || i == J_CHEST || i == J_HEAD ) && -dn > 3.0f &&
 				 cg.time - rd->lastThud > 250 ) {
@@ -997,6 +1040,10 @@ void CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 	if ( best->entityNum < MAX_CLIENTS ) {
 		CG_Bleed( hit, best->entityNum );
 	}
+	CG_RagdollAddWound( best->entityNum, hit, dir );
+	if ( CG_PointContents( hit, -1 ) & CONTENTS_WATER ) {
+		CG_GoreWaterBlood( hit, 2 );
+	}
 }
 
 /*
@@ -1125,6 +1172,14 @@ For dead (eligible) characters it runs the ragdoll and replaces the pose.
 void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	ragdoll_t *rd;
 	float dt;
+
+	// bullet wounds drawn on the skin (alive or dead)
+	if ( cent->currentState.number != cg.snap->ps.clientNum && CG_RagdollBleeds( cent->currentState.aiChar ) ) {
+		body->reFlags |= REFLAG_WOUNDS;
+		if ( cg_bloodMode.integer == BLOODMODE_GREEN ) {
+			body->reFlags |= REFLAG_WOUNDS_GREEN;
+		}
+	}
 
 	rd = CG_RagdollFind( cent->currentState.number );
 	if ( !( cent->currentState.eFlags & EF_DEAD ) || !CG_RagdollEligible( cent ) ) {

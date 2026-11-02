@@ -929,6 +929,9 @@ intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 		return 0;
 	case CG_R_LERPBONE_X:
 		return re.LerpBone( VMA( 1 ), VMA( 2 ), VMA( 3 ) );
+	case CG_R_ADDWOUND_X:
+		re.AddWound( args[1], VMA( 2 ), VMA( 3 ) );
+		return 0;
 		//----(SA)	added
 	default:
 		Com_Error( ERR_DROP, "Bad cgame system trap: %ld", (long int) args[0] );

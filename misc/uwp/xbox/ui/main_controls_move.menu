@@ -174,13 +174,64 @@
 		forecolor 1 1 1 1
 		visible 0 
     }
+		itemDef {
+		name move
+		group controls
+		type ITEM_TYPE_YESNO
+		text "Toggle Crouch"
+		cvar "xbox_crouchToggle"
+		rect 300 276 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textalignx 142
+		textaligny 10
+		textscale .23 
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		backcolor 1 1 1 .07           
+		forecolor 1 1 1 1
+		visible 0 
+    }
+		itemDef {
+		name move
+		group controls
+		type ITEM_TYPE_YESNO
+		text "Toggle Sprint"
+		cvar "xbox_sprintToggle"
+		rect 300 294 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textalignx 142
+		textaligny 10
+		textscale .23 
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		backcolor 1 1 1 .07           
+		forecolor 1 1 1 1
+		visible 0 
+    }
+		itemDef {
+		name move
+		group controls
+		type ITEM_TYPE_YESNO
+		text "Hold to Aim"
+		cvar "xbox_aimHold"
+		rect 300 312 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textalignx 142
+		textaligny 10
+		textscale .23 
+		style WINDOW_STYLE_FILLED
+		textfont UI_FONT_BIG
+		backcolor 1 1 1 .07           
+		forecolor 1 1 1 1
+		visible 0 
+    }
 	   itemDef {
 		name move
 		group controls
 		type ITEM_TYPE_YESNO
 		text "@CONTROLS_AUTORELOAD"
 		cvar "cg_autoreload"
-		rect 300 276 290 12
+		rect 300 330 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -197,7 +248,7 @@
 		type ITEM_TYPE_YESNO
 		text "@CONTROLS_AUTOPICKUP"
 		cvar "cg_autoactivate"
-		rect 300 294 290 12
+		rect 300 348 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textalignx 142
 		textaligny 10
@@ -217,7 +268,7 @@
 		text "@CONTROLS_AUTOSWITCH"
 		cvar "cg_autoswitch"
 		cvarFloatList { "@OFF" 0 "@CONTROLS_ALWAYSSWITCH" 1 "@CONTROLS_IFNEW" 2 "@CONTROLS_IFBETTER" 3 "@CONTROLS_NEWORBETTER" 4 "@CONTROLS_NEWANDBETTER" 5 }
-		rect 300 312 290 12
+		rect 300 366 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textalignx 142
 		textaligny 10

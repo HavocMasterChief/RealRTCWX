@@ -1071,6 +1071,150 @@ void R_CalcBones( mdsHeader_t *header, const refEntity_t *refent, int *boneList,
 #endif
 
 /*
+===============================================================================
+RealRTCWX bullet wounds
+
+cgame reports each hit on a character (world position + bullet direction).
+The next time that character's skin is built, the vertex nearest the hit
+(facing the shot) is found on the closest surface, and the vertices around
+it are remembered by index; from then on they're darkened to blood every
+frame (tess.woundTint, applied in ComputeColors), so the wound stays on the
+skin however the body moves.
+===============================================================================
+*/
+#define WOUND_MAX_ENTS      128
+#define WOUND_MAX           24
+#define WOUND_VERTS         12
+#define WOUND_PENDING       4
+#define WOUND_RADIUS        3.5f
+
+typedef struct {
+	const mdsSurface_t *surf;
+	int num;
+	short vert[WOUND_VERTS];
+	byte weight[WOUND_VERTS];
+} rdWound_t;
+
+typedef struct {
+	vec3_t pos, dir;        // world space
+	int frame;              // frame it was searched in (0: not yet)
+	const mdsSurface_t *bestSurf;
+	int bestVert;
+	float bestDist;
+} rdWoundPending_t;
+
+typedef struct {
+	int numWounds;
+	rdWound_t wound[WOUND_MAX];
+	int numPending;
+	rdWoundPending_t pending[WOUND_PENDING];
+} rdEntWounds_t;
+
+static rdEntWounds_t rd_wounds[WOUND_MAX_ENTS];
+
+void RE_AddWound( int entityNum, const vec3_t pos, const vec3_t dir ) {
+	rdEntWounds_t *ew;
+	rdWoundPending_t *p;
+	if ( entityNum < 0 ) {
+		memset( rd_wounds, 0, sizeof( rd_wounds ) );
+		return;
+	}
+	if ( entityNum >= WOUND_MAX_ENTS ) {
+		return;
+	}
+	ew = &rd_wounds[entityNum];
+	if ( ew->numWounds >= WOUND_MAX || ew->numPending >= WOUND_PENDING ) {
+		return;
+	}
+	p = &ew->pending[ew->numPending++];
+	memset( p, 0, sizeof( *p ) );
+	VectorCopy( pos, p->pos );
+	VectorCopy( dir, p->dir );
+	p->bestDist = 1e9f;
+}
+
+static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surface, int baseVertex, int count ) {
+	rdEntWounds_t *ew;
+	int i, j, k;
+
+	if ( refent->entityNum < 0 || refent->entityNum >= WOUND_MAX_ENTS ) {
+		return;
+	}
+	ew = &rd_wounds[refent->entityNum];
+
+	// look for pending hits on this surface
+	for ( i = 0; i < ew->numPending; i++ ) {
+		rdWoundPending_t *p = &ew->pending[i];
+		vec3_t lp, ld, d;
+
+		if ( p->frame && p->frame != tr.frameCount && p->bestSurf == surface ) {
+			// searched every surface last frame: this one had the closest
+			// vertex - remember it and its neighbours
+			rdWound_t *w = &ew->wound[ew->numWounds++];
+			float *c = tess.xyz[baseVertex + p->bestVert];
+			w->surf = surface;
+			w->num = 0;
+			for ( j = 0; j < count && w->num < WOUND_VERTS; j++ ) {
+				float dist;
+				VectorSubtract( tess.xyz[baseVertex + j], c, d );
+				dist = VectorLength( d );
+				if ( dist < WOUND_RADIUS ) {
+					w->vert[w->num] = (short)j;
+					w->weight[w->num] = (byte)( 255 * ( 1.0f - 0.6f * dist / WOUND_RADIUS ) );
+					w->num++;
+				}
+			}
+			ew->pending[i] = ew->pending[--ew->numPending];
+			i--;
+			continue;
+		}
+		if ( p->frame && p->frame != tr.frameCount ) {
+			if ( !p->bestSurf || tr.frameCount - p->frame > 2 ) {
+				ew->pending[i] = ew->pending[--ew->numPending];   // missed everything
+				i--;
+			}
+			continue;
+		}
+		p->frame = tr.frameCount;
+		// into model space
+		VectorSubtract( p->pos, refent->origin, d );
+		for ( k = 0; k < 3; k++ ) {
+			lp[k] = DotProduct( d, refent->axis[k] );
+			ld[k] = DotProduct( p->dir, refent->axis[k] );
+		}
+		for ( j = 0; j < count; j++ ) {
+			float dist;
+			if ( DotProduct( tess.normal[baseVertex + j], ld ) > 0.2f ) {
+				continue;   // faces away from the shot
+			}
+			VectorSubtract( tess.xyz[baseVertex + j], lp, d );
+			dist = VectorLengthSquared( d );
+			if ( dist < p->bestDist && dist < 12.0f * 12.0f ) {
+				p->bestDist = dist;
+				p->bestSurf = surface;
+				p->bestVert = j;
+			}
+		}
+	}
+
+	// draw the wounds on this surface
+	for ( i = 0; i < ew->numWounds; i++ ) {
+		rdWound_t *w = &ew->wound[i];
+		if ( w->surf != surface ) {
+			continue;
+		}
+		for ( j = 0; j < w->num; j++ ) {
+			int v = w->vert[j];
+			if ( v < count && tess.woundTint[baseVertex + v] < w->weight[j] ) {
+				tess.woundTint[baseVertex + v] = w->weight[j];
+				tess.woundAny = qtrue;
+				tess.woundGreen = ( refent->reFlags & REFLAG_WOUNDS_GREEN ) ? qtrue : qfalse;
+			}
+		}
+	}
+}
+
+/*
 ==============
 RB_SurfaceAnim
 ==============
@@ -1219,6 +1363,11 @@ void RB_SurfaceAnim( mdsSurface_t *surface ) {
 		tess.texCoords[baseVertex + j][0][1] = v->texCoords[1];
 
 		v = (mdsVertex_t *)&v->weights[v->numWeights];
+	}
+
+	// RealRTCWX: bullet wounds recorded on this character
+	if ( refent->reFlags & REFLAG_WOUNDS ) {
+		R_ApplyWounds( refent, surface, baseVertex, render_count );
 	}
 
 	DBG_SHOWTIME

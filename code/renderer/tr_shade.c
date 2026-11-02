@@ -383,6 +383,10 @@ void RB_BeginSurface( shader_t *shader, int fogNum ) {
 	shader_t *state = ( shader->remappedShader ) ? shader->remappedShader : shader;
 
 	tess.ATI_tess = qfalse;     //----(SA)	added
+	if ( tess.woundAny ) {      // RealRTCWX wounds left over from a batch that drew nothing
+		memset( tess.woundTint, 0, sizeof( tess.woundTint ) );
+		tess.woundAny = qfalse;
+	}
 	tess.numIndexes = 0;
 	tess.numVertexes = 0;
 	tess.shader = state;
@@ -769,6 +773,22 @@ static void RB_FogPass( void ) {
 ComputeColors
 ===============
 */
+// RealRTCWX: darken the skin around bullet wounds to blood, keeping the
+// lighting already in svars.colors (see R_ApplyWounds in tr_animation.c)
+static void RB_ApplyWoundTint( void ) {
+	int i;
+	for ( i = 0; i < tess.numVertexes; i++ ) {
+		int w = tess.woundTint[i];
+		if ( w ) {
+			float f = w * ( 0.9f / 255.0f );
+			float kr = tess.woundGreen ? 0.95f : 0.5f, kg = tess.woundGreen ? 0.55f : 0.95f;
+			tess.svars.colors[i][0] = (byte)( tess.svars.colors[i][0] * ( 1.0f - kr * f ) );
+			tess.svars.colors[i][1] = (byte)( tess.svars.colors[i][1] * ( 1.0f - kg * f ) );
+			tess.svars.colors[i][2] = (byte)( tess.svars.colors[i][2] * ( 1.0f - 0.95f * f ) );
+		}
+	}
+}
+
 static void ComputeColors( shaderStage_t *pStage ) {
 	int i;
 
@@ -1055,6 +1075,11 @@ static void ComputeColors( shaderStage_t *pStage ) {
 				}
 			}
 		}
+	}
+
+	// RealRTCWX: bullet wounds (first stage only)
+	if ( tess.woundAny && pStage == tess.xstages[0] ) {
+		RB_ApplyWoundTint();
 	}
 
 	//
@@ -1476,6 +1501,9 @@ void RB_StageIteratorVertexLitTexture( void ) {
 	// compute colors
 	//
 	RB_CalcDiffuseColor( ( unsigned char * ) tess.svars.colors );
+	if ( tess.woundAny ) {
+		RB_ApplyWoundTint();
+	}
 
 	//
 	// log this call
@@ -1755,6 +1783,10 @@ void RB_EndSurface( void ) {
 
 
 	// clear shader so we can tell we don't have any unclosed surfaces
+	if ( tess.woundAny ) {
+		memset( tess.woundTint, 0, tess.numVertexes );
+		tess.woundAny = qfalse;
+	}
 	tess.numIndexes = 0;
 
 	GLimp_LogComment( "----------\n" );

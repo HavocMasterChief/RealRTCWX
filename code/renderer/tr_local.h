@@ -1708,6 +1708,11 @@ typedef struct shaderCommands_s
 
 	qboolean ATI_tess;
 
+	// RealRTCWX: bullet wounds on skeletal models (0..255 per vertex)
+	byte woundTint[SHADER_MAX_VERTEXES];
+	qboolean woundAny;
+	qboolean woundGreen;
+
 	// info extracted from current shader
 	int numPasses;
 	void ( *currentStageIteratorFunc )( void );
@@ -1774,6 +1779,7 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent );
 void R_TransformDlights( int count, dlight_t * dl, orientationr_t * or );
 int R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir );
 void RE_SetRagdoll( int slot, const float *data );
+void RE_AddWound( int entityNum, const vec3_t pos, const vec3_t dir );
 int RE_LerpBone( orientation_t *out, const refEntity_t *refent, const char *boneName );
 
 

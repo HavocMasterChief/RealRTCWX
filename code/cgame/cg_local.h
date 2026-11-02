@@ -2366,6 +2366,7 @@ qboolean CG_RagdollPelvis( int entityNum, vec3_t out );
 qboolean CG_RagdollWound( int entityNum, vec3_t out );
 void CG_RagdollCheckSave( void );
 void CG_GoreAddDrip( const vec3_t origin, int life );
+void CG_GoreWaterBlood( const vec3_t point, int puffs );
 void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter );
 void CG_RagdollBullet( const vec3_t start, const vec3_t end );
 void CG_RagdollExplosion( const vec3_t origin, float radius, float strength );
@@ -2780,6 +2781,7 @@ void        trap_R_RegisterFont( const char *fontName, int pointSize, fontInfo_t
 qboolean    trap_Key_IsDown( int keynum );
 void        trap_R_SetRagdoll( int slot, const float *data );
 int         trap_R_LerpBone( orientation_t *tag, const refEntity_t *refent, const char *boneName );
+void        trap_R_AddWound( int entityNum, const vec3_t pos, const vec3_t dir );
 int         trap_R_LightForPoint( vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir );
 int         trap_Key_GetCatcher( void );
 void        trap_Key_SetCatcher( int catcher );

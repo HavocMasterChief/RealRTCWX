@@ -115,6 +115,8 @@ typedef enum {
 #define REFLAG_DEAD_LOD     32  // allow the LOD to go lower than recommended
 #define REFLAG_SCALEDSPHERECULL 64  // on LOD switch, align the model to the player's camera
 #define REFLAG_FULL_LOD     8   // force a FULL lod
+#define REFLAG_WOUNDS       128 // RealRTCWX: draw recorded bullet wounds on the skin (RE_AddWound)
+#define REFLAG_WOUNDS_GREEN 256 // ... in green (green blood option)
 
 typedef struct {
 	refEntityType_t reType;

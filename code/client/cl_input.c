@@ -656,6 +656,65 @@ void CL_UpdateAimAssistPreset( void ) {
     CL_ApplyAimAssistPreset( preset );
 }
 
+#ifdef RTCW_UWP
+/*
+=================
+Xbox hold / toggle options for crouch, sprint and aim
+
+The pad buttons are bound to these wrappers (see Com_ExecuteCfg), which
+turn presses into the real commands as the player chose:
+  xbox_crouchToggle 1: B toggles crouch (RealRTCW's default), 0: hold
+  xbox_sprintToggle 1: LS click toggles sprint (off when you stop), 0: hold
+  xbox_aimHold      1: aim while LT is held, 0: LT toggles aim (default)
+=================
+*/
+static cvar_t *xbox_crouchToggle, *xbox_sprintToggle, *xbox_aimHold;
+static qboolean xbSprintOn;
+
+static void CL_XbCvars( void ) {
+	if ( !xbox_crouchToggle ) {
+		xbox_crouchToggle = Cvar_Get( "xbox_crouchToggle", "1", CVAR_ARCHIVE );
+		xbox_sprintToggle = Cvar_Get( "xbox_sprintToggle", "0", CVAR_ARCHIVE );
+		xbox_aimHold = Cvar_Get( "xbox_aimHold", "0", CVAR_ARCHIVE );
+	}
+}
+
+static void IN_XbCrouchDown( void ) {
+	CL_XbCvars();
+	Cbuf_AddText( xbox_crouchToggle->integer ? "=movedown\n" : "+movedown\n" );
+}
+static void IN_XbCrouchUp( void ) {
+	CL_XbCvars();
+	if ( !xbox_crouchToggle->integer ) {
+		Cbuf_AddText( "-movedown\n" );
+	}
+}
+static void IN_XbSprintDown( void ) {
+	CL_XbCvars();
+	if ( xbox_sprintToggle->integer ) {
+		xbSprintOn = !xbSprintOn;
+		Cbuf_AddText( xbSprintOn ? "+sprint\n" : "-sprint\n" );
+	} else {
+		Cbuf_AddText( "+sprint\n" );
+	}
+}
+static void IN_XbSprintUp( void ) {
+	CL_XbCvars();
+	if ( !xbox_sprintToggle->integer ) {
+		Cbuf_AddText( "-sprint\n" );
+	}
+}
+static void IN_XbAimDown( void ) {
+	Cbuf_AddText( "weapalt\n" );
+}
+static void IN_XbAimUp( void ) {
+	CL_XbCvars();
+	if ( xbox_aimHold->integer && cl.cgameIsZoomed ) {
+		Cbuf_AddText( "weapalt\n" );   // let go: back out of the sights
+	}
+}
+#endif
+
 /*
 =================
 CL_JoystickMove
@@ -710,6 +769,15 @@ void CL_JoystickMove( usercmd_t *cmd ) {
 
 	float forward = (j_forward->value * j_moveSens->value) * cl.joystickAxis[j_forward_axis->integer];
     float right   = (j_side->value    * j_moveSens->value) * cl.joystickAxis[j_side_axis->integer];
+
+#ifdef RTCW_UWP
+	// toggled sprint ends when you stop moving
+	if ( xbSprintOn && fabsf( cl.joystickAxis[j_forward_axis->integer] ) < 0.2f &&
+		 fabsf( cl.joystickAxis[j_side_axis->integer] ) < 0.2f ) {
+		xbSprintOn = qfalse;
+		Cbuf_AddText( "-sprint\n" );
+	}
+#endif
 	float up = (j_up->value * j_moveSens->value) * cl.joystickAxis[j_up_axis->integer];
 
 	if (cl_useKeyLean->integer && (cmd->buttons & BUTTON_ACTIVATE))
@@ -1640,6 +1708,15 @@ void CL_InitInput( void ) {
 	Cmd_AddCommand( "-kick", IN_KickUp );
 	// done
 
+#ifdef RTCW_UWP
+	Cmd_AddCommand( "+xbcrouch", IN_XbCrouchDown );
+	Cmd_AddCommand( "-xbcrouch", IN_XbCrouchUp );
+	Cmd_AddCommand( "+xbsprint", IN_XbSprintDown );
+	Cmd_AddCommand( "-xbsprint", IN_XbSprintUp );
+	Cmd_AddCommand( "+xbaim", IN_XbAimDown );
+	Cmd_AddCommand( "-xbaim", IN_XbAimUp );
+	CL_XbCvars();
+#endif
 	Cmd_AddCommand( "+sprint", IN_SprintDown );
 	Cmd_AddCommand( "-sprint", IN_SprintUp );
 

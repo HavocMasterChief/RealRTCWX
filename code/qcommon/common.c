@@ -1976,6 +1976,10 @@ void Com_ExecuteCfg(void)
 #ifdef RTCW_UWP
 		// Xbox: View is tap = flashlight, hold = dossier (handled in cgame)
 		Cbuf_ExecuteText(EXEC_NOW, "bind PAD0_BACK +xbview\n");
+		// crouch / sprint / aim go through the hold-or-toggle wrappers (cl_input.c)
+		Cbuf_ExecuteText(EXEC_NOW, "bind PAD0_B +xbcrouch\n");
+		Cbuf_ExecuteText(EXEC_NOW, "bind PAD0_LEFTSTICK_CLICK +xbsprint\n");
+		Cbuf_ExecuteText(EXEC_NOW, "bind PAD0_LEFTTRIGGER +xbaim\n");
 		Cbuf_Execute();
 #endif
 		Cbuf_ExecuteText(EXEC_NOW, "exec autoexec.cfg\n");

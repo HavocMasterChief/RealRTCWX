@@ -574,3 +574,8 @@ void trap_R_SetRagdoll( int slot, const float *data ) {
 int trap_R_LerpBone( orientation_t *tag, const refEntity_t *refent, const char *boneName ) {
 	return syscall( CG_R_LERPBONE_X, tag, refent, boneName );
 }
+
+// RealRTCWX: a bullet wound on a character's skin (-1 clears everything)
+void trap_R_AddWound( int entityNum, const vec3_t pos, const vec3_t dir ) {
+	syscall( CG_R_ADDWOUND_X, entityNum, pos, dir );
+}

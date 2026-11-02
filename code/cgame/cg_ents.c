@@ -1049,6 +1049,30 @@ static void CG_Item( centity_t *cent ) {
 			ent.nonNormalizedAxes = qtrue;
 
 		} else {                                // then default to laying it on it's side
+			// a weapon tossed from a dying soldier tumbles through the air
+			// and lands at whatever turn it had (not snapping straight)
+			if ( es->otherEntityNum2 == 1 && !( es->eFlags & EF_SPINNING ) ) {
+				static float spun[MAX_GENTITIES], spunBase[MAX_GENTITIES];
+				static int flightTime[MAX_GENTITIES];
+				int n = es->number;
+				if ( es->pos.trType == TR_GRAVITY ) {
+					float t;
+					if ( flightTime[n] != es->pos.trTime ) {
+						// new toss, or a bounce (keeps the turn it had)
+						spunBase[n] = ( flightTime[n] && es->pos.trTime - flightTime[n] < 3000 ) ? spun[n] : 0;
+						flightTime[n] = es->pos.trTime;
+					}
+					t = ( cg.time - es->pos.trTime ) * 0.001f;
+					if ( t < 0 ) {
+						t = 0;
+					}
+					spun[n] = spunBase[n] + t * ( 420 + ( n % 5 ) * 60 ) * ( spunBase[n] ? 0.4f : 1.0f );
+					cent->lerpAngles[YAW] += spun[n];
+					cent->lerpAngles[PITCH] += sin( t * 11.0f ) * 30.0f * exp( -t * 1.5f );
+				} else if ( flightTime[n] && flightTime[n] <= es->pos.trTime ) {
+					cent->lerpAngles[YAW] += spun[n];
+				}
+			}
 			if ( weaponInfo->droppedAnglesHack ) {
 				cent->lerpAngles[2] += 90;
 			}

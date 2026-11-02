@@ -403,9 +403,39 @@ CG_GorePoolAt
 Finds the floor under 'point' and starts a pool there.
 ===============
 */
+/*
+===============
+CG_GoreWaterBlood
+
+Blood in water: slow red clouds that drift up and spread instead of a pool.
+===============
+*/
+void CG_GoreWaterBlood( const vec3_t point, int puffs ) {
+	int i;
+	if ( !CG_GoreEnabled() ) {
+		return;
+	}
+	for ( i = 0; i < puffs; i++ ) {
+		vec3_t p, vel;
+		VectorCopy( point, p );
+		p[0] += crandom() * 4;
+		p[1] += crandom() * 4;
+		VectorSet( vel, crandom() * 4, crandom() * 4, 5 + random() * 8 );
+		CG_SmokePuff( p, vel, 6 + random() * 6, 1, 1, 1, 0.55f, 3500 + random() * 2000,
+					  cg.time + i * 180, 300, 0,
+					  CG_BloodShader( cgs.media.bloodCloudShader, cgs.media.bloodCloudShaderGreen ) );
+	}
+}
+
 static void CG_GorePoolAt( const vec3_t point, float radius, int growTime ) {
 	trace_t tr;
 	vec3_t start, end;
+
+	if ( CG_PointContents( point, -1 ) & CONTENTS_WATER ) {
+		CG_GoreWaterBlood( point, 10 );     // a body in water: clouds, no pool
+		CG_GoreLog( "pool: under water at (%.0f %.0f %.0f), clouds instead\n", point[0], point[1], point[2] );
+		return;
+	}
 
 	VectorCopy( point, start );
 	start[2] += 8;

@@ -28,7 +28,9 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 
 #include "cg_local.h"
 
-#define RD_MAX          32      // renderer slots (RD_MAX_SLOTS in tr_animation.c)
+#define RD_MAX          128     // bodies kept in their ragdoll pose (RD_MAX_SLOTS in tr_animation.c)
+#define RD_MAX_SIM      32      // of those, how many may still be moving; past that the oldest
+								// moving one is locked in the pose it has
 #define RD_SEGS         11
 #define RD_STEP         ( 1.0f / 60.0f )
 #define RD_ITER         8
@@ -369,6 +371,23 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		rd = &rdBodies[oldest];
 	}
 	slot = (int)( rd - rdBodies ) + 1;
+
+	// too many still moving: lock the oldest moving body where it is
+	{
+		int moving = 0, first = -1;
+		for ( i = 0; i < RD_MAX; i++ ) {
+			if ( &rdBodies[i] == rd || !rdBodies[i].active || rdBodies[i].sleeping ) {
+				continue;
+			}
+			moving++;
+			if ( first < 0 || rdBodies[i].startTime < rdBodies[first].startTime ) {
+				first = i;
+			}
+		}
+		if ( moving >= RD_MAX_SIM && first >= 0 ) {
+			rdBodies[first].sleeping = qtrue;
+		}
+	}
 	for ( i = 0; i < J_NUM; i++ ) {
 		VectorCopy( rest[i], rd->rest[i] );
 	}

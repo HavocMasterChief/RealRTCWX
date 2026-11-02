@@ -3465,6 +3465,15 @@ void Menu_HandleKey( menuDef_t *menu, int key, qboolean down ) {
 				return;
 			}
 		}
+		// a grid ownerdraw named "padGrid" (achievements browser) takes the
+		// D-pad and shoulders
+		{
+			itemDef_t *g = Menu_FindItemByName( menu, "padGrid" );
+			if ( g && ( g->window.flags & WINDOW_VISIBLE ) && DC->ownerDrawHandleKey &&
+				 DC->ownerDrawHandleKey( g->window.ownerDraw, g->window.ownerDrawFlags, &g->special, key ) ) {
+				return;
+			}
+		}
 		// up/down always drive the menu's "padList" list, focused or not
 		if ( key == K_PAD0_DPAD_UP || key == K_PAD0_DPAD_DOWN ) {
 			itemDef_t *l = Menu_FindItemByName( menu, "padList" );

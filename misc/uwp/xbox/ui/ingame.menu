@@ -255,6 +255,22 @@ menuDef
 	action { open ingame_cheats }
 	}
 
+	itemDef
+	{
+	name xbachievements
+	type 1
+	text "ACHIEVEMENTS"
+	rect 10 404 178 26
+	textfont UI_FONT_DEFAULT
+	textscale .3
+	textalign ITEM_ALIGN_LEFT
+	textalignx 14
+	textaligny 20
+	forecolor .85 .78 .64 1
+	visible 1
+	action { open ingame_achievements }
+	}
+
 }
 
 
@@ -969,6 +985,114 @@ menuDef {
 		forecolor 1 .55 .45 1
 		visible 1
 		action { exec "xbachreset" ; close xbox_achreset3 ; open ingame_cheats }
+	}
+
+}
+
+menuDef {
+	name "ingame_achievements"
+	visible 0
+	fullscreen 0
+	rect 20 30 600 420
+	focusColor 1 .75 0 1
+	style 1
+	border 1
+	onOpen { uiScript xbAchLoad }
+	onESC { close ingame_achievements ; open ingame }
+
+	itemDef {
+		name window
+		rect 0 0 600 420
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .4 .3 .8
+		backcolor .07 .05 .04 .94
+		visible 1
+		decoration
+	}
+	itemDef {
+		name window
+		rect 2 2 596 22
+		style WINDOW_STYLE_FILLED
+		backcolor .45 .1 .07 .45
+		visible 1
+		decoration
+	}
+	itemDef {
+		name title
+		text "ACHIEVEMENTS"
+		rect 0 2 600 22
+		textfont UI_FONT_DEFAULT
+		textscale .27
+		textalign ITEM_ALIGN_CENTER
+		textalignx 300
+		textaligny 17
+		forecolor .94 .89 .78 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name padGrid
+		ownerdraw UI_XBOX_ACHIEVEMENTS
+		rect 20 30 560 300
+		forecolor 1 1 1 1
+		visible 1
+		decoration
+	}
+
+}
+
+menuDef {
+	name "xbox_achievements"
+	visible 0
+	fullscreen 0
+	rect 20 30 600 420
+	focusColor 1 .75 0 1
+	style 1
+	border 1
+	onOpen { uiScript xbAchLoad }
+	onESC { close xbox_achievements }
+
+	itemDef {
+		name window
+		rect 0 0 600 420
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .4 .3 .8
+		backcolor .07 .05 .04 .94
+		visible 1
+		decoration
+	}
+	itemDef {
+		name window
+		rect 2 2 596 22
+		style WINDOW_STYLE_FILLED
+		backcolor .45 .1 .07 .45
+		visible 1
+		decoration
+	}
+	itemDef {
+		name title
+		text "ACHIEVEMENTS"
+		rect 0 2 600 22
+		textfont UI_FONT_DEFAULT
+		textscale .27
+		textalign ITEM_ALIGN_CENTER
+		textalignx 300
+		textaligny 17
+		forecolor .94 .89 .78 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name padGrid
+		ownerdraw UI_XBOX_ACHIEVEMENTS
+		rect 20 30 560 300
+		forecolor 1 1 1 1
+		visible 1
+		decoration
 	}
 
 }

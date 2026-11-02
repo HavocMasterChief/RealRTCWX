@@ -2370,6 +2370,8 @@ void CG_AchUnlock( const char *id );
 void CG_AchReset_f( void );
 void CG_AchDraw( void );
 int CG_AchCount( int *total );
+void CG_AchSaved( void );
+void CG_AchDrawMissionRow( float y, float alpha );
 void CG_GoreAddDrip( const vec3_t origin, int life );
 void CG_GoreWaterBlood( const vec3_t point, int puffs );
 void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter );

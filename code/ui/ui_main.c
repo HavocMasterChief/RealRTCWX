@@ -3025,6 +3025,212 @@ static void UI_DrawLimboChat( rectDef_t *rect, int font, float scale, vec4_t col
 
 // FIXME: table drive
 //
+/*
+===============================================================================
+RealRTCWX: achievements browser (Xbox)
+
+A grid of every achievement's icon (achievements/list.txt, unlocks from
+achievements.dat - the files cgame keeps), locked ones dimmed; the D-pad
+moves the selection (menus route it here for an ownerdraw named padGrid);
+the selected one's name, description and state are shown underneath.
+===============================================================================
+*/
+#define XBACH_MAX   192
+#define XBACH_COLS  8
+#define XBACH_ROWS  3
+
+typedef struct {
+	char id[48], name[80], desc[120];
+	qboolean unlocked;
+	qhandle_t icon;
+} xbAch_t;
+
+static xbAch_t xbAch[XBACH_MAX];
+static int xbAchNum, xbAchSel, xbAchTop;
+
+static int UI_XbReadFile( const char *path, char *buf, int size ) {
+	fileHandle_t f;
+	int len = trap_FS_FOpenFile( path, &f, FS_READ );
+	if ( len <= 0 ) {
+		if ( f ) {
+			trap_FS_FCloseFile( f );
+		}
+		buf[0] = 0;
+		return 0;
+	}
+	if ( len >= size ) {
+		len = size - 1;
+	}
+	trap_FS_Read( buf, len, f );
+	trap_FS_FCloseFile( f );
+	buf[len] = 0;
+	return len;
+}
+
+static char *UI_XbNextLine( char **p ) {
+	char *line = *p, *e;
+	if ( !*line ) {
+		return NULL;
+	}
+	while ( **p && **p != '\n' ) {
+		( *p )++;
+	}
+	if ( **p ) {
+		*( *p )++ = 0;
+	}
+	if ( ( e = strchr( line, '\r' ) ) != NULL ) {
+		*e = 0;
+	}
+	return line;
+}
+
+static void UI_XbAchLoad( void ) {
+	static char buf[32768];
+	char *p, *line;
+	int i;
+
+	xbAchNum = 0;
+	UI_XbReadFile( "achievements/list.txt", buf, sizeof( buf ) );
+	for ( p = buf; ( line = UI_XbNextLine( &p ) ) != NULL && xbAchNum < XBACH_MAX; ) {
+		char *t1, *t2;
+		xbAch_t *a;
+		if ( !line[0] || ( line[0] == '/' && line[1] == '/' ) || !( t1 = strchr( line, '\t' ) ) ) {
+			continue;
+		}
+		*t1++ = 0;
+		if ( ( t2 = strchr( t1, '\t' ) ) != NULL ) {
+			*t2++ = 0;
+		}
+		a = &xbAch[xbAchNum++];
+		memset( a, 0, sizeof( *a ) );
+		Q_strncpyz( a->id, line, sizeof( a->id ) );
+		Q_strncpyz( a->name, t1, sizeof( a->name ) );
+		Q_strncpyz( a->desc, t2 ? t2 : "", sizeof( a->desc ) );
+	}
+	UI_XbReadFile( "achievements.dat", buf, sizeof( buf ) );
+	for ( p = buf; ( line = UI_XbNextLine( &p ) ) != NULL; ) {
+		for ( i = 0; i < xbAchNum; i++ ) {
+			if ( !Q_stricmp( xbAch[i].id, line ) ) {
+				xbAch[i].unlocked = qtrue;
+			}
+		}
+	}
+	if ( xbAchSel >= xbAchNum ) {
+		xbAchSel = 0;
+	}
+}
+
+static qboolean UI_XbAch_HandleKey( int key ) {
+	int sel = xbAchSel;
+	switch ( key ) {
+	case K_PAD0_DPAD_LEFT: case K_LEFTARROW: case K_PAD0_LEFTSTICK_LEFT:
+		sel--;
+		break;
+	case K_PAD0_DPAD_RIGHT: case K_RIGHTARROW: case K_PAD0_LEFTSTICK_RIGHT:
+		sel++;
+		break;
+	case K_PAD0_DPAD_UP: case K_UPARROW: case K_PAD0_LEFTSTICK_UP:
+		sel -= XBACH_COLS;
+		break;
+	case K_PAD0_DPAD_DOWN: case K_DOWNARROW: case K_PAD0_LEFTSTICK_DOWN:
+		sel += XBACH_COLS;
+		break;
+	case K_PAD0_LEFTSHOULDER:
+		sel -= XBACH_COLS * XBACH_ROWS;
+		break;
+	case K_PAD0_RIGHTSHOULDER:
+		sel += XBACH_COLS * XBACH_ROWS;
+		break;
+	default:
+		return qfalse;
+	}
+	if ( xbAchNum <= 0 ) {
+		return qtrue;
+	}
+	if ( sel < 0 ) {
+		sel = 0;
+	}
+	if ( sel >= xbAchNum ) {
+		sel = xbAchNum - 1;
+	}
+	xbAchSel = sel;
+	return qtrue;
+}
+
+static void UI_XbAch_Draw( rectDef_t *rect, vec4_t color ) {
+	static const vec4_t brass = { 0.79f, 0.63f, 0.26f, 1 }, dark = { 0.05f, 0.04f, 0.03f, 0.9f };
+	vec4_t c;
+	float cell = rect->w / XBACH_COLS, icon = cell - 10, x, y;
+	int i, row, col, unlocked = 0, selRow;
+
+	if ( !xbAchNum ) {
+		UI_XbAchLoad();
+	}
+	for ( i = 0; i < xbAchNum; i++ ) {
+		unlocked += xbAch[i].unlocked;
+	}
+	// keep the selection on screen
+	selRow = xbAchSel / XBACH_COLS;
+	if ( selRow < xbAchTop ) {
+		xbAchTop = selRow;
+	} else if ( selRow >= xbAchTop + XBACH_ROWS ) {
+		xbAchTop = selRow - XBACH_ROWS + 1;
+	}
+
+	for ( row = 0; row < XBACH_ROWS; row++ ) {
+		for ( col = 0; col < XBACH_COLS; col++ ) {
+			xbAch_t *a;
+			i = ( xbAchTop + row ) * XBACH_COLS + col;
+			if ( i >= xbAchNum ) {
+				break;
+			}
+			a = &xbAch[i];
+			if ( !a->icon ) {
+				a->icon = trap_R_RegisterShaderNoMip( va( "achievements/%s", a->id ) );
+			}
+			x = rect->x + col * cell + 5;
+			y = rect->y + row * cell + 5;
+			if ( a->unlocked ) {
+				Vector4Set( c, 1, 1, 1, 1 );
+			} else {
+				Vector4Set( c, 0.3f, 0.3f, 0.3f, 0.85f );     // locked: dark
+			}
+			trap_R_SetColor( c );
+			UI_DrawHandlePic( x, y, icon, icon, a->icon );
+			trap_R_SetColor( NULL );
+			if ( i == xbAchSel ) {
+				UI_DrawRect( x - 3, y - 3, icon + 6, icon + 6, brass );
+				UI_DrawRect( x - 2, y - 2, icon + 4, icon + 4, brass );
+			}
+		}
+	}
+
+	// scroll hint and count
+	y = rect->y + XBACH_ROWS * cell + 6;
+	Vector4Set( c, 0.56f, 0.49f, 0.39f, 1 );
+	Text_Paint( rect->x + 4, y + 10, UI_FONT_DEFAULT, 0.2f, c,
+				va( "%i of %i unlocked     LB / RB: page     B: back", unlocked, xbAchNum ), 0, 0, ITEM_TEXTSTYLE_NORMAL );
+
+	// details
+	if ( xbAchSel < xbAchNum ) {
+		xbAch_t *a = &xbAch[xbAchSel];
+		y += 18;
+		UI_FillRect( rect->x, y, rect->w, 54, dark );
+		UI_DrawRect( rect->x, y, rect->w, 54, brass );
+		Vector4Set( c, 0.94f, 0.89f, 0.78f, 1 );
+		Text_Paint( rect->x + 10, y + 21, UI_FONT_BIG, 0.3f, c, a->name, 0, 40, ITEM_TEXTSTYLE_SHADOWED );
+		Vector4Set( c, 0.73f, 0.65f, 0.52f, 1 );
+		Text_Paint( rect->x + 10, y + 40, UI_FONT_DEFAULT, 0.2f, c, a->desc[0] ? a->desc : "Keep playing to find out.", 0, 70, ITEM_TEXTSTYLE_NORMAL );
+		if ( a->unlocked ) {
+			Vector4Set( c, 0.79f, 0.63f, 0.26f, 1 );
+			Text_Paint( rect->x + rect->w - 80, y + 21, UI_FONT_DEFAULT, 0.22f, c, "UNLOCKED", 0, 0, ITEM_TEXTSTYLE_NORMAL );
+		} else {
+			Vector4Set( c, 0.55f, 0.5f, 0.45f, 1 );
+			Text_Paint( rect->x + rect->w - 70, y + 21, UI_FONT_DEFAULT, 0.22f, c, "LOCKED", 0, 0, ITEM_TEXTSTYLE_NORMAL );
+		}
+	}
+}
+
 static void UI_OwnerDraw( float x, float y, float w, float h, float text_x, float text_y, int ownerDraw, int ownerDrawFlags, int align, float special, int font, float scale, vec4_t color, qhandle_t shader, int textStyle ) {
 	rectDef_t rect;
 
@@ -3034,6 +3240,9 @@ static void UI_OwnerDraw( float x, float y, float w, float h, float text_x, floa
 	rect.h = h;
 
 	switch ( ownerDraw ) {
+	case UI_XBOX_ACHIEVEMENTS:
+		UI_XbAch_Draw( &rect, color );
+		break;
 	case UI_HANDICAP:
 		UI_DrawHandicap( &rect, font, scale, color, textStyle );
 		break;
@@ -3685,6 +3894,8 @@ static qboolean UI_SelectedPlayer_HandleKey(int flags, float *special, int key) 
 
 static qboolean UI_OwnerDrawHandleKey( int ownerDraw, int flags, float *special, int key ) {
 	switch ( ownerDraw ) {
+	case UI_XBOX_ACHIEVEMENTS:
+		return UI_XbAch_HandleKey( key );
 	case UI_HANDICAP:
 		return UI_Handicap_HandleKey( flags, special, key );
 		break;
@@ -4980,6 +5191,10 @@ static void UI_RunMenuScript( char **args ) {
 	char buff[1024];
 
 	if ( String_Parse( args, &name ) ) {
+		if ( Q_stricmp( name, "xbAchLoad" ) == 0 ) {     // RealRTCWX achievements browser
+			UI_XbAchLoad();
+			return;
+		}
 		//#ifdef MISSIONPACK			// NERVE - SMF - enabled for multiplayer
 		if ( Q_stricmp( name, "StartServer" ) == 0 ) {
 			int i, clients;

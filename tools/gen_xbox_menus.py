@@ -445,17 +445,29 @@ def cheat_menus():
     return out
 
 
-def cheats_button(t):
-    """A CHEATS entry under Quit in the in-game menu."""
-    item = '''
+def achievements_menu(name, on_esc):
+    body = '''
+	itemDef {
+		name padGrid
+		ownerdraw UI_XBOX_ACHIEVEMENTS
+		rect 20 30 560 300
+		forecolor 1 1 1 1
+		visible 1
+		decoration
+	}
+'''
+    return _window(name, (20, 30, 600, 420), "ACHIEVEMENTS", body, on_esc, on_open="uiScript xbAchLoad")
+
+
+def text_button(name, text, y, action, hide_survival=False):
+    test = '\tcvarTest "g_gameType"\n\thideCvar { "3" }\n' if hide_survival else ""
+    return f'''
 	itemDef
-	{
-	name xbcheats
+	{{
+	name {name}
 	type 1
-	text "CHEATS"
-	cvarTest "g_gameType"
-	hideCvar { "3" }
-	rect 10 375 178 26
+	text "{text}"
+{test}	rect 10 {y} 178 26
 	textfont UI_FONT_DEFAULT
 	textscale .3
 	textalign ITEM_ALIGN_LEFT
@@ -463,20 +475,35 @@ def cheats_button(t):
 	textaligny 20
 	forecolor .85 .78 .64 1
 	visible 1
-	action { open ingame_cheats }
-	}
+	action {{ {action} }}
+	}}
 '''
+
+
+def main_buttons(t):
+    """ACHIEVEMENTS under the main menu's buttons."""
+    return t.rstrip() + "\n" + text_button("xbachievements", "ACHIEVEMENTS", 342, "open xbox_achievements") + "\n"
+
+
+def cheats_button(t):
+    """A CHEATS entry under Quit in the in-game menu."""
+    item = text_button("xbcheats", "CHEATS", 375, "open ingame_cheats", True)
+    item += text_button("xbachievements", "ACHIEVEMENTS", 404, "open ingame_achievements")
     i = t.index("name quit")
     j = t.index("}", t.index("mouseExit", i)) + 1      # end of its mouseExit { }
     j = t.index("}", j) + 1                             # end of the quit item
     t = t[:j] + "\n" + item + t[j:]
     k = t.rindex("}")                                   # the file's outer brace
-    return t[:k] + cheat_menus() + "\n" + t[k:]
+    menus = cheat_menus()
+    menus += achievements_menu("ingame_achievements", "close ingame_achievements ; open ingame")
+    menus += achievements_menu("xbox_achievements", "close xbox_achievements")
+    return t[:k] + menus + "\n" + t[k:]
 
 
 def main():
     copy_stock_ui()
     gen("ingame.menu", cheats_button)
+    gen("main_buttons.menu", main_buttons)
     # Display
     for n in ("main_system_display.menu", "ingame_system_graphics.menu"):
         gen(n, lambda t: repack_rows(drop_items(t, lambda it: field(it, "cvar") in DISPLAY_DROP

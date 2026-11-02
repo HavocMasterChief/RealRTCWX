@@ -382,6 +382,20 @@ def drip_svg():
 </svg>'''
 
 
+def cog_svg(angle):
+    """A brass cog for the 'game saved' indicator (8 frames, cgame cycles them)."""
+    import math
+    teeth = []
+    for k in range(8):
+        a = math.radians(k * 45)
+        teeth.append(f'<rect x="-5" y="-30" width="10" height="12" rx="2" transform="rotate({k * 45})"/>')
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-32 -32 64 64">
+<g transform="rotate({angle})" fill="#c9a043" stroke="#1b130e" stroke-width="1.6">
+{"".join(teeth)}<circle r="21"/><circle r="8" fill="#241b17"/></g>
+<circle r="17" fill="none" stroke="#f0d27a" stroke-opacity="0.45" stroke-width="2"/>
+</svg>'''
+
+
 def part_svg(p):
     if p[0] == "text":
         _, t, x, y, size = p[:5]
@@ -454,7 +468,9 @@ def main():
             if size != 512:
                 Image.open(path).resize((size, size), Image.LANCZOS).save(path)
         # pop-up art and the name list for cgame
-        for name, svg, w, h in (("plate", plate_svg(), 1120, 232), ("drip", drip_svg(), 32, 256)):
+        art = [("plate", plate_svg(), 1120, 232), ("drip", drip_svg(), 32, 256)]
+        art += [(f"save{k}", cog_svg(k * 45 / 8), 128, 128) for k in range(8)]
+        for name, svg, w, h in art:
             pg.set_viewport_size({"width": w, "height": h})
             pg.set_content(f'<html><body style="margin:0;background:transparent">{svg}</body></html>')
             pg.locator("svg").screenshot(path=os.path.join(out, name + ".png"), omit_background=True)

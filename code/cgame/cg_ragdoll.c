@@ -177,6 +177,7 @@ typedef struct {
 	vec3_t p[J_NUM];
 } rdSaved_t;
 static rdSaved_t rdSaved[RD_MAX];
+static char rdLastSave[256];     // the last g_lastSave we answered
 static int rdNumSaved;
 static qboolean rdSavedUsed[RD_MAX];
 static int rdStamp;
@@ -235,6 +236,9 @@ void CG_RagdollReset( void ) {
 	memset( rdDeclined, 0, sizeof( rdDeclined ) );
 	trap_R_AddWound( -1, NULL, NULL );
 	CG_RagdollLoadSaved();
+	// a save announced before this level started isn't ours to answer
+	// (it would overwrite that save's poses with this level's empty set)
+	trap_Cvar_VariableStringBuffer( "g_lastSave", rdLastSave, sizeof( rdLastSave ) );
 }
 
 static ragdoll_t *CG_RagdollFind( int entityNum ) {
@@ -1399,7 +1403,7 @@ static void CG_RagdollLoadSaved( void ) {
 
 // each frame (and right away when the client is about to suspend)
 void CG_RagdollCheckSave( void ) {
-	static char last[256];
+	char *last = rdLastSave;
 	char cur[256];
 	char *s, *tok;
 
@@ -1407,7 +1411,8 @@ void CG_RagdollCheckSave( void ) {
 	if ( !cur[0] || !strcmp( cur, last ) ) {
 		return;
 	}
-	Q_strncpyz( last, cur, sizeof( last ) );
+	Q_strncpyz( last, cur, sizeof( rdLastSave ) );
+	CG_AchSaved();      // "game saved" indicator
 	// "levelTime name [name...]"
 	s = cur;
 	tok = COM_Parse( &s );     // the time

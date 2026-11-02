@@ -41,7 +41,10 @@ static int achQueueLen;
 static int achShowing = -1;
 static int achShowStart;
 
-static qhandle_t achPlate, achDrip;
+static qhandle_t achPlate, achDrip, achCog[8];
+static int achLevel[ACH_QUEUE];     // unlocked during this level (for the mission stats)
+static int achLevelNum;
+static int achSavedTime = -100000;
 static sfxHandle_t achSound;
 
 static achievement_t *CG_AchFind( const char *id ) {
@@ -166,8 +169,14 @@ static void CG_AchSaveUnlocks( void ) {
 }
 
 void CG_AchInit( void ) {
+	int i;
 	achQueueLen = 0;
 	achShowing = -1;
+	achLevelNum = 0;
+	achSavedTime = -100000;
+	for ( i = 0; i < 8; i++ ) {
+		achCog[i] = trap_R_RegisterShaderNoMip( va( "achievements/save%i", i ) );
+	}
 	achPlate = trap_R_RegisterShaderNoMip( "achievements/plate" );
 	achDrip = trap_R_RegisterShaderNoMip( "achievements/drip" );
 	achSound = trap_S_RegisterSound( "sound/xbox/achievement.wav" );   // an iron bell (overlay)
@@ -212,6 +221,67 @@ void CG_AchUnlock( const char *id ) {
 	if ( achQueueLen < ACH_QUEUE ) {
 		achQueue[achQueueLen++] = (int)( a - achList );
 	}
+	if ( achLevelNum < ACH_QUEUE ) {
+		achLevel[achLevelNum++] = (int)( a - achList );
+	}
+}
+
+// the game just saved (cg_ragdoll.c sees it in g_lastSave)
+void CG_AchSaved( void ) {
+	achSavedTime = cg.time;
+}
+
+/*
+===============
+CG_AchDrawMissionRow
+
+Under the end-of-mission stats: the achievements earned on this level.
+===============
+*/
+void CG_AchDrawMissionRow( float y, float alpha ) {
+	vec4_t c;
+	int i;
+	float x, size = 30;
+	if ( !achLevelNum ) {
+		return;
+	}
+	Vector4Set( c, 0.72f, 0.27f, 0.18f, alpha );
+	CG_Text_Paint( 150, y + 12, UI_FONT_DEFAULT, 0.2f, c,
+				   va( "ACHIEVEMENTS THIS MISSION: %i", achLevelNum ), 0, 0, ITEM_TEXTSTYLE_SHADOWED );
+	x = 150;
+	Vector4Set( c, 1, 1, 1, alpha );
+	trap_R_SetColor( c );
+	for ( i = 0; i < achLevelNum && i < 10; i++ ) {
+		achievement_t *a = &achList[achLevel[i]];
+		if ( !a->icon ) {
+			a->icon = trap_R_RegisterShaderNoMip( va( "achievements/%s", a->id ) );
+		}
+		CG_DrawPic( x, y + 18, size, size, a->icon );
+		x += size + 4;
+	}
+	trap_R_SetColor( NULL );
+	if ( achLevelNum == 1 ) {
+		Vector4Set( c, 0.94f, 0.89f, 0.78f, alpha );
+		CG_Text_Paint( x + 6, y + 38, UI_FONT_DEFAULT, 0.22f, c, achList[achLevel[0]].name, 0, 34, ITEM_TEXTSTYLE_SHADOWED );
+	}
+}
+
+// bottom-right "Game saved" with a turning brass cog, for 1.6 s after a save
+static void CG_AchDrawSaved( void ) {
+	vec4_t c;
+	int dt = cg.time - achSavedTime;
+	float a;
+	if ( dt < 0 || dt > 1600 || !achCog[0] ) {
+		return;
+	}
+	a = dt < 150 ? dt / 150.0f : ( dt > 1200 ? ( 1600 - dt ) / 400.0f : 1.0f );
+	Vector4Set( c, 1, 1, 1, a );
+	trap_R_SetColor( c );
+	CG_DrawPic( SCREEN_WIDTH - 46, SCREEN_HEIGHT - 92, 24, 24, achCog[( dt / 60 ) & 7] );
+	trap_R_SetColor( NULL );
+	Vector4Set( c, 0.94f, 0.89f, 0.78f, a );
+	CG_Text_Paint( SCREEN_WIDTH - 52 - CG_Text_Width( "GAME SAVED", UI_FONT_DEFAULT, 0.2f, 0 ), SCREEN_HEIGHT - 75,
+				   UI_FONT_DEFAULT, 0.2f, c, "GAME SAVED", 0, 0, ITEM_TEXTSTYLE_SHADOWED );
 }
 
 // "xbachreset" (Cheats menu, after three confirmations)
@@ -243,6 +313,7 @@ void CG_AchDraw( void ) {
 	vec4_t col;
 	int i, num, all;
 
+	CG_AchDrawSaved();
 	if ( achShowing < 0 ) {
 		if ( !achQueueLen || cg.cameraMode ) {
 			return;     // wait for cutscenes to end

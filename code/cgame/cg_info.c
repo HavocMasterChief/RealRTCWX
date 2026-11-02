@@ -353,6 +353,8 @@ void CG_DrawExitStats( void ) {
 
 	COM_Parse( &mstats );
 	// end (parse it)
+
+	CG_AchDrawMissionRow( 340, color[3] );     // RealRTCWX: achievements earned here
 }
 
 /*

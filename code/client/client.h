@@ -481,6 +481,9 @@ extern cvar_t *j_aimassist_turnrate_ads;
 extern cvar_t *j_aimassist_recoil;  
 
 extern cvar_t *j_invertLook; 
+extern cvar_t *j_lookCurve;
+extern cvar_t *j_quickTurn;
+extern cvar_t *j_adsSens;
 
 extern cvar_t   *j_uiSpeed;
 extern cvar_t   *ui_padNav;

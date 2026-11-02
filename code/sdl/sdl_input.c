@@ -83,15 +83,26 @@ static bool SDLCALL IN_UWP_EventWatch( void *userdata, SDL_Event *event ) {
 	return true;
 }
 
-void IN_Rumble( float low, float high, float trigger, int ms ) {
+// body motors for 'ms'; trigger motors (left, right) for their own time
+void IN_RumbleEx( float low, float high, int ms, float leftTrig, float rightTrig, int trigMs ) {
 	Uint16 l = (Uint16)( low * 65535.0f ), h = (Uint16)( high * 65535.0f );
 	if ( ms < 0 ) ms = 0;
+	if ( trigMs < 0 ) trigMs = 0;
 	if ( gamepad ) {
-		SDL_RumbleGamepad( gamepad, l, h, (Uint32)ms );
-		SDL_RumbleGamepadTriggers( gamepad, 0, (Uint16)( trigger * 65535.0f ), (Uint32)( ms > 200 ? 200 : ms ) );
+		if ( low > 0 || high > 0 || ms == 0 ) {
+			SDL_RumbleGamepad( gamepad, l, h, (Uint32)ms );
+		}
+		if ( leftTrig > 0 || rightTrig > 0 || trigMs == 0 ) {
+			SDL_RumbleGamepadTriggers( gamepad, (Uint16)( leftTrig * 65535.0f ), (Uint16)( rightTrig * 65535.0f ),
+									   (Uint32)trigMs );
+		}
 	} else if ( stick ) {
 		SDL_RumbleJoystick( stick, l, h, (Uint32)ms );
 	}
+}
+
+void IN_Rumble( float low, float high, float trigger, int ms ) {
+	IN_RumbleEx( low, high, ms, 0, trigger, ms > 200 ? 200 : ms );
 }
 #endif
 

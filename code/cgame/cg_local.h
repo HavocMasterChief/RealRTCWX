@@ -2363,11 +2363,15 @@ void CG_ClearBloodMarks( void );
 void CG_RagdollBody( centity_t *cent, refEntity_t *body );
 void CG_RagdollReset( void );
 qboolean CG_RagdollPelvis( int entityNum, vec3_t out );
+qboolean CG_RagdollWound( int entityNum, vec3_t out );
+void CG_RagdollCheckSave( void );
+void CG_GoreAddDrip( const vec3_t origin, int life );
 void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter );
 void CG_RagdollBullet( const vec3_t start, const vec3_t end );
 void CG_RagdollExplosion( const vec3_t origin, float radius, float strength );
 void CG_XbViewDown_f( void );
 void CG_XbViewUp_f( void );
+void CG_XbViewCombo_f( void );
 void CG_AddFlashlight( void );
 void CG_AddGore( void );
 void CG_GoreReset( void );
@@ -2376,6 +2380,7 @@ void CG_AddBloodTrails( vec3_t origin, vec3_t dir, int speed, int duration, int 
 void CG_GoreScreenSplat( const vec3_t origin, int count );
 void CG_DrawGoreScreen( void );
 void CG_PadRumble( float low, float high, int ms, float trigger );
+void CG_PadRumbleEx( float low, float high, int ms, float rightTrig, int trigMs, float leftTrig );
 void    CG_AddMarks( void );
 void    CG_ImpactMark( qhandle_t markShader,
 					   const vec3_t origin, const vec3_t dir,

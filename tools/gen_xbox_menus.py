@@ -271,6 +271,17 @@ def controls_set(prefix, group, img_rect, x, y0, header_note):
     vib = re.sub(r'text "[^"]*"', 'text "Vibration"', vib, count=1)
     vib = vib.replace('cvar "j_invertLook"', 'cvar "xbox_vibration"')
     rows.append(vib)
+    sens = find_item(look, "j_lookSens")
+    ads = re.sub(r'text "[^"]*"', 'text "Aim Down Sights Sensitivity"', sens, count=1)
+    ads = re.sub(r'cvarfloat\s+"j_lookSens"[^\n]*', 'cvarfloat "j_adsSens" 0.75 0.3 1.5', ads)
+    curve = re.sub(r'text "[^"]*"', 'text "Look Precision Curve"', sens, count=1)
+    curve = re.sub(r'cvarfloat\s+"j_lookSens"[^\n]*', 'cvarfloat "j_lookCurve" 1.6 1.0 3.0', curve)
+    qt = find_item(look, "j_invertLook")
+    qt = re.sub(r'text "[^"]*"', 'text "Quick Turn"', qt, count=1)
+    qt = qt.replace('cvar "j_invertLook"', 'cvar "j_quickTurn"')
+    rows.insert(1, ads)
+    rows.insert(2, curve)
+    rows.append(qt)
     rows += [find_item(misc, c) for c in ("cg_autoreload", "cg_autoactivate", "cg_autoswitch")]
     placed = [place(r, "move", x, y0 + 18 * i) for i, r in enumerate(rows)]
     out_move = split_items(move)[0][1] + retab(nth_item(move, 0), "Settings") + "\n" + "\n".join(placed) + "\n"

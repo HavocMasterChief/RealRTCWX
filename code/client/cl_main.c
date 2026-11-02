@@ -141,6 +141,9 @@ cvar_t *j_uiExpo;
 cvar_t *j_uiDeadzone;
 
 cvar_t *j_invertLook;
+cvar_t *j_lookCurve;
+cvar_t *j_quickTurn;
+cvar_t *j_adsSens;
 
 cvar_t  *cl_activeAction;
 
@@ -3034,8 +3037,8 @@ static cvar_t *xbox_rumble;
 static cvar_t *xbox_vibration;
 
 static void CL_CheckRumble( void ) {
-	float low, high, trig;
-	int ms, serial;
+	float low, high, trig, ltrig = 0;
+	int ms, serial, trigMs = -1, n;
 
 	if ( !xbox_rumble || !xbox_rumble->modified ) {
 		return;
@@ -3044,8 +3047,12 @@ static void CL_CheckRumble( void ) {
 	if ( !xbox_vibration->integer ) {
 		return;
 	}
-	if ( sscanf( xbox_rumble->string, "%f %f %d %f %d", &low, &high, &ms, &trig, &serial ) >= 3 ) {
-		IN_Rumble( low, high, trig, ms );
+	// "low high ms trigger serial [trigMs leftTrigger]"
+	n = sscanf( xbox_rumble->string, "%f %f %d %f %d %d %f", &low, &high, &ms, &trig, &serial, &trigMs, &ltrig );
+	if ( n >= 6 ) {
+		IN_RumbleEx( low, high, ms, ltrig, trig, trigMs );
+	} else if ( n >= 3 ) {
+		IN_Rumble( low, high, n >= 4 ? trig : 0, ms );
 	}
 }
 
@@ -3090,6 +3097,7 @@ void CL_UWP_SuspendSave( void ) {
 	}
 	Com_Printf( "UWP: suspending - saving to '%s'\n", UWP_SUSPEND_SAVE );
 	Cbuf_ExecuteText( EXEC_NOW, "savegame " UWP_SUSPEND_SAVE "\n" );
+	Cbuf_ExecuteText( EXEC_NOW, "rdsavenow\n" );     // cgame keeps the ragdoll poses with it
 	FS_WriteFile( UWP_SUSPEND_MARKER, "1", 1 );
 }
 
@@ -3971,6 +3979,11 @@ void CL_Init( void ) {
 	j_uiDeadzone =	Cvar_Get ("j_uiDeadzone",   "0.18", CVAR_ARCHIVE);
 
 	j_invertLook = Cvar_Get( "j_invertLook", "0", CVAR_ARCHIVE );
+	// look response: curve exponent (1 = linear), quick-turn at full tilt,
+	// sensitivity while aiming down sights
+	j_lookCurve = Cvar_Get( "j_lookCurve", "1.6", CVAR_ARCHIVE );
+	j_quickTurn = Cvar_Get( "j_quickTurn", "1", CVAR_ARCHIVE );
+	j_adsSens = Cvar_Get( "j_adsSens", "0.75", CVAR_ARCHIVE );
 
 	j_lookSens = Cvar_Get ("j_lookSens", "1.0", CVAR_ARCHIVE);
 	j_moveSens = Cvar_Get ("j_moveSens", "1.0", CVAR_ARCHIVE);

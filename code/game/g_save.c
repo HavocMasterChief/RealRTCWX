@@ -1406,6 +1406,19 @@ qboolean G_SaveGame( char *username ) {
 
 	trap_FS_FCloseFile( f );
 
+	// tell cgame, which keeps the ragdoll poses next to the save
+	// (save/<name>.rag; see cg_ragdoll.c)
+	// ("levelTime name [name...]": several saves in one frame are listed together)
+	{
+		char prev[MAX_STRING_CHARS];
+		trap_Cvar_VariableStringBuffer( "g_lastSave", prev, sizeof( prev ) );
+		if ( atoi( prev ) == level.time && prev[0] && strlen( prev ) + strlen( username ) + 2 < 250 ) {
+			trap_Cvar_Set( "g_lastSave", va( "%s %s", prev, username ) );
+		} else {
+			trap_Cvar_Set( "g_lastSave", va( "%d %s", level.time, username ) );
+		}
+	}
+
 	return qtrue;
 }
 

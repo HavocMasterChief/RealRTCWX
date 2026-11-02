@@ -676,6 +676,38 @@ void CL_JoystickMove( usercmd_t *cmd ) {
 		pitch = -pitch;
 	}
 
+	// look response (applied to the look amount only; aim assist below
+	// still reads the raw stick)
+	{
+		float mag = sqrtf( yawAxis * yawAxis + pitchAxis * pitchAxis );
+		static float fullTilt = 0;     // seconds held at full tilt
+		float scale = 1.0f;
+
+		// curve: fine control for small movements, full speed at the edge
+		if ( mag > 0.001f && j_lookCurve && j_lookCurve->value > 1.0f ) {
+			float m = mag > 1.0f ? 1.0f : mag;
+			scale = powf( m, j_lookCurve->value ) / m;
+		}
+		// quick turn: pushed all the way for a moment, the turn speeds up
+		// (yaw only) so turning around doesn't take forever
+		if ( j_quickTurn && j_quickTurn->integer && mag > 0.94f && fabsf( yawAxis ) > 0.7f && !cl.cgameIsZoomed ) {
+			fullTilt += cls.frametime * 0.001f;
+		} else {
+			fullTilt = 0;
+		}
+		yaw *= scale;
+		pitch *= scale;
+		if ( fullTilt > 0.2f ) {
+			float boost = ( fullTilt - 0.2f ) / 0.35f;
+			yaw *= 1.0f + 0.9f * ( boost > 1.0f ? 1.0f : boost );
+		}
+		// aiming down sights
+		if ( cl.cgameIsZoomed && j_adsSens ) {
+			yaw *= j_adsSens->value;
+			pitch *= j_adsSens->value;
+		}
+	}
+
 	float forward = (j_forward->value * j_moveSens->value) * cl.joystickAxis[j_forward_axis->integer];
     float right   = (j_side->value    * j_moveSens->value) * cl.joystickAxis[j_side_axis->integer];
 	float up = (j_up->value * j_moveSens->value) * cl.joystickAxis[j_up_axis->integer];

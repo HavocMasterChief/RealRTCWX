@@ -1567,6 +1567,17 @@ void CG_XbViewDown_f( void ) {
 	cgXbViewHeldAction = qfalse;
 }
 
+// the client used View as a modifier (View + D-Pad: quick save / load):
+// releasing View mustn't toggle the flashlight; show the message
+void CG_XbViewCombo_f( void ) {
+	cgXbViewHeldAction = qtrue;
+	if ( trap_Argc() > 1 ) {
+		char msg[64];
+		trap_Argv( 1, msg, sizeof( msg ) );
+		CG_CenterPrint( msg, SCREEN_HEIGHT * 0.3, SMALLCHAR_WIDTH );
+	}
+}
+
 void CG_XbViewUp_f( void ) {
 	if ( cgXbViewDownTime && !cgXbViewHeldAction ) {
 		cgFlashlight = !cgFlashlight;
@@ -1788,6 +1799,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 		CG_AddLocalEntities();
 		CG_AddFlashlight();
+		CG_RagdollCheckSave();
 
 		DEBUGTIME
 

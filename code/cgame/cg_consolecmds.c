@@ -823,6 +823,8 @@ static consoleCommand_t commands[] = {
 	{"deletesound", CG_DeleteSound_f},
 	{"+xbview", CG_XbViewDown_f},     // Xbox View: tap = flashlight, hold = dossier
 	{"-xbview", CG_XbViewUp_f},
+	{"xbviewcombo", CG_XbViewCombo_f},
+	{"rdsavenow", CG_RagdollCheckSave},     // client, just before suspending
 	{"+weaponwheel", CG_WeaponWheelDown_f},
 	{"-weaponwheel", CG_WeaponWheelUp_f}
 };

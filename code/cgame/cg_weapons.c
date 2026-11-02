@@ -2369,6 +2369,8 @@ CG_VenomSpinAngle
 #define     SPIN_SPEED  1
 #define     COAST_TIME  2000
 
+static void CG_VenomSpinRumble( centity_t *cent, qboolean spinning );
+
 static float CG_VenomSpinAngle( centity_t *cent ) {
 	int delta;
 	float angle;
@@ -2412,6 +2414,7 @@ static float CG_VenomSpinAngle( centity_t *cent ) {
 
 	}
 
+	CG_VenomSpinRumble( cent, cent->pe.barrelSpinning );
 	return angle;
 }
 
@@ -5850,6 +5853,9 @@ The trigger value drives the right-trigger motor.
 ================
 */
 static void CG_FireRumble( int weapon ) {
+	// body (low, high, ms) + right trigger (strength, ms): the trigger gives
+	// each gun its own feel - a pistol snaps, a bolt rifle kicks hard and
+	// short, shotguns thump, machine guns buzz (their short pulses overlap)
 	switch ( weapon ) {
 	case WP_NONE:
 	case WP_KNIFE:
@@ -5861,38 +5867,80 @@ static void CG_FireRumble( int weapon ) {
 	case WP_ARTY:
 	case WP_POISONGAS:
 	case WP_SMOKE_BOMB:
-		CG_PadRumble( 0.10f, 0.0f, 60, 0.0f );
+		CG_PadRumbleEx( 0.10f, 0.0f, 60, 0.0f, 0, 0.0f );
 		break;
 	case WP_PANZERFAUST:
-		CG_PadRumble( 0.9f, 0.7f, 380, 1.0f );
+		CG_PadRumbleEx( 0.9f, 0.7f, 380, 1.0f, 220, 0.6f );
 		break;
 	case WP_M97:
 	case WP_AUTO5:
 	case WP_M30:
-		CG_PadRumble( 0.75f, 0.55f, 180, 0.9f );
+		CG_PadRumbleEx( 0.75f, 0.55f, 180, 1.0f, 110, 0.0f );
 		break;
 	case WP_VENOM:
 	case WP_MG42M:
 	case WP_BROWNING:
-		CG_PadRumble( 0.35f, 0.45f, 90, 0.6f );
+		CG_PadRumbleEx( 0.35f, 0.45f, 90, 0.7f, 80, 0.0f );
 		break;
 	case WP_FLAMETHROWER:
 	case WP_TESLA:
-		CG_PadRumble( 0.15f, 0.35f, 250, 0.35f );
+		CG_PadRumbleEx( 0.15f, 0.35f, 250, 0.3f, 250, 0.0f );
 		break;
 	case WP_MAUSER:
-	case WP_GARAND:
+	case WP_MOSIN:
+	case WP_DELISLE:
 	case WP_SNIPERRIFLE:
 	case WP_SNOOPERSCOPE:
-	case WP_M1GARAND:
-	case WP_M1941SCOPE:
 	case WP_DELISLESCOPE:
-		CG_PadRumble( 0.5f, 0.4f, 130, 0.8f );
+		CG_PadRumbleEx( 0.5f, 0.4f, 130, 1.0f, 60, 0.0f );     // bolt action: one hard kick
 		break;
-	default:    // pistols, SMGs, rifles
-		CG_PadRumble( 0.2f, 0.35f, 70, 0.45f );
+	case WP_GARAND:
+	case WP_M1GARAND:
+	case WP_G43:
+	case WP_M1941:
+	case WP_M1941SCOPE:
+	case WP_FG42:
+	case WP_FG42SCOPE:
+		CG_PadRumbleEx( 0.4f, 0.35f, 100, 0.85f, 50, 0.0f );
+		break;
+	case WP_BAR:
+	case WP_MP44:
+		CG_PadRumbleEx( 0.25f, 0.4f, 75, 0.6f, 55, 0.0f );
+		break;
+	case WP_MP40:
+	case WP_THOMPSON:
+	case WP_STEN:
+	case WP_PPSH:
+	case WP_MP34:
+		CG_PadRumbleEx( 0.18f, 0.3f, 55, 0.4f, 45, 0.0f );
+		break;
+	default:    // pistols
+		CG_PadRumbleEx( 0.15f, 0.25f, 60, 0.55f, 35, 0.0f );
 		break;
 	}
+}
+
+/*
+================
+CG_VenomSpinRumble
+
+While the local player's Venom spins up / keeps spinning, a light buzz in
+the right trigger that builds with the spin.
+================
+*/
+static void CG_VenomSpinRumble( centity_t *cent, qboolean spinning ) {
+	static int nextPulse;
+	float k;
+	if ( cent->currentState.number != cg.snap->ps.clientNum || !spinning || cg.time < nextPulse ||
+		 cg.time - cent->muzzleFlashTime < 120 ) {
+		return;     // shots have their own (stronger) rumble
+	}
+	k = ( cg.time - cent->pe.barrelTime ) / 600.0f;
+	if ( k > 1 ) {
+		k = 1;
+	}
+	nextPulse = cg.time + 60;
+	CG_PadRumbleEx( 0.0f, 0.05f + 0.1f * k, 70, 0.15f + 0.35f * k, 70, 0.0f );
 }
 
 void CG_FireWeapon( centity_t *cent, int event ) {

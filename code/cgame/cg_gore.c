@@ -87,6 +87,7 @@ typedef struct {
 	vec3_t origin;
 	int entityNum;          // ceiling it's on (moving objects like the tram)
 	vec3_t entOrigin;
+	int life;               // ms it keeps dripping
 } goreDrip_t;
 
 #define GORE_RUN_MAX_POINTS     96
@@ -596,6 +597,7 @@ void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal ) {
 		}
 		GORE_ALLOC( goDrips, GORE_MAX_DRIPS, d );
 		d->active = qtrue;
+		d->life = 0;
 		d->startTime = cg.time;
 		d->nextDrip = cg.time + 300 + rand() % 700;
 		VectorMA( point, 1.0f, normal, d->origin );
@@ -690,11 +692,25 @@ static void CG_GoreDrawRun( goreRun_t *r, qhandle_t shader ) {
 	}
 }
 
+// a free drip point (a wound hanging over a drop)
+void CG_GoreAddDrip( const vec3_t origin, int life ) {
+	goreDrip_t *d;
+	GORE_ALLOC( goDrips, GORE_MAX_DRIPS, d );
+	memset( d, 0, sizeof( *d ) );
+	d->active = qtrue;
+	d->startTime = cg.time;
+	d->nextDrip = cg.time + 200;
+	d->life = life;
+	VectorCopy( origin, d->origin );
+	d->origin[2] -= 3;
+	d->entityNum = ENTITYNUM_WORLD;
+}
+
 static void CG_GoreUpdateDrip( goreDrip_t *d ) {
 	int age = cg.time - d->startTime;
 	vec3_t down = { 0, 0, -1 };
 
-	if ( age > 30000 ) {
+	if ( age > ( d->life ? d->life : 30000 ) ) {
 		d->active = qfalse;
 		return;
 	}
@@ -758,15 +774,30 @@ static void CG_GoreCheckBodies( void ) {
 		// wait for the body to fall before the pool starts (a ragdoll takes
 		// a little longer to come to rest)
 		{
-			vec3_t pelvis;
-			qboolean rag = CG_RagdollPelvis( num, pelvis );
+			vec3_t wound;
+			qboolean rag = CG_RagdollWound( num, wound );
 			if ( goPooled[num] || cg.time - goDeadTime[num] < ( rag ? 2000 : 1200 ) || !CG_GoreBleeds( s ) ) {
 				continue;
 			}
 			goPooled[num] = qtrue;
 			cent = &cg_entities[num];
 			CG_GoreLog( "body %i dead (aiChar %i, ragdoll %i): starting pool\n", num, s->aiChar, rag );
-			CG_GorePoolAt( rag ? pelvis : cent->lerpOrigin, ( CG_BloodExtreme() ? 40 : 30 ) + random() * 12,
+			if ( rag ) {
+				// the wound hanging in the air (over a ledge or railing):
+				// it drips onto whatever is below, and the pool forms there
+				trace_t tr;
+				vec3_t below;
+				VectorCopy( wound, below );
+				below[2] -= 256;
+				CG_Trace( &tr, wound, NULL, NULL, below, num, MASK_SOLID );
+				if ( tr.fraction * 256 > 16 && tr.fraction < 1.0f ) {
+					CG_GoreAddDrip( wound, 45000 );
+					CG_GoreLog( "body %i: wound hangs %.0f above the floor, dripping\n", num, tr.fraction * 256 );
+					VectorCopy( tr.endpos, wound );
+					wound[2] += 4;
+				}
+			}
+			CG_GorePoolAt( rag ? wound : cent->lerpOrigin, ( CG_BloodExtreme() ? 40 : 30 ) + random() * 12,
 						   CG_BloodExtreme() ? 15000 : 20000 );
 		}
 	}
@@ -1235,6 +1266,21 @@ simply unused.
 static int goRumbleSerial;
 static int goRumbleUntil;
 static float goRumbleStrength;
+
+// full control: body motors for ms, right/left trigger motors for trigMs
+void CG_PadRumbleEx( float low, float high, int ms, float rightTrig, int trigMs, float leftTrig ) {
+	if ( rightTrig > 1 ) rightTrig = 1;
+	if ( leftTrig > 1 ) leftTrig = 1;
+	if ( low > 1 ) low = 1;
+	if ( high > 1 ) high = 1;
+	if ( ms > goRumbleUntil - cg.time ) {
+		goRumbleUntil = cg.time + ms;
+		goRumbleStrength = low > high ? low : high;
+	}
+	goRumbleSerial++;
+	trap_Cvar_Set( "xbox_rumble", va( "%.2f %.2f %d %.2f %d %d %.2f", low, high, ms, rightTrig, goRumbleSerial,
+									  trigMs, leftTrig ) );
+}
 
 void CG_PadRumble( float low, float high, int ms, float trigger ) {
 	float strength = low > high ? low : high;

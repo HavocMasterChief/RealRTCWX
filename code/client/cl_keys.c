@@ -2252,6 +2252,29 @@ void CL_KeyDownEvent( int key, unsigned time )
 		}
 	}
 
+#ifdef RTCW_UWP
+	// Xbox: View + D-Pad Up = quick save, View + D-Pad Down = quick load
+	if ( keys[K_PAD0_BACK].down && ( key == K_PAD0_DPAD_UP || key == K_PAD0_DPAD_DOWN ) &&
+		 clc.state == CA_ACTIVE && !clc.demoplaying && !( Key_GetCatcher() & ( KEYCATCH_UI | KEYCATCH_CONSOLE ) ) ) {
+		if ( key == K_PAD0_DPAD_UP ) {
+			if ( cl.snap.ps.stats[STAT_HEALTH] > 0 && !cl.cameraMode ) {
+				Cbuf_AddText( "savegame quicksave\n" );
+				Cbuf_AddText( "xbviewcombo \"Quick saved\"\n" );
+			} else {
+				Cbuf_AddText( "xbviewcombo \"Can't save now\"\n" );
+			}
+		} else {
+			if ( FS_FileExists( "save/quicksave.svg" ) ) {
+				Cbuf_AddText( "xbviewcombo \"Quick loading...\"\n" );
+				Cbuf_AddText( "loadgame quicksave\n" );
+			} else {
+				Cbuf_AddText( "xbviewcombo \"No quick save yet\"\n" );
+			}
+		}
+		return;     // not the D-Pad's own action
+	}
+#endif
+
 	// In-level cinematic overlay: any key skips it, and we swallow input so UI/console can't open.
 	if ( SCR_LevelCinematicActive() && key == K_ESCAPE ) {
 

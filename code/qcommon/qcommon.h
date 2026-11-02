@@ -1217,6 +1217,7 @@ void Sys_UWP_KeepAlive( void );
 void Sys_UWP_LogMemory( const char *where );
 void UWP_RequestRefreshRate( int hz );
 void IN_Rumble( float low, float high, float trigger, int ms );
+void IN_RumbleEx( float low, float high, int ms, float leftTrig, float rightTrig, int trigMs );
 void CL_UWP_Background( qboolean background );
 void CL_UWP_SuspendSave( void );
 void SNDDMA_UWP_Pause( qboolean pause );

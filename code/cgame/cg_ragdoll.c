@@ -136,6 +136,7 @@ typedef struct {
 	int entityNum;
 	int slot;               // renderer slot 1..RD_MAX
 	int startTime, lastSeen;
+	int wound;              // joint nearest the killing shot (blood comes from here)
 	int groundEnt;          // mover it's lying on (-1: none), carried along with it
 	vec3_t groundOrg;
 	int lastThud;
@@ -161,6 +162,21 @@ typedef struct {
 static ragdoll_t rdBodies[RD_MAX];
 static byte rdDeclined[MAX_GENTITIES];   // dead bodies that keep their death animation
 static void CG_RagdollInitPairs( ragdoll_t *rd );
+static void CG_RagdollLoadSaved( void );
+static void CG_RagdollPose( ragdoll_t *rd );
+
+// ragdoll poses kept with savegames (save/<name>.rag)
+#define RD_SAVE_MAGIC   0x31474152  // "RAG1"
+typedef struct {
+	int entityNum, aiChar, wound;
+	int frame, oldframe, torsoFrame, oldTorsoFrame;
+	float backlerp, torsoBacklerp;
+	vec3_t axis[3], torsoAxis[3], origin;
+	vec3_t p[J_NUM];
+} rdSaved_t;
+static rdSaved_t rdSaved[RD_MAX];
+static int rdNumSaved;
+static qboolean rdSavedUsed[RD_MAX];
 static int rdStamp;
 
 // the last bullet that hit each entity (where, which way, when)
@@ -214,6 +230,7 @@ void CG_RagdollReset( void ) {
 	memset( rdBodies, 0, sizeof( rdBodies ) );
 	memset( rdHits, 0, sizeof( rdHits ) );
 	memset( rdDeclined, 0, sizeof( rdDeclined ) );
+	CG_RagdollLoadSaved();
 }
 
 static ragdoll_t *CG_RagdollFind( int entityNum ) {
@@ -224,6 +241,16 @@ static ragdoll_t *CG_RagdollFind( int entityNum ) {
 		}
 	}
 	return NULL;
+}
+
+// where a ragdolled body bleeds from: the joint the killing shot hit
+qboolean CG_RagdollWound( int entityNum, vec3_t out ) {
+	ragdoll_t *rd = CG_RagdollFind( entityNum );
+	if ( !rd ) {
+		return qfalse;
+	}
+	VectorCopy( rd->p[rd->wound], out );
+	return qtrue;
 }
 
 qboolean CG_RagdollPelvis( int entityNum, vec3_t out ) {
@@ -407,6 +434,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->sleeping = qfalse;
 	rd->groundEnt = -1;
 	rd->lastThud = 0;
+	rd->wound = J_PELVIS;
 
 	rd->steps = 0;
 
@@ -420,6 +448,14 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		// path, the rest of the body follows a little (a head shot snaps
 		// the head back, a leg shot takes the legs out)
 		const float *hp = rdHits[rd->entityNum].point, *hd = rdHits[rd->entityNum].dir;
+		float bestD = 1e9f;
+		for ( i = 0; i < J_NUM; i++ ) {
+			float dd = DistanceSquared( rd->p[i], hp );
+			if ( dd < bestD ) {
+				bestD = dd;
+				rd->wound = i;
+			}
+		}
 		for ( i = 0; i < J_NUM; i++ ) {
 			float d2 = DistanceSquared( rd->p[i], hp );
 			float w = exp( -d2 / ( 2.0f * 14.0f * 14.0f ) );
@@ -1108,7 +1144,41 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 		rd = NULL;
 	}
 	if ( !rd ) {
-		rd = CG_RagdollStart( cent, body );
+		rdSaved_t *sv = NULL;
+		int k;
+		for ( k = 0; k < rdNumSaved; k++ ) {
+			if ( !rdSavedUsed[k] && rdSaved[k].entityNum == cent->currentState.number &&
+				 rdSaved[k].aiChar == cent->currentState.aiChar ) {
+				sv = &rdSaved[k];
+				rdSavedUsed[k] = qtrue;
+				break;
+			}
+		}
+		if ( sv ) {
+			// a body from a loaded save: rebuild it from its saved pose,
+			// then put the joints back where they were
+			refEntity_t saved = *body;
+			saved.frame = sv->frame;
+			saved.oldframe = sv->oldframe;
+			saved.torsoFrame = sv->torsoFrame;
+			saved.oldTorsoFrame = sv->oldTorsoFrame;
+			saved.backlerp = sv->backlerp;
+			saved.torsoBacklerp = sv->torsoBacklerp;
+			memcpy( saved.axis, sv->axis, sizeof( saved.axis ) );
+			memcpy( saved.torsoAxis, sv->torsoAxis, sizeof( saved.torsoAxis ) );
+			VectorCopy( sv->origin, saved.origin );
+			rd = CG_RagdollStart( cent, &saved );
+			if ( rd ) {
+				memcpy( rd->p, sv->p, sizeof( rd->p ) );
+				memcpy( rd->old, sv->p, sizeof( rd->old ) );
+				rd->wound = sv->wound;
+				rd->sleeping = qtrue;
+				rd->steps = 1000;   // muscles long relaxed
+				CG_RagdollPose( rd );
+			}
+		} else {
+			rd = CG_RagdollStart( cent, body );
+		}
 		if ( !rd ) {
 			// decided once per death: retrying every frame would restart
 			// the body (and cost bone lookups) over and over
@@ -1170,4 +1240,127 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	body->renderfx |= RF_LIGHTING_ORIGIN;
 	body->ragdoll = rd->slot;
 	body->ragdollStamp = ++rdStamp;
+}
+
+/*
+===============
+Ragdolls in savegames
+
+The game saves entities, not cgame's ragdolls, so each save gets a small
+file of its own next to it (save/<name>.rag) with every body's final pose.
+The game announces each save in g_lastSave ("name levelTime"); a loaded
+save is in savegame_filename when cgame starts.
+===============
+*/
+static void CG_RagdollSaveName( const char *in, char *out, int outSize ) {
+	char *dot;
+	Q_strncpyz( out, in, outSize );
+	dot = strrchr( out, '.' );
+	if ( dot && !Q_stricmp( dot, ".svg" ) ) {
+		*dot = 0;
+	}
+	Q_strcat( out, outSize, ".rag" );
+}
+
+static void CG_RagdollWriteSave( const char *username ) {
+	char path[MAX_QPATH], file[MAX_QPATH];
+	fileHandle_t f;
+	int i, n = 0, magic = RD_SAVE_MAGIC;
+
+	Com_sprintf( file, sizeof( file ), "save/%s", username );
+	CG_RagdollSaveName( file, path, sizeof( path ) );
+	if ( trap_FS_FOpenFile( path, &f, FS_WRITE ) < 0 ) {
+		return;
+	}
+	for ( i = 0; i < RD_MAX; i++ ) {
+		if ( rdBodies[i].active ) {
+			n++;
+		}
+	}
+	trap_FS_Write( &magic, sizeof( magic ), f );
+	trap_FS_Write( cgs.mapname, MAX_QPATH, f );
+	trap_FS_Write( &n, sizeof( n ), f );
+	for ( i = 0; i < RD_MAX; i++ ) {
+		ragdoll_t *rd = &rdBodies[i];
+		rdSaved_t sv;
+		if ( !rd->active ) {
+			continue;
+		}
+		memset( &sv, 0, sizeof( sv ) );
+		sv.entityNum = rd->entityNum;
+		sv.aiChar = cg_entities[rd->entityNum].currentState.aiChar;
+		sv.wound = rd->wound;
+		sv.frame = rd->pose.frame;
+		sv.oldframe = rd->pose.oldframe;
+		sv.torsoFrame = rd->pose.torsoFrame;
+		sv.oldTorsoFrame = rd->pose.oldTorsoFrame;
+		sv.backlerp = rd->pose.backlerp;
+		sv.torsoBacklerp = rd->pose.torsoBacklerp;
+		memcpy( sv.axis, rd->pose.axis, sizeof( sv.axis ) );
+		memcpy( sv.torsoAxis, rd->pose.torsoAxis, sizeof( sv.torsoAxis ) );
+		VectorCopy( rd->pose.origin, sv.origin );
+		memcpy( sv.p, rd->p, sizeof( sv.p ) );
+		trap_FS_Write( &sv, sizeof( sv ), f );
+	}
+	trap_FS_FCloseFile( f );
+	CG_Printf( "ragdoll: kept %i body poses with save '%s'\n", n, username );
+}
+
+static void CG_RagdollLoadSaved( void ) {
+	char name[MAX_QPATH], path[MAX_QPATH], map[MAX_QPATH];
+	fileHandle_t f;
+	int len, magic = 0, n = 0, i;
+
+	rdNumSaved = 0;
+	memset( rdSavedUsed, 0, sizeof( rdSavedUsed ) );
+	trap_Cvar_VariableStringBuffer( "savegame_filename", name, sizeof( name ) );
+	if ( !name[0] ) {
+		return;
+	}
+	CG_RagdollSaveName( name, path, sizeof( path ) );
+	len = trap_FS_FOpenFile( path, &f, FS_READ );
+	if ( len < (int)( sizeof( int ) * 2 + MAX_QPATH ) ) {
+		if ( len >= 0 ) {
+			trap_FS_FCloseFile( f );
+		}
+		return;
+	}
+	trap_FS_Read( &magic, sizeof( magic ), f );
+	trap_FS_Read( map, MAX_QPATH, f );
+	trap_FS_Read( &n, sizeof( n ), f );
+	map[MAX_QPATH - 1] = 0;
+	if ( magic != RD_SAVE_MAGIC || Q_stricmp( map, cgs.mapname ) || n < 0 || n > RD_MAX ||
+		 len < (int)( sizeof( int ) * 2 + MAX_QPATH + n * sizeof( rdSaved_t ) ) ) {
+		trap_FS_FCloseFile( f );
+		return;
+	}
+	for ( i = 0; i < n; i++ ) {
+		trap_FS_Read( &rdSaved[i], sizeof( rdSaved_t ), f );
+	}
+	trap_FS_FCloseFile( f );
+	rdNumSaved = n;
+	CG_Printf( "ragdoll: restoring %i body poses from '%s'\n", n, path );
+}
+
+// each frame (and right away when the client is about to suspend)
+void CG_RagdollCheckSave( void ) {
+	static char last[256];
+	char cur[256];
+	char *s, *tok;
+
+	trap_Cvar_VariableStringBuffer( "g_lastSave", cur, sizeof( cur ) );
+	if ( !cur[0] || !strcmp( cur, last ) ) {
+		return;
+	}
+	Q_strncpyz( last, cur, sizeof( last ) );
+	// "levelTime name [name...]"
+	s = cur;
+	tok = COM_Parse( &s );     // the time
+	while ( 1 ) {
+		tok = COM_Parse( &s );
+		if ( !tok[0] ) {
+			break;
+		}
+		CG_RagdollWriteSave( tok );
+	}
 }

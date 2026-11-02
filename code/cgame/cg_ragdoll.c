@@ -95,6 +95,23 @@ static const struct { int a, b; float frac; } rdLimits[] = {
 };
 #define RD_NUM_LIMITS ( sizeof( rdLimits ) / sizeof( rdLimits[0] ) )
 
+// capsules for self-collision (limbs can't pass through each other or the
+// torso); radius in units
+static const struct { int a, b; float r; } rdCaps[] = {
+	{ J_PELVIS, J_CHEST, 7.0f },        // 0 torso
+	{ J_HEAD, J_HEAD, 5.0f },           // 1 head
+	{ J_LSHOULDER, J_LELBOW, 2.8f },    // 2
+	{ J_LELBOW, J_LHAND, 2.5f },        // 3
+	{ J_RSHOULDER, J_RELBOW, 2.8f },    // 4
+	{ J_RELBOW, J_RHAND, 2.5f },        // 5
+	{ J_LHIP, J_LKNEE, 3.6f },          // 6
+	{ J_LKNEE, J_LFOOT, 3.0f },         // 7
+	{ J_RHIP, J_RKNEE, 3.6f },          // 8
+	{ J_RKNEE, J_RFOOT, 3.0f }          // 9
+};
+#define RD_NUM_CAPS ( sizeof( rdCaps ) / sizeof( rdCaps[0] ) )
+#define RD_MAX_PAIRS 48
+
 // body parts: anchor joint, primary axis (from -> to), secondary helper (from -> to)
 static const struct { int anchor, p0, p1, s0, s1; } rdSegs[RD_SEGS] = {
 	{ J_PELVIS,    J_PELVIS,    J_CHEST,  J_LHIP,      J_RHIP },       // 0 pelvis
@@ -121,6 +138,9 @@ typedef struct {
 	vec3_t p[J_NUM], old[J_NUM];   // simulation, world space
 	float stick[RD_NUM_STICKS];
 	float limit[RD_NUM_LIMITS];
+	qboolean hingeOn[4];    // L knee, R knee, L elbow, R elbow
+	int numPairs;
+	struct { short a, b; float minDist; } pair[RD_MAX_PAIRS];   // capsule pairs that collide
 	float accum;
 	int steps;
 	vec3_t restFrame[3];    // pelvis frame of the frozen pose (model space)
@@ -130,6 +150,7 @@ typedef struct {
 } ragdoll_t;
 
 static ragdoll_t rdBodies[RD_MAX];
+static void CG_RagdollInitPairs( ragdoll_t *rd );
 static int rdStamp;
 
 // the last bullet that hit each entity (where, which way, when)
@@ -361,7 +382,178 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	for ( i = 0; i < (int)RD_NUM_LIMITS; i++ ) {
 		rd->limit[i] = rdLimits[i].frac * Distance( rd->p[rdLimits[i].a], rd->p[rdLimits[i].b] );
 	}
+	CG_RagdollInitPairs( rd );
+	memset( rd->hingeOn, 0, sizeof( rd->hingeOn ) );
 	return rd;
+}
+
+// closest points between segments p1-q1 and p2-q2: fractions s, t along them
+static float CG_SegSegDist( const vec3_t p1, const vec3_t q1, const vec3_t p2, const vec3_t q2,
+							float *s, float *t, vec3_t c1, vec3_t c2 ) {
+	vec3_t d1, d2, r, diff;
+	float a, e, f, b, c, denom;
+	VectorSubtract( q1, p1, d1 );
+	VectorSubtract( q2, p2, d2 );
+	VectorSubtract( p1, p2, r );
+	a = DotProduct( d1, d1 );
+	e = DotProduct( d2, d2 );
+	f = DotProduct( d2, r );
+	if ( a < 1e-4f && e < 1e-4f ) {
+		*s = *t = 0;
+	} else if ( a < 1e-4f ) {
+		*s = 0;
+		*t = Com_Clamp( 0, 1, f / e );
+	} else {
+		c = DotProduct( d1, r );
+		if ( e < 1e-4f ) {
+			*t = 0;
+			*s = Com_Clamp( 0, 1, -c / a );
+		} else {
+			b = DotProduct( d1, d2 );
+			denom = a * e - b * b;
+			*s = denom > 1e-6f ? Com_Clamp( 0, 1, ( b * f - c * e ) / denom ) : 0;
+			*t = ( b * *s + f ) / e;
+			if ( *t < 0 ) {
+				*t = 0;
+				*s = Com_Clamp( 0, 1, -c / a );
+			} else if ( *t > 1 ) {
+				*t = 1;
+				*s = Com_Clamp( 0, 1, ( b - c ) / a );
+			}
+		}
+	}
+	VectorMA( p1, *s, d1, c1 );
+	VectorMA( p2, *t, d2, c2 );
+	VectorSubtract( c1, c2, diff );
+	return VectorLength( diff );
+}
+
+// pick the capsule pairs that can collide: not sharing a joint, not the
+// limbs' roots against the torso; the allowed gap never exceeds what the
+// death pose already has (so a pose that starts tucked doesn't explode)
+static void CG_RagdollInitPairs( ragdoll_t *rd ) {
+	int i, j;
+	float s, t, d;
+	vec3_t c1, c2;
+	rd->numPairs = 0;
+	for ( i = 0; i < (int)RD_NUM_CAPS; i++ ) {
+		for ( j = i + 1; j < (int)RD_NUM_CAPS; j++ ) {
+			if ( rdCaps[i].a == rdCaps[j].a || rdCaps[i].a == rdCaps[j].b ||
+				 rdCaps[i].b == rdCaps[j].a || rdCaps[i].b == rdCaps[j].b ) {
+				continue;
+			}
+			if ( i == 0 && ( j == 2 || j == 4 || j == 6 || j == 8 ) ) {
+				continue;   // upper arms and thighs are attached to the torso
+			}
+			if ( i == 1 && ( j == 2 || j == 4 ) ) {
+				continue;   // head vs upper arms: shoulders sit right under it
+			}
+			if ( rd->numPairs >= RD_MAX_PAIRS ) {
+				return;
+			}
+			d = CG_SegSegDist( rd->p[rdCaps[i].a], rd->p[rdCaps[i].b],
+							   rd->p[rdCaps[j].a], rd->p[rdCaps[j].b], &s, &t, c1, c2 );
+			rd->pair[rd->numPairs].a = i;
+			rd->pair[rd->numPairs].b = j;
+			rd->pair[rd->numPairs].minDist = MIN( rdCaps[i].r + rdCaps[j].r, d * 0.9f );
+			rd->numPairs++;
+		}
+	}
+}
+
+// push overlapping capsules apart, spreading the move over their end joints
+static void CG_RagdollSelfCollide( ragdoll_t *rd ) {
+	int n;
+	for ( n = 0; n < rd->numPairs; n++ ) {
+		int ci = rd->pair[n].a, cj = rd->pair[n].b;
+		float *a1 = rd->p[rdCaps[ci].a], *b1 = rd->p[rdCaps[ci].b];
+		float *a2 = rd->p[rdCaps[cj].a], *b2 = rd->p[rdCaps[cj].b];
+		float s, t, d, pen, w1a, w1b, w2a, w2b, sum;
+		vec3_t c1, c2, dir;
+		d = CG_SegSegDist( a1, b1, a2, b2, &s, &t, c1, c2 );
+		pen = rd->pair[n].minDist - d;
+		if ( pen <= 0 ) {
+			continue;
+		}
+		if ( d > 0.001f ) {
+			VectorSubtract( c1, c2, dir );
+			VectorScale( dir, 1.0f / d, dir );
+		} else {
+			VectorSet( dir, 0, 0, 1 );
+		}
+		// weights per end joint (a degenerate capsule has a == b)
+		w1a = 1 - s; w1b = s; w2a = 1 - t; w2b = t;
+		sum = w1a * w1a + w1b * w1b + w2a * w2a + w2b * w2b;
+		if ( sum < 1e-4f ) {
+			continue;
+		}
+		pen /= sum;
+		if ( a1 == b1 ) {
+			VectorMA( a1, pen, dir, a1 );
+		} else {
+			VectorMA( a1, pen * w1a, dir, a1 );
+			VectorMA( b1, pen * w1b, dir, b1 );
+		}
+		if ( a2 == b2 ) {
+			VectorMA( a2, -pen, dir, a2 );
+		} else {
+			VectorMA( a2, -pen * w2a, dir, a2 );
+			VectorMA( b2, -pen * w2b, dir, b2 );
+		}
+	}
+}
+
+// hinge: joint k (knee/elbow) between a and b may only bend toward
+// bendDir (knees forward, elbows back); a reversed bend is pushed straight.
+// A hinge the death pose already has reversed is left alone until it
+// first bends the right way (no violent snap on the first frame).
+static void CG_RagdollHinge( ragdoll_t *rd, int a, int k, int b, const vec3_t bendDir, qboolean *on ) {
+	float *pa = rd->p[a], *pk = rd->p[k], *pb = rd->p[b];
+	vec3_t u, o, off, bp;
+	float len, c, corr;
+	VectorSubtract( pb, pa, u );
+	len = VectorNormalize( u );
+	if ( len < 0.01f ) {
+		return;
+	}
+	VectorSubtract( pk, pa, o );
+	VectorMA( o, -DotProduct( o, u ), u, off );     // knee's offset from the a-b line
+	VectorMA( bendDir, -DotProduct( bendDir, u ), u, bp );
+	if ( VectorNormalize( bp ) < 0.15f ) {
+		return;     // limb points along bendDir: no meaningful bend side
+	}
+	c = DotProduct( off, bp );
+	if ( c >= 0.25f ) {
+		*on = qtrue;
+		return;
+	}
+	if ( !*on ) {
+		return;
+	}
+	corr = 0.25f - c;
+	VectorMA( pk, corr * ( 2.0f / 3.0f ), bp, pk );
+	VectorMA( pa, -corr / 3.0f, bp, pa );
+	VectorMA( pb, -corr / 3.0f, bp, pb );
+}
+
+static void CG_RagdollJointLimits( ragdoll_t *rd ) {
+	vec3_t up, right, fwd, chestUp, shoulders, chestFwd, back;
+	// Quake axes: forward = up x right
+	VectorSubtract( rd->p[J_CHEST], rd->p[J_PELVIS], up );
+	VectorSubtract( rd->p[J_RHIP], rd->p[J_LHIP], right );
+	CrossProduct( up, right, fwd );
+	if ( VectorNormalize( fwd ) > 0.01f ) {
+		CG_RagdollHinge( rd, J_LHIP, J_LKNEE, J_LFOOT, fwd, &rd->hingeOn[0] );
+		CG_RagdollHinge( rd, J_RHIP, J_RKNEE, J_RFOOT, fwd, &rd->hingeOn[1] );
+	}
+	VectorSubtract( rd->p[J_HEAD], rd->p[J_CHEST], chestUp );
+	VectorSubtract( rd->p[J_RSHOULDER], rd->p[J_LSHOULDER], shoulders );
+	CrossProduct( chestUp, shoulders, chestFwd );
+	if ( VectorNormalize( chestFwd ) > 0.01f ) {
+		VectorNegate( chestFwd, back );
+		CG_RagdollHinge( rd, J_LSHOULDER, J_LELBOW, J_LHAND, back, &rd->hingeOn[2] );
+		CG_RagdollHinge( rd, J_RSHOULDER, J_RELBOW, J_RHAND, back, &rd->hingeOn[3] );
+	}
 }
 
 /*
@@ -441,6 +633,8 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 			VectorMA( a, diff, d, a );
 			VectorMA( b, -diff, d, b );
 		}
+		CG_RagdollJointLimits( rd );
+		CG_RagdollSelfCollide( rd );
 	}
 
 	// collide with the world

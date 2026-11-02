@@ -38,8 +38,8 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 // pelvis) so limbs don't flop like rope; strong at first, fading to a light
 // stiffness that stays
 #define RD_MUSCLE_START 0.10f
-#define RD_MUSCLE_END   0.012f
-#define RD_MUSCLE_FADE  1.4f    // seconds
+#define RD_MUSCLE_END   0.0f    // fully limp once it fades (arms used to stay held out)
+#define RD_MUSCLE_FADE  1.2f    // seconds
 #define RD_HIT_WINDOW   1200    // ms: a hit this recent shapes the fall
 
 enum {
@@ -88,7 +88,9 @@ static const int rdSticks[][2] = {
 // but not closer than this fraction of it (no limbs folding into the body)
 static const struct { int a, b; float frac; } rdLimits[] = {
 	{ J_LSHOULDER, J_LHAND, 0.35f }, { J_RSHOULDER, J_RHAND, 0.35f },
-	{ J_LHIP, J_LFOOT, 0.55f }, { J_RHIP, J_RFOOT, 0.55f },
+	{ J_LHIP, J_LFOOT, 0.7f }, { J_RHIP, J_RFOOT, 0.7f },       // knees can't fold flat
+	{ J_LKNEE, J_CHEST, 0.75f }, { J_RKNEE, J_CHEST, 0.75f },   // thighs can't fold into the chest
+	{ J_LFOOT, J_PELVIS, 0.6f }, { J_RFOOT, J_PELVIS, 0.6f },   // no sitting on the heels
 	{ J_LHAND, J_PELVIS, 0.25f }, { J_RHAND, J_PELVIS, 0.25f },
 	{ J_LFOOT, J_RFOOT, 0.2f }, { J_LKNEE, J_RKNEE, 0.3f },
 	{ J_HEAD, J_PELVIS, 0.85f }, { J_LFOOT, J_CHEST, 0.6f }, { J_RFOOT, J_CHEST, 0.6f }
@@ -651,7 +653,7 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 			VectorSubtract( target, rd->p[i], rel );
 			// legs give out first: knees buckle, the body crumples down
 			// instead of toppling stiff as a plank
-			VectorMA( rd->p[i], ( i == J_LKNEE || i == J_LFOOT || i == J_RKNEE || i == J_RFOOT ) ? s * 0.3f : s,
+			VectorMA( rd->p[i], ( i == J_LKNEE || i == J_LFOOT || i == J_RKNEE || i == J_RFOOT ) ? s * 0.5f : s,
 					  rel, rd->p[i] );
 		}
 		rd->steps++;

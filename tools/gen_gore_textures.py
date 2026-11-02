@@ -30,8 +30,8 @@ def save(density, name):
     for y in range(h):
         for x in range(w):
             v = d[x, y] / 255.0
-            k = 1.0 - 0.3 * v
-            p[x, y] = (int(110 * k), int(9 * k), int(9 * k), int(255 * min(1.0, v * 1.05)))
+            k = 1.0 - 0.35 * v
+            p[x, y] = (int(72 * k), int(6 * k), int(5 * k), int(255 * min(1.0, v * 1.05)))
     img.save(os.path.join(OUT, f"{name}.tga"))
     print("wrote", f"{name}.tga")
 

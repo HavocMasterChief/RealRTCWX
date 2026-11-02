@@ -266,7 +266,7 @@ static float CG_GoreLightAt( const vec3_t point ) {
 static void CG_GoreColor( float light, float alpha, byte *out ) {
 	// about the darkness of the game's own blood decals
 	// the texture holds the blood colour; this only darkens it in shadow
-	float k = 0.6f + 0.4f * light;
+	float k = 0.45f + 0.45f * light;
 	out[0] = out[1] = out[2] = (byte)( 255 * k );
 	out[3] = (byte)( 255 * alpha );
 }

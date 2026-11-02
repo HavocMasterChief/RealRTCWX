@@ -63,10 +63,19 @@ int steamInit(void)
 	return 0;
 }
 
+#if defined( RTCW_UWP ) && defined( GAMEDLL )
+// Xbox: local achievements (pop-up + saved on the console), see g_cmds.c
+void G_UWP_Achievement( const char *id );
+void steamSetAchievement(const char* id)
+{
+	G_UWP_Achievement( id );
+}
+#else
 void steamSetAchievement(const char* id)
 {
 	return;
 }
+#endif
 
 int steamAlive()
 {

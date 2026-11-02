@@ -2121,6 +2121,98 @@ void Cmd_SetSpawnPoint_f( gentity_t *clent ) {
 ClientCommand
 =================
 */
+/*
+===============================================================================
+RealRTCWX (Xbox): local achievements and the cheat menu
+
+Achievements: the Steam calls land in G_UWP_Achievement (steam.c), which
+tells cgame ("xbach <id>"); cgame shows the pop-up and keeps the unlocks on
+the console. None are awarded on a playthrough that used cheats.
+
+Cheats ("xbcheat <name>", from the in-game Cheats menu): the first one
+marks the playthrough (g_cheatedRun 1). The mark goes into every save of
+that run (save/<name>.cht, see G_SaveGame / G_LoadGame) and is cleared by
+starting a new campaign.
+===============================================================================
+*/
+#define XBCHEAT_GOD     1
+#define XBCHEAT_AMMO    2
+#define XBCHEAT_ONEHIT  4
+
+void G_UWP_Achievement( const char *id ) {
+	if ( !id || !id[0] || g_cheats.integer || trap_Cvar_VariableIntegerValue( "g_cheatedRun" ) ) {
+		return;
+	}
+	trap_SendServerCommand( -1, va( "xbach %s", id ) );
+}
+
+int G_XbCheats( void ) {
+	return trap_Cvar_VariableIntegerValue( "g_xbcheats" );
+}
+
+static void Cmd_XbCheat_f( gentity_t *ent ) {
+	char name[MAX_TOKEN_CHARS];
+	int bits = G_XbCheats(), i;
+
+	if ( trap_Argc() < 2 || ent->health <= 0 ) {
+		return;
+	}
+	trap_Argv( 1, name, sizeof( name ) );
+	trap_Cvar_Set( "g_cheatedRun", "1" );
+
+	if ( !Q_stricmp( name, "enable" ) ) {
+		trap_SendServerCommand( ent - g_entities, "cp \"Cheats enabled - achievements are off for this playthrough\"" );
+	} else if ( !Q_stricmp( name, "god" ) ) {
+		bits ^= XBCHEAT_GOD;
+		if ( bits & XBCHEAT_GOD ) {
+			ent->flags |= FL_GODMODE;
+		} else {
+			ent->flags &= ~FL_GODMODE;
+		}
+		trap_SendServerCommand( ent - g_entities, va( "cp \"God mode %s\"", ( bits & XBCHEAT_GOD ) ? "ON" : "OFF" ) );
+	} else if ( !Q_stricmp( name, "ammo" ) ) {
+		bits ^= XBCHEAT_AMMO;
+		trap_SendServerCommand( ent - g_entities, va( "cp \"Infinite ammo %s\"", ( bits & XBCHEAT_AMMO ) ? "ON" : "OFF" ) );
+	} else if ( !Q_stricmp( name, "onehit" ) ) {
+		bits ^= XBCHEAT_ONEHIT;
+		trap_SendServerCommand( ent - g_entities, va( "cp \"One-hit kills %s\"", ( bits & XBCHEAT_ONEHIT ) ? "ON" : "OFF" ) );
+	} else if ( !Q_stricmp( name, "noclip" ) ) {
+		ent->client->noclip = !ent->client->noclip;
+		trap_SendServerCommand( ent - g_entities, va( "cp \"No clipping %s\"", ent->client->noclip ? "ON" : "OFF" ) );
+	} else if ( !Q_stricmp( name, "weapons" ) ) {
+		for ( i = 0; i <= WP_M7; i++ ) {
+			COM_BitSet( ent->client->ps.weapons, i );
+		}
+		for ( i = 1; i < WP_MONSTER_ATTACK1; i++ ) {
+			Add_Ammo( ent, i, 999, qtrue );
+		}
+		trap_SendServerCommand( ent - g_entities, "cp \"All weapons\"" );
+	} else if ( !Q_stricmp( name, "health" ) ) {
+		ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
+		ent->client->ps.stats[STAT_ARMOR] = 100;
+		trap_SendServerCommand( ent - g_entities, "cp \"Health and armour restored\"" );
+	}
+	trap_Cvar_Set( "g_xbcheats", va( "%i", bits ) );
+}
+
+// every frame for the player: cheats that need keeping up
+void G_XbCheatThink( gentity_t *ent ) {
+	int bits = G_XbCheats();
+	if ( !bits || !ent->client || ( ent->r.svFlags & SVF_CASTAI ) ) {
+		return;
+	}
+	if ( bits & XBCHEAT_GOD ) {
+		ent->flags |= FL_GODMODE;
+	}
+	if ( ( bits & XBCHEAT_AMMO ) && ent->client->ps.weapon > WP_NONE && ent->client->ps.weapon < WP_NUM_WEAPONS ) {
+		int w = ent->client->ps.weapon;
+		ent->client->ps.ammoclip[BG_FindClipForWeapon( w )] = ammoTable[w].maxclip;
+		if ( ent->client->ps.ammo[BG_FindAmmoForWeapon( w )] < ammoTable[w].maxammo ) {
+			ent->client->ps.ammo[BG_FindAmmoForWeapon( w )] = ammoTable[w].maxammo;
+		}
+	}
+}
+
 void ClientCommand( int clientNum ) {
 	gentity_t *ent;
 	char cmd[MAX_TOKEN_CHARS];
@@ -2141,6 +2233,11 @@ void ClientCommand( int clientNum ) {
 		return;
 	}
 	// done.
+
+	if ( Q_stricmp( cmd, "xbcheat" ) == 0 ) {
+		Cmd_XbCheat_f( ent );
+		return;
+	}
 
 	// RF, client damage commands
 	if ( Q_stricmp( cmd, "cld" ) == 0 ) {

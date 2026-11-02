@@ -825,6 +825,7 @@ static consoleCommand_t commands[] = {
 	{"-xbview", CG_XbViewUp_f},
 	{"xbviewcombo", CG_XbViewCombo_f},
 	{"rdsavenow", CG_RagdollCheckSave},     // client, just before suspending
+	{"xbachreset", CG_AchReset_f},          // Cheats menu: reset achievements
 	{"+weaponwheel", CG_WeaponWheelDown_f},
 	{"-weaponwheel", CG_WeaponWheelUp_f}
 };

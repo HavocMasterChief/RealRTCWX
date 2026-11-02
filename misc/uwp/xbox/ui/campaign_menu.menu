@@ -379,7 +379,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill0 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill0 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -400,7 +400,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill1 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill1 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -421,7 +421,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill2 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill2 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -442,7 +442,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill3 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill3 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -463,7 +463,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill4 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill4 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -601,7 +601,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill0 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill0 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -622,7 +622,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill1 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill1 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -643,7 +643,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill2 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill2 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -664,7 +664,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill3 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill3 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -685,7 +685,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill4 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill4 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign }
 	}
 
 	itemDef {

@@ -303,8 +303,180 @@ def write_raw(name, text):
     print("wrote", name)
 
 
+# ---------------------------------------------------------------------------
+# Cheats (in-game): first "Enable cheats" (confirmed), then the list; plus
+# Reset achievements behind three confirmations. Appended to ingame.menu,
+# which holds several menuDefs like campaign_menu.menu.
+# ---------------------------------------------------------------------------
+def _btn(name, text, y, action, show=None, hide=None, w=240, x=30, color="1 1 1 1"):
+    test = ""
+    if show is not None:
+        test = f'\t\tcvarTest "g_cheatedRun"\n\t\tshowCvar {{ "{show}" }}\n'
+    elif hide is not None:
+        test = f'\t\tcvarTest "g_cheatedRun"\n\t\thideCvar {{ "{hide}" }}\n'
+    return f'''
+	itemDef {{
+		name {name}
+		type ITEM_TYPE_BUTTON
+		text "{text}"
+{test}		rect {x} {y} {w} 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor {color}
+		visible 1
+		action {{ {action} }}
+	}}
+'''
+
+
+def _label(text, y, scale=".22", color=".8 .72 .58 1", x=30, w=240):
+    return f'''
+	itemDef {{
+		name label
+		text "{text}"
+		rect {x} {y} {w} 16
+		textfont UI_FONT_DEFAULT
+		textscale {scale}
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 13
+		forecolor {color}
+		visible 1
+		decoration
+	}}
+'''
+
+
+def _window(name, rect, title, body, on_esc, on_open=""):
+    x, y, w, h = rect
+    return f'''
+menuDef {{
+	name "{name}"
+	visible 0
+	fullscreen 0
+	rect {x} {y} {w} {h}
+	focusColor 1 .75 0 1
+	style 1
+	border 1
+	onOpen {{ {on_open} }}
+	onESC {{ {on_esc} }}
+
+	itemDef {{
+		name window
+		rect 0 0 {w} {h}
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .4 .3 .8
+		backcolor .07 .05 .04 .94
+		visible 1
+		decoration
+	}}
+	itemDef {{
+		name window
+		rect 2 2 {w - 4} 22
+		style WINDOW_STYLE_FILLED
+		backcolor .45 .1 .07 .45
+		visible 1
+		decoration
+	}}
+	itemDef {{
+		name title
+		text "{title}"
+		rect 0 2 {w} 22
+		textfont UI_FONT_DEFAULT
+		textscale .27
+		textalign ITEM_ALIGN_CENTER
+		textalignx {w // 2}
+		textaligny 17
+		forecolor .94 .89 .78 1
+		visible 1
+		decoration
+	}}
+{body}
+}}
+'''
+
+
+def cheat_menus():
+    back = "close ingame_cheats ; open ingame"
+    body = _label("Using a cheat turns achievements off", 30) + _label("for this playthrough (all of its saves).", 44)
+    body += _btn("enable", "Enable cheats...", 70, "open xbox_cheat_confirm", hide="1", color="1 .8 .5 1")
+    rows = [("god", "God mode"), ("ammo", "Infinite ammo"), ("onehit", "One-hit kills"),
+            ("noclip", "No clipping"), ("weapons", "All weapons"), ("health", "Restore health and armour")]
+    y = 70
+    for cmd, text in rows:
+        body += _btn("cheat_" + cmd, text, y, f'exec "xbcheat {cmd}"', show="1")
+        y += 21
+    body += _btn("hidegun", "Hide / show weapon (screenshots)", y, 'exec "toggle cg_drawGun"')
+    y += 21
+    body += _label("Achievements are cheat-locked on this playthrough", y + 2, ".2", ".72 .27 .18 1") .replace('name label', 'name locked\n\t\tcvarTest "g_cheatedRun"\n\t\tshowCvar { "1" }')
+    y += 26
+    body += _btn("resetach", "Reset achievements...", y, "close ingame_cheats ; open xbox_achreset1", color="1 .55 .45 1")
+    y += 21
+    body += _btn("back", "Back", y, back)
+    out = _window("ingame_cheats", (190, 90, 300, y + 30), "CHEATS", body, back)
+
+    # enable confirmation
+    b = _label("Achievements won't unlock for the rest", 32) + _label("of this playthrough, in any of its saves.", 46)
+    b += _label("Starting a new campaign clears this.", 60, ".2", ".7 .62 .5 1")
+    b += _btn("yes", "Enable cheats", 86, 'exec "xbcheat enable" ; close xbox_cheat_confirm ; open ingame_cheats', color="1 .8 .5 1")
+    b += _btn("no", "Cancel", 107, "close xbox_cheat_confirm ; open ingame_cheats")
+    out += _window("xbox_cheat_confirm", (190, 140, 300, 140), "TURN OFF ACHIEVEMENTS?", b,
+                   "close xbox_cheat_confirm ; open ingame_cheats")
+
+    # reset: three confirmations
+    steps = [
+        ("xbox_achreset1", "RESET ACHIEVEMENTS?", ["This removes every achievement", "you have unlocked."], "Yes, reset them", "xbox_achreset2"),
+        ("xbox_achreset2", "ARE YOU SURE?", ["All of them will be locked again.", "This can't be undone."], "Yes, I'm sure", "xbox_achreset3"),
+        ("xbox_achreset3", "LAST CHANCE", ["Press Reset to erase every", "achievement now."], "Reset", None),
+    ]
+    for name, title, lines, yes, nxt in steps:
+        b = _label(lines[0], 32) + _label(lines[1], 46)
+        act = f"close {name} ; open {nxt}" if nxt else f'exec "xbachreset" ; close {name} ; open ingame_cheats'
+        # "No" first, so a stray A press backs out
+        b += _btn("no", "No, keep them", 74, f"close {name} ; open ingame_cheats")
+        b += _btn("yes", yes, 95, act, color="1 .55 .45 1")
+        out += _window(name, (190, 150, 300, 126), title, b, f"close {name} ; open ingame_cheats")
+    return out
+
+
+def cheats_button(t):
+    """A CHEATS entry under Quit in the in-game menu."""
+    item = '''
+	itemDef
+	{
+	name xbcheats
+	type 1
+	text "CHEATS"
+	cvarTest "g_gameType"
+	hideCvar { "3" }
+	rect 10 375 178 26
+	textfont UI_FONT_DEFAULT
+	textscale .3
+	textalign ITEM_ALIGN_LEFT
+	textalignx 14
+	textaligny 20
+	forecolor .85 .78 .64 1
+	visible 1
+	action { open ingame_cheats }
+	}
+'''
+    i = t.index("name quit")
+    j = t.index("}", t.index("mouseExit", i)) + 1      # end of its mouseExit { }
+    j = t.index("}", j) + 1                             # end of the quit item
+    t = t[:j] + "\n" + item + t[j:]
+    k = t.rindex("}")                                   # the file's outer brace
+    return t[:k] + cheat_menus() + "\n" + t[k:]
+
+
 def main():
     copy_stock_ui()
+    gen("ingame.menu", cheats_button)
     # Display
     for n in ("main_system_display.menu", "ingame_system_graphics.menu"):
         gen(n, lambda t: repack_rows(drop_items(t, lambda it: field(it, "cvar") in DISPLAY_DROP

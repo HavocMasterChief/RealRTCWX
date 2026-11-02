@@ -938,6 +938,10 @@ void ClientThink_real( gentity_t *ent ) {
 	static int wolfkicktimer = 0;
 
 	client = ent->client;
+	{
+		extern void G_XbCheatThink( gentity_t *ent );
+		G_XbCheatThink( ent );
+	}
 
 	// don't think if the client is not yet connected (and thus not yet spawned in)
 	if ( client->pers.connected != CON_CONNECTED ) {

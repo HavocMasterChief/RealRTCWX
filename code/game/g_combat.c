@@ -966,6 +966,12 @@ void G_DamageExt( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		return;
 	}
 
+	// RealRTCWX cheat menu: one-hit kills (the player's attacks only)
+	if ( attacker && attacker->client && !( attacker->r.svFlags & SVF_CASTAI ) && targ != attacker &&
+		 ( trap_Cvar_VariableIntegerValue( "g_xbcheats" ) & 4 ) ) {
+		damage = 10000;
+	}
+
 	// gas masks/armor make these troop types immune to poison gas damage
 	if ( mod == MOD_POISONGAS && ( targ->aiCharacter == AICHAR_SUPERSOLDIER || targ->aiCharacter == AICHAR_SUPERSOLDIER_LAB || targ->aiCharacter == AICHAR_VENOM || targ->aiCharacter == AICHAR_PROTOSOLDIER ) ) {
 		return;

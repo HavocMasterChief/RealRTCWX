@@ -1406,6 +1406,16 @@ qboolean G_SaveGame( char *username ) {
 
 	trap_FS_FCloseFile( f );
 
+	// RealRTCWX: whether this playthrough used cheats (save/<name>.cht)
+	{
+		fileHandle_t cf;
+		char cheat = trap_Cvar_VariableIntegerValue( "g_cheatedRun" ) ? '1' : '0';
+		if ( trap_FS_FOpenFile( va( "save\\%s.cht", username ), &cf, FS_WRITE ) >= 0 ) {
+			trap_FS_Write( &cheat, 1, cf );
+			trap_FS_FCloseFile( cf );
+		}
+	}
+
 	// tell cgame, which keeps the ragdoll poses next to the save
 	// (save/<name>.rag; see cg_ragdoll.c)
 	// ("levelTime name [name...]": several saves in one frame are listed together)
@@ -1450,6 +1460,32 @@ void G_LoadGame( char *filename ) {
 	}
 
 	G_DPrintf( "G_LoadGame '%s'\n", filename );
+
+	// RealRTCWX: the playthrough's cheat mark comes with the save
+	{
+		char cht[MAX_QPATH], *dot;
+		fileHandle_t cf;
+		char c = '0';
+		// the save that was asked for (the server copies it over the
+		// "current" save before loading, but not its .cht)
+		trap_Cvar_VariableStringBuffer( "savegame_filename", cht, sizeof( cht ) );
+		if ( !cht[0] ) {
+			Q_strncpyz( cht, filename, sizeof( cht ) );
+		}
+		dot = strrchr( cht, '.' );
+		if ( dot ) {
+			*dot = 0;
+		}
+		Q_strcat( cht, sizeof( cht ), ".cht" );
+		if ( trap_FS_FOpenFile( cht, &cf, FS_READ ) > 0 ) {
+			trap_FS_Read( &c, 1, cf );
+			trap_FS_FCloseFile( cf );
+		} else if ( cf ) {
+			trap_FS_FCloseFile( cf );
+		}
+		trap_Cvar_Set( "g_cheatedRun", c == '1' ? "1" : "0" );
+		trap_Cvar_Set( "g_xbcheats", "0" );
+	}
 
 	// enforce the "current" savegame, since that is used for all loads
 	filename = "save\\current_realrtcw.svg";

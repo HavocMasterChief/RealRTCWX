@@ -156,6 +156,8 @@ typedef struct {
 	int steps;
 	vec3_t restFrame[3];    // pelvis frame of the frozen pose (model space)
 	int stillSteps;
+	int awakeSteps;      // steps since it last woke (jittering bodies get put to sleep)
+	float jitter;        // recent movement, smoothed
 	qboolean sleeping;
 	float data[RD_SEGS][12];
 } ragdoll_t;
@@ -467,6 +469,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->pose = pose;
 	rd->accum = 0;
 	rd->stillSteps = 0;
+	rd->awakeSteps = 0;
+	rd->jitter = 1.0f;
 	rd->sleeping = qfalse;
 	rd->groundEnt = -1;
 	rd->lastThud = 0;
@@ -883,6 +887,13 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 	} else {
 		rd->stillSteps = 0;
 	}
+	// a body that never quite settles (wedged, or twitching between a
+	// limit and a wall) kept simulating forever and cost frame rate: after
+	// 6 s awake, if it's only shuffling in place, it goes to sleep
+	rd->jitter = rd->jitter * 0.95f + moved * 0.05f;
+	if ( ++rd->awakeSteps > 360 && rd->jitter < 1.5f ) {
+		rd->sleeping = qtrue;
+	}
 }
 
 // an orthonormal frame (axes as rows) from a primary and a helper direction
@@ -977,6 +988,8 @@ static void CG_RagdollWake( ragdoll_t *rd ) {
 	}
 	rd->sleeping = qfalse;
 	rd->stillSteps = 0;
+	rd->awakeSteps = 0;
+	rd->jitter = 1.0f;
 	rd->accum = 0;
 }
 
@@ -1183,7 +1196,7 @@ For dead (eligible) characters it runs the ragdoll and replaces the pose.
 ===============
 */
 // RealRTCWX: frame-rate watch (see CG_RagdollPerfFrame)
-static int rdPerfBodies, rdPerfMoving, rdPerfSteps, rdPerfMs;
+static int rdPerfBodies, rdPerfMoving, rdPerfSteps, rdPerfMs, rdFrameSteps;
 
 // every frame: if the game ran under 45 FPS over the last 2 s, log what
 // the bodies cost
@@ -1196,7 +1209,7 @@ void CG_RagdollPerfFrame( void ) {
 	moving += rdPerfMoving;
 	steps += rdPerfSteps;
 	ms += rdPerfMs;
-	rdPerfBodies = rdPerfMoving = rdPerfSteps = rdPerfMs = 0;
+	rdPerfBodies = rdPerfMoving = rdPerfSteps = rdPerfMs = rdFrameSteps = 0;
 	last = now;
 	if ( !start ) {
 		start = now;
@@ -1299,11 +1312,19 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 		rd->accum += dt;
 		rdPerfMoving++;
 		{
-			int t0 = trap_Milliseconds();
-			while ( rd->accum >= RD_STEP && !rd->sleeping ) {
+			// at most 2 steps a body per frame, and a budget for all of them:
+			// when the frame rate drops, bodies fall a little slower instead
+			// of each frame costing more and dropping it further
+			int t0 = trap_Milliseconds(), n = 0;
+			while ( rd->accum >= RD_STEP && !rd->sleeping && n < 2 && rdFrameSteps < 40 ) {
 				CG_RagdollStep( rd );
 				rd->accum -= RD_STEP;
 				rdPerfSteps++;
+				rdFrameSteps++;
+				n++;
+			}
+			if ( rd->accum > RD_STEP ) {
+				rd->accum = RD_STEP;
 			}
 			rdPerfMs += trap_Milliseconds() - t0;
 		}

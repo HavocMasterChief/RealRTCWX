@@ -41,8 +41,9 @@ RealRTCWX: frame-rate drops on the console. Every 2 s, if the game ran under
 front means the GPU (or the D3D12 translation) is the limit.
 */
 extern int tr_perfMdsVerts, tr_perfWoundVerts, tr_perfWoundMs;
+int tr_perfBackMs, tr_perfSwapMs;      // last frame's back end (and its swap), see RE_EndFrame / RB_SwapBuffers
 static void R_UWP_PerfWatch( void ) {
-	static int start, frames, front, back, surfs, verts, tris, dlv, flares, mds, wv, wms, ents, dls, maxms, last;
+	static int start, frames, front, back, swap, shaders, surfs, verts, tris, dlv, flares, mds, wv, wms, ents, dls, maxms, last;
 	int now = ri.Milliseconds(), ms;
 
 	ms = last ? now - last : 0;
@@ -52,7 +53,9 @@ static void R_UWP_PerfWatch( void ) {
 	}
 	frames++;
 	front += tr.frontEndMsec;
-	back += backEnd.pc.msec;
+	back += tr_perfBackMs;
+	swap += tr_perfSwapMs;
+	shaders += backEnd.pc.c_shaders;
 	surfs += backEnd.pc.c_surfaces;
 	verts += backEnd.pc.c_vertexes;
 	tris += backEnd.pc.c_indexes / 3;
@@ -71,15 +74,15 @@ static void R_UWP_PerfWatch( void ) {
 	if ( now - start >= 2000 ) {
 		float avg = (float)( now - start ) / frames;
 		if ( avg > 22.0f ) {
-			ri.Printf( PRINT_ALL, "perf: %.0f FPS (worst %i ms) | front %.1f back %.1f ms | %i surfs %ik verts %ik tris | "
+			ri.Printf( PRINT_ALL, "perf: %.0f FPS (worst %i ms) | front %.1f back %.1f (swap/GPU wait %.1f) ms | %i batches %i surfs %ik verts %ik tris | "
 					   "%i ents %i dlights %i dlight-verts %i flares | models %ik verts, wounds %ik verts %.1f ms\n",
-					   1000.0f / avg, maxms, (float)front / frames, (float)back / frames,
-					   surfs / frames, verts / frames / 1000, tris / frames / 1000,
+					   1000.0f / avg, maxms, (float)front / frames, (float)back / frames, (float)swap / frames,
+					   shaders / frames, surfs / frames, verts / frames / 1000, tris / frames / 1000,
 					   ents / frames, dls / frames, dlv / frames, flares / frames,
 					   mds / frames / 1000, wv / frames / 1000, (float)wms / frames );
 		}
 		start = now;
-		frames = front = back = surfs = verts = tris = dlv = flares = mds = wv = wms = ents = dls = maxms = 0;
+		frames = front = back = swap = shaders = surfs = verts = tris = dlv = flares = mds = wv = wms = ents = dls = maxms = 0;
 	}
 }
 #endif
@@ -648,6 +651,9 @@ void RE_EndFrame( int *frontEndMsec, int *backEndMsec ) {
 	cmd->commandId = RC_SWAP_BUFFERS;
 
 	R_IssueRenderCommands( qtrue );
+#ifdef RTCW_UWP
+	tr_perfBackMs = backEnd.pc.msec;
+#endif
 
 	R_InitNextFrame();
 

@@ -130,6 +130,7 @@ int time_frontend;          // renderer frontend time
 int time_backend;           // renderer backend time
 #ifdef RTCW_UWP
 static int com_uwpServerMs, com_uwpClientMs;
+int com_uwpCgameMs;     // cgame's frame, incl. the scene it hands the renderer (cl_cgame.c)
 #endif
 
 int com_frameTime;
@@ -2932,11 +2933,12 @@ void Com_Frame( void ) {
 		if ( now - start >= 2000 ) {
 			float avg = (float)( now - start ) / frames;
 			if ( avg > 22.0f && com_sv_running && com_sv_running->integer ) {
-				Com_Printf( "perf(frame): %.0f FPS | game/AI %.1f ms, client+render %.1f ms a frame\n",
-							1000.0f / avg, (float)com_uwpServerMs / frames, (float)com_uwpClientMs / frames );
+				Com_Printf( "perf(frame): %.0f FPS | game/AI %.1f ms, client+render %.1f ms (cgame %.1f) a frame\n",
+							1000.0f / avg, (float)com_uwpServerMs / frames, (float)com_uwpClientMs / frames,
+							(float)com_uwpCgameMs / frames );
 			}
 			start = now;
-			frames = com_uwpServerMs = com_uwpClientMs = 0;
+			frames = com_uwpServerMs = com_uwpClientMs = com_uwpCgameMs = 0;
 		}
 	}
 #else

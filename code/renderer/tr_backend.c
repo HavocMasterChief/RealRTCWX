@@ -1669,7 +1669,16 @@ const void  *RB_SwapBuffers( const void *data ) {
 		FBO_PostProcess();
 	}
 
+#ifdef RTCW_UWP
+	{
+		extern int tr_perfSwapMs;
+		int t0 = ri.Milliseconds();
+		GLimp_EndFrame();
+		tr_perfSwapMs = ri.Milliseconds() - t0;
+	}
+#else
 	GLimp_EndFrame();
+#endif
 
 	if ( fboEnabled ) {
 		FBO_BindMain();

@@ -1133,7 +1133,16 @@ CL_CGameRendering
 =====================
 */
 void CL_CGameRendering( stereoFrame_t stereo ) {
+#ifdef RTCW_UWP
+	{
+		extern int com_uwpCgameMs;
+		int t0 = Sys_Milliseconds();
+		VM_Call( cgvm, CG_DRAW_ACTIVE_FRAME, cl.serverTime, stereo, clc.demoplaying );
+		com_uwpCgameMs += Sys_Milliseconds() - t0;
+	}
+#else
 	VM_Call( cgvm, CG_DRAW_ACTIVE_FRAME, cl.serverTime, stereo, clc.demoplaying );
+#endif
 	VM_Debug( 0 );
 }
 

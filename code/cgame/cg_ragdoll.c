@@ -136,6 +136,9 @@ typedef struct {
 	int entityNum;
 	int slot;               // renderer slot 1..RD_MAX
 	int startTime, lastSeen;
+	int groundEnt;          // mover it's lying on (-1: none), carried along with it
+	vec3_t groundOrg;
+	int lastThud;
 	qhandle_t hModel;
 	refEntity_t pose;       // frozen death-animation pose + placement
 	vec3_t rest[J_NUM];     // joints in model space, frozen pose
@@ -402,6 +405,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->accum = 0;
 	rd->stillSteps = 0;
 	rd->sleeping = qfalse;
+	rd->groundEnt = -1;
+	rd->lastThud = 0;
 
 	rd->steps = 0;
 
@@ -699,6 +704,14 @@ static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
 			VectorSubtract( vel, vn, vt );
 			// floors grip, edges / step risers / slopes let it slide
 			keep = tr.plane.normal[2] > 0.9f ? 0.7f : 0.92f;
+			// a heavy part landing hard: thud
+			if ( ( i == J_PELVIS || i == J_CHEST || i == J_HEAD ) && -dn > 3.0f &&
+				 cg.time - rd->lastThud > 250 ) {
+				int vol = (int)( ( -dn - 3.0f ) * 40.0f + 60.0f );
+				rd->lastThud = cg.time;
+				trap_S_StartSoundVControl( tr.endpos, ENTITYNUM_WORLD, CHAN_AUTO, cgs.media.landSound,
+										   vol > 255 ? 255 : vol );
+			}
 			VectorMA( rd->p[i], -keep, vt, rd->old[i] );
 			VectorCopy( rd->p[i], start[i] );   // the second pass starts from here
 		} else {
@@ -860,6 +873,211 @@ static void CG_RagdollPose( ragdoll_t *rd ) {
 	}
 }
 
+// wake a body (it may have been locked or settled); keeps the moving cap
+static void CG_RagdollWake( ragdoll_t *rd ) {
+	int i, moving = 0, first = -1;
+	if ( !rd->sleeping ) {
+		rd->stillSteps = 0;
+		return;
+	}
+	for ( i = 0; i < RD_MAX; i++ ) {
+		if ( &rdBodies[i] == rd || !rdBodies[i].active || rdBodies[i].sleeping ) {
+			continue;
+		}
+		moving++;
+		if ( first < 0 || rdBodies[i].startTime < rdBodies[first].startTime ) {
+			first = i;
+		}
+	}
+	if ( moving >= RD_MAX_SIM && first >= 0 ) {
+		rdBodies[first].sleeping = qtrue;
+	}
+	rd->sleeping = qfalse;
+	rd->stillSteps = 0;
+	rd->accum = 0;
+}
+
+// give joints near 'point' a kick (units/s), falling off over 'spread'
+static void CG_RagdollKick( ragdoll_t *rd, const vec3_t point, const vec3_t vel, float spread, float minShare ) {
+	int i;
+	for ( i = 0; i < J_NUM; i++ ) {
+		float d2 = DistanceSquared( rd->p[i], point );
+		float w = minShare + ( 1.0f - minShare ) * exp( -d2 / ( 2.0f * spread * spread ) );
+		VectorMA( rd->old[i], -RD_STEP * w, vel, rd->old[i] );
+	}
+}
+
+/*
+===============
+CG_RagdollBullet
+
+Every bullet fired (anyone's): if its path crosses a ragdoll, the part it
+hits is knocked along the shot and bleeds. Done here rather than on the
+server, which only knows the box where the body died, not where it is now.
+===============
+*/
+void CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
+	vec3_t dir, far, c1, c2, hit;
+	ragdoll_t *best = NULL;
+	float bestS = 2.0f, len;
+	int i, c;
+
+	VectorSubtract( end, start, dir );
+	len = VectorNormalize( dir );
+	if ( len < 1 ) {
+		return;
+	}
+	VectorMA( end, 24, dir, far );  // the server's hit box can stop the bullet just short of the body
+	for ( i = 0; i < RD_MAX; i++ ) {
+		ragdoll_t *rd = &rdBodies[i];
+		float s, t, d;
+		if ( !rd->active ) {
+			continue;
+		}
+		// quick reject: pelvis far from the line
+		d = CG_SegSegDist( start, far, rd->p[J_PELVIS], rd->p[J_PELVIS], &s, &t, c1, c2 );
+		if ( d > 64 ) {
+			continue;
+		}
+		for ( c = 0; c < (int)RD_NUM_CAPS; c++ ) {
+			d = CG_SegSegDist( start, far, rd->p[rdCaps[c].a], rd->p[rdCaps[c].b], &s, &t, c1, c2 );
+			if ( d < rdCaps[c].r + 1.0f && s < bestS ) {
+				bestS = s;
+				best = rd;
+				VectorCopy( c1, hit );
+			}
+		}
+	}
+	if ( !best ) {
+		return;
+	}
+	CG_RagdollWake( best );
+	{
+		vec3_t vel;
+		VectorScale( dir, 230, vel );
+		vel[2] += 25;
+		CG_RagdollKick( best, hit, vel, 10.0f, 0.12f );
+	}
+	if ( best->entityNum < MAX_CLIENTS ) {
+		CG_Bleed( hit, best->entityNum );
+	}
+}
+
+/*
+===============
+CG_RagdollExplosion
+
+Throws every body in reach of a blast that isn't behind a wall.
+'strength' is the kick (units/s) right at the centre.
+===============
+*/
+void CG_RagdollExplosion( const vec3_t origin, float radius, float strength ) {
+	int i, j;
+	for ( i = 0; i < RD_MAX; i++ ) {
+		ragdoll_t *rd = &rdBodies[i];
+		trace_t tr;
+		if ( !rd->active || Distance( rd->p[J_PELVIS], origin ) > radius + 40 ) {
+			continue;
+		}
+		CG_Trace( &tr, origin, NULL, NULL, rd->p[J_PELVIS], rd->entityNum, MASK_SOLID );
+		if ( tr.fraction < 1.0f ) {
+			continue;   // sheltered
+		}
+		CG_RagdollWake( rd );
+		for ( j = 0; j < J_NUM; j++ ) {
+			vec3_t away;
+			float d, f;
+			VectorSubtract( rd->p[j], origin, away );
+			d = VectorNormalize( away );
+			if ( d >= radius ) {
+				continue;
+			}
+			f = 1.0f - d / radius;
+			f = strength * f * f;
+			away[2] += 0.6f;    // blasts lift
+			VectorMA( rd->old[j], -RD_STEP * f, away, rd->old[j] );
+		}
+	}
+}
+
+// the player walking into a body nudges the parts in the way
+static void CG_RagdollPlayerContact( ragdoll_t *rd ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	vec3_t mins = { -18, -18, -24 }, maxs = { 18, 18, 40 };
+	float speed;
+	int i;
+
+	if ( ps->pm_type == PM_DEAD || Distance( ps->origin, rd->p[J_PELVIS] ) > 96 ) {
+		return;
+	}
+	speed = sqrt( ps->velocity[0] * ps->velocity[0] + ps->velocity[1] * ps->velocity[1] );
+	if ( speed < 40 ) {
+		return;     // standing on or next to a body doesn't move it
+	}
+	for ( i = 0; i < J_NUM; i++ ) {
+		vec3_t rel, out;
+		float r = rdRadius[i], ox, oy;
+		VectorSubtract( rd->p[i], ps->origin, rel );
+		if ( rel[0] < mins[0] - r || rel[0] > maxs[0] + r || rel[1] < mins[1] - r || rel[1] > maxs[1] + r ||
+			 rel[2] < mins[2] - r || rel[2] > maxs[2] + r ) {
+			continue;
+		}
+		// push out sideways, the short way, and pass on some of the walk
+		ox = rel[0] > 0 ? ( maxs[0] + r - rel[0] ) : ( mins[0] - r - rel[0] );
+		oy = rel[1] > 0 ? ( maxs[1] + r - rel[1] ) : ( mins[1] - r - rel[1] );
+		VectorClear( out );
+		if ( fabs( ox ) < fabs( oy ) ) {
+			out[0] = ox;
+		} else {
+			out[1] = oy;
+		}
+		CG_RagdollWake( rd );
+		VectorAdd( rd->p[i], out, rd->p[i] );
+		VectorAdd( rd->old[i], out, rd->old[i] );
+		VectorMA( rd->old[i], -RD_STEP * 0.5f, ps->velocity, rd->old[i] );
+		rd->old[i][2] = rd->p[i][2] - ( rd->p[i][2] - rd->old[i][2] ) * 0.3f;   // don't fling it upward
+	}
+}
+
+// a body lying on a mover (the tram, a lift) rides along with it
+static void CG_RagdollRide( ragdoll_t *rd ) {
+	trace_t tr;
+	vec3_t down, delta;
+	int i;
+
+	VectorCopy( rd->p[J_PELVIS], down );
+	down[2] -= 24;
+	CG_Trace( &tr, rd->p[J_PELVIS], NULL, NULL, down, rd->entityNum, MASK_SOLID );
+	if ( tr.fraction < 1.0f && tr.entityNum != ENTITYNUM_WORLD && tr.entityNum < MAX_GENTITIES &&
+		 ( cg_entities[tr.entityNum].currentState.eType == ET_MOVER ||
+		   cg_entities[tr.entityNum].currentState.eType == ET_MOVERSCALED ) ) {
+		if ( rd->groundEnt != tr.entityNum ) {
+			rd->groundEnt = tr.entityNum;
+			VectorCopy( cg_entities[tr.entityNum].lerpOrigin, rd->groundOrg );
+			return;
+		}
+	} else if ( tr.fraction < 1.0f ) {
+		rd->groundEnt = -1;     // on the world now
+		return;
+	}
+	if ( rd->groundEnt < 0 ) {
+		return;
+	}
+	VectorSubtract( cg_entities[rd->groundEnt].lerpOrigin, rd->groundOrg, delta );
+	VectorCopy( cg_entities[rd->groundEnt].lerpOrigin, rd->groundOrg );
+	if ( VectorLengthSquared( delta ) < 1e-4f ) {
+		return;
+	}
+	for ( i = 0; i < J_NUM; i++ ) {
+		VectorAdd( rd->p[i], delta, rd->p[i] );
+		VectorAdd( rd->old[i], delta, rd->old[i] );
+	}
+	VectorAdd( rd->pose.origin, delta, rd->pose.origin );   // model space stays the same
+	if ( rd->sleeping ) {
+		CG_RagdollPose( rd );
+	}
+}
+
 /*
 ===============
 CG_RagdollBody
@@ -899,6 +1117,9 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 		}
 	}
 	rd->lastSeen = cg.time;
+
+	CG_RagdollRide( rd );
+	CG_RagdollPlayerContact( rd );
 
 	// simulate (fixed steps, at most a few per frame)
 	if ( !rd->sleeping ) {

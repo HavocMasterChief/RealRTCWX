@@ -1550,6 +1550,60 @@ extern void CG_SetupDlightstyles( void );
 
 /*
 =================
+Flashlight (Xbox: tap View; hold View still opens the dossier)
+=================
+*/
+static qboolean cgFlashlight;
+static int cgXbViewDownTime;
+static qboolean cgXbViewHeldAction;
+
+#define XBVIEW_HOLD_MS 400
+
+void CG_XbViewDown_f( void ) {
+	if ( cgXbViewDownTime ) {
+		return;     // key repeat
+	}
+	cgXbViewDownTime = trap_Milliseconds();
+	cgXbViewHeldAction = qfalse;
+}
+
+void CG_XbViewUp_f( void ) {
+	if ( cgXbViewDownTime && !cgXbViewHeldAction ) {
+		cgFlashlight = !cgFlashlight;
+		trap_S_StartLocalSound( cgs.media.noFireUnderwater, CHAN_LOCAL_SOUND );   // a dry click
+	}
+	cgXbViewDownTime = 0;
+}
+
+void CG_AddFlashlight( void ) {
+	trace_t tr;
+	vec3_t end, spot, near;
+	float dist, f;
+
+	// held long enough: the dossier, as before
+	if ( cgXbViewDownTime && !cgXbViewHeldAction && trap_Milliseconds() - cgXbViewDownTime >= XBVIEW_HOLD_MS ) {
+		cgXbViewHeldAction = qtrue;
+		trap_SendConsoleCommand( "notebook\n" );
+	}
+
+	if ( !cgFlashlight || cg.snap->ps.pm_type == PM_DEAD || cg.snap->ps.pm_type == PM_INTERMISSION ||
+		 cg.renderingThirdPerson || cg.cameraMode ) {
+		return;
+	}
+	// where the beam lands: a light there, sized like a cone's spot
+	VectorMA( cg.refdef.vieworg, 1200, cg.refdef.viewaxis[0], end );
+	CG_Trace( &tr, cg.refdef.vieworg, NULL, NULL, end, cg.snap->ps.clientNum, MASK_SHOT );
+	dist = 1200 * tr.fraction;
+	f = 1.0f - dist / 1400.0f;     // dims with distance
+	VectorMA( tr.endpos, -( 8 + dist * 0.08f ), cg.refdef.viewaxis[0], spot );
+	trap_R_AddLightToScene( spot, 90 + dist * 0.22f, 1.0f * f, 0.95f * f, 0.82f * f, 0 );
+	// and a little spill close to you, so the gun and nearby walls catch it
+	VectorMA( cg.refdef.vieworg, 48, cg.refdef.viewaxis[0], near );
+	trap_R_AddLightToScene( near, 110, 0.35f, 0.33f, 0.29f, 0 );
+}
+
+/*
+=================
 CG_DrawActiveFrame
 
 Generates and draws a game scene and status information at the given time.
@@ -1733,6 +1787,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		DEBUGTIME
 
 		CG_AddLocalEntities();
+		CG_AddFlashlight();
 
 		DEBUGTIME
 

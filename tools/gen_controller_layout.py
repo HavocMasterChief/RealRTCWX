@@ -108,10 +108,12 @@ def main():
             d.ellipse(s([tx - 3, ty - 3, tx + 3, ty + 3]), fill=LINE)
 
     # View / Menu: labels above the controller, lines straight down
-    for bx, btn, act, align in ((482, "View", "Dossier", "R"), (542, "Menu", "Pause", "L")):
-        d.line(s([bx, 205, bx, 70]), fill=LINE, width=2 * K)
+    for bx, btn, act, align in ((482, "View", "Flashlight\nHold: Dossier", "R"), (542, "Menu", "Pause", "L")):
+        lines = act.split("\n")
+        d.line(s([bx, 205, bx, 70 + 22 * (len(lines) - 1)]), fill=LINE, width=2 * K)
         d.ellipse(s([bx - 3, 202, bx + 3, 208]), fill=LINE)
-        for text, font, col, yy in ((btn, fb, KEY, 22), (act, fr, TEXT, 45)):
+        rows = [(btn, fb, KEY, 22)] + [(t, fr, TEXT, 45 + 22 * n) for n, t in enumerate(lines)]
+        for text, font, col, yy in rows:
             tw = d.textlength(text, font=font)
             x = (bx - 8) * K - tw if align == "R" else (bx + 8) * K
             d.text((x, yy * K), text, font=font, fill=col)

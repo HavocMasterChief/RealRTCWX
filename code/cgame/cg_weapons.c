@@ -6748,6 +6748,8 @@ void CG_MissileHitWall( int weapon, int clientNum, vec3_t origin, vec3_t dir, in
 	//
 	if ( shakeAmt ) {
 		CG_StartShakeCamera( shakeAmt, shakeDur, origin, shakeRad );
+		// throw nearby bodies (grenade ~ 0.15: 260 units, rockets more)
+		CG_RagdollExplosion( origin, 180 + 550 * shakeAmt, 1400 * ( shakeAmt < 0.4f ? shakeAmt : 0.4f ) + 250 );
 	}
 
 
@@ -7171,6 +7173,16 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 
 	if ( flesh ) {
 		CG_RagdollNoteHit( fleshEntityNum, end, sourceEntityNum );
+	}
+	// dead bodies can be shot (see cg_ragdoll.c)
+	{
+		vec3_t rstart;
+		if ( sourceEntityNum == cg.snap->ps.clientNum ) {
+			VectorCopy( cg.refdef.vieworg, rstart );
+			CG_RagdollBullet( rstart, end );
+		} else if ( sourceEntityNum >= 0 && CG_CalcMuzzlePoint( sourceEntityNum, rstart ) ) {
+			CG_RagdollBullet( rstart, end );
+		}
 	}
 
 	// if the shooter is currently valid, calc a source point and possibly

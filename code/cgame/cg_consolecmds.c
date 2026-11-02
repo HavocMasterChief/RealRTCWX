@@ -821,6 +821,8 @@ static consoleCommand_t commands[] = {
 	{"dumpsound", CG_DumpSound_f},
 	{"listsounds", CG_ListSounds_f},
 	{"deletesound", CG_DeleteSound_f},
+	{"+xbview", CG_XbViewDown_f},     // Xbox View: tap = flashlight, hold = dossier
+	{"-xbview", CG_XbViewUp_f},
 	{"+weaponwheel", CG_WeaponWheelDown_f},
 	{"-weaponwheel", CG_WeaponWheelUp_f}
 };

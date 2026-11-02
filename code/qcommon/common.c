@@ -1973,6 +1973,11 @@ void Com_ExecuteCfg(void)
 		Cbuf_Execute();
 		Cbuf_ExecuteText(EXEC_NOW, "exec " RRTCW_VARIABLES "\n");
 		Cbuf_Execute();
+#ifdef RTCW_UWP
+		// Xbox: View is tap = flashlight, hold = dossier (handled in cgame)
+		Cbuf_ExecuteText(EXEC_NOW, "bind PAD0_BACK +xbview\n");
+		Cbuf_Execute();
+#endif
 		Cbuf_ExecuteText(EXEC_NOW, "exec autoexec.cfg\n");
 		Cbuf_Execute();
 	}

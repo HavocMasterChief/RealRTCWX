@@ -5572,9 +5572,12 @@ void CG_UpdateWeaponWheelSelection( float cursorx, float cursory ) {
 		}
 
 		float sectorSize = ( 2.0f * M_PI ) / (float)numVisible;
-		float angleOffset = sectorSize * 0.5f;
 
-		idx = (int)( ( angle + angleOffset ) / sectorSize );
+		// icons are drawn at the middle of their sectors (CG_DrawWeaponWheel:
+		// idx * sector + sector / 2, measured from straight up), so sector
+		// idx starts at idx * sector; adding half a sector here put every
+		// selection half a slot off from the icon under the stick
+		idx = (int)( angle / sectorSize );
 
 		if ( idx >= numVisible ) {
 			idx = 0;

@@ -204,6 +204,12 @@ that object: remember where it was, and offset the effect by how far it
 has moved since.
 ===============
 */
+// invisible walls (clip / nodraw brushes, like the ones keeping you off a
+// ledge) and sky are solid to traces but nothing to draw blood on
+static qboolean CG_GoreVisible( const trace_t *tr ) {
+	return !( tr->surfaceFlags & ( SURF_NODRAW | SURF_SKY ) );
+}
+
 static void CG_GoreAttach( int entityNum, int *outEnt, vec3_t outOrigin ) {
 	if ( entityNum >= 0 && entityNum < MAX_GENTITIES && entityNum != ENTITYNUM_WORLD ) {
 		*outEnt = entityNum;
@@ -264,11 +270,16 @@ static float CG_GoreLightAt( const vec3_t point ) {
 
 // blood colour at a given light level, as vertex colours
 static void CG_GoreColor( float light, float alpha, byte *out ) {
-	// about the darkness of the game's own blood decals
-	// the texture holds the blood colour; this only darkens it in shadow
-	float k = 0.45f + 0.45f * light;
-	out[0] = out[1] = out[2] = (byte)( 255 * k );
-	out[3] = (byte)( 255 * alpha );
+	// the blood filters the surface under it (see zz_xbox_gore.shader), so
+	// the level's light already applies; grey only sets how strong it is
+	(void)light;
+	if ( alpha < 0 ) {
+		alpha = 0;
+	} else if ( alpha > 1 ) {
+		alpha = 1;
+	}
+	out[0] = out[1] = out[2] = (byte)( 255 * alpha );
+	out[3] = 255;
 }
 
 /*
@@ -400,7 +411,7 @@ static void CG_GorePoolAt( const vec3_t point, float radius, int growTime ) {
 	VectorCopy( point, end );
 	end[2] -= 96;
 	CG_Trace( &tr, start, NULL, NULL, end, -1, MASK_SOLID );
-	if ( tr.fraction >= 1.0f || tr.startsolid || tr.plane.normal[2] < 0.7f ) {
+	if ( tr.fraction >= 1.0f || tr.startsolid || tr.plane.normal[2] < 0.7f || !CG_GoreVisible( &tr ) ) {
 		CG_GoreLog( "pool: no floor below (%.0f %.0f %.0f) frac=%.2f startsolid=%i nz=%.2f\n",
 					point[0], point[1], point[2], tr.fraction, tr.startsolid, tr.plane.normal[2] );
 		return;
@@ -451,6 +462,10 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 		CG_GoreLog( "run: no wall behind (%.0f %.0f %.0f)\n", point[0], point[1], point[2] );
 		return;
 	}
+	if ( !CG_GoreVisible( &tr ) ) {
+		CG_GoreLog( "run: invisible wall at (%.0f %.0f %.0f)\n", point[0], point[1], point[2] );
+		return;
+	}
 	wallEnt = tr.entityNum;
 
 	maxLen = 32 + random() * 72;
@@ -471,7 +486,7 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 		VectorMA( cur, 1.0f, normal, a );
 		VectorMA( cur, -4.0f, normal, b );
 		CG_Trace( &tr, a, NULL, NULL, b, -1, MASK_SOLID );
-		if ( tr.fraction >= 1.0f || tr.entityNum != wallEnt ||
+		if ( tr.fraction >= 1.0f || tr.entityNum != wallEnt || !CG_GoreVisible( &tr ) ||
 			 DotProduct( tr.plane.normal, normal ) < 0.85f ) {
 			break;
 		}
@@ -563,6 +578,16 @@ void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal ) {
 	if ( normal[2] < -0.6f ) {
 		goreDrip_t *d;
 		int i;
+		{
+			trace_t tr;
+			vec3_t a, b;
+			VectorMA( point, 2.0f, normal, a );
+			VectorMA( point, -4.0f, normal, b );
+			CG_Trace( &tr, a, NULL, NULL, b, -1, MASK_SOLID );
+			if ( tr.fraction >= 1.0f || !CG_GoreVisible( &tr ) ) {
+				return;     // no real ceiling there (sky, clip)
+			}
+		}
 		// don't stack drip points on top of each other
 		for ( i = 0; i < GORE_MAX_DRIPS; i++ ) {
 			if ( goDrips[i].active && Distance( goDrips[i].origin, point ) < 12 ) {
@@ -985,7 +1010,7 @@ static void CG_GoreUpdateFeet( void ) {
 	VectorCopy( start, end );
 	end[2] -= 64;
 	CG_Trace( &tr, start, NULL, NULL, end, ps->clientNum, MASK_SOLID );
-	if ( tr.fraction < 1.0f && !tr.startsolid && tr.plane.normal[2] > 0.7f ) {
+	if ( tr.fraction < 1.0f && !tr.startsolid && tr.plane.normal[2] > 0.7f && CG_GoreVisible( &tr ) ) {
 		CG_GoreSpawnFoot( tr.endpos, tr.plane.normal, forward,
 						  (float)goFootSteps / GORE_FOOT_STEPS, goFootLeft, tr.entityNum );
 	}

@@ -605,6 +605,77 @@ static void CG_RagdollJointLimits( ragdoll_t *rd ) {
 	}
 }
 
+// one pass over every joint constraint
+static void CG_RagdollConstrain( ragdoll_t *rd ) {
+	vec3_t d;
+	int i;
+
+	for ( i = 0; i < (int)RD_NUM_STICKS; i++ ) {
+		float *a = rd->p[rdSticks[i][0]], *b = rd->p[rdSticks[i][1]];
+		float len, diff;
+		VectorSubtract( b, a, d );
+		len = VectorLength( d );
+		if ( len < 0.001f ) {
+			continue;
+		}
+		diff = ( len - rd->stick[i] ) / len * 0.5f;
+		VectorMA( a, diff, d, a );
+		VectorMA( b, -diff, d, b );
+	}
+	for ( i = 0; i < (int)RD_NUM_LIMITS; i++ ) {
+		float *a = rd->p[rdLimits[i].a], *b = rd->p[rdLimits[i].b];
+		float len, diff;
+		VectorSubtract( b, a, d );
+		len = VectorLength( d );
+		if ( len < 0.001f || len >= rd->limit[i] ) {
+			continue;
+		}
+		diff = ( len - rd->limit[i] ) / len * 0.5f;
+		VectorMA( a, diff, d, a );
+		VectorMA( b, -diff, d, b );
+	}
+	CG_RagdollJointLimits( rd );
+	CG_RagdollSelfCollide( rd );
+}
+
+// move each joint from where it was this step to where it wants to be,
+// stopping at the world; sliding keeps most of its motion (bodies slide
+// and tumble off steps and edges instead of sticking to them)
+static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
+	int i;
+	for ( i = 0; i < J_NUM; i++ ) {
+		trace_t tr;
+		vec3_t mins, maxs;
+		float r = rdRadius[i];
+
+		VectorSet( mins, -r, -r, -r );
+		VectorSet( maxs, r, r, r );
+		CG_Trace( &tr, start[i], mins, maxs, rd->p[i], rd->entityNum, MASK_SOLID );
+		if ( tr.allsolid ) {
+			// started inside (a step corner): stay put this step, but keep
+			// half the motion so the constraints can work it loose
+			vec3_t vel;
+			VectorSubtract( rd->p[i], start[i], vel );
+			VectorCopy( start[i], rd->p[i] );
+			VectorMA( start[i], -0.5f, vel, rd->old[i] );
+		} else if ( tr.fraction < 1.0f ) {
+			vec3_t vel, vn, vt;
+			float dn, keep;
+			VectorSubtract( rd->p[i], start[i], vel );
+			VectorMA( tr.endpos, 0.05f, tr.plane.normal, rd->p[i] );
+			dn = DotProduct( vel, tr.plane.normal );
+			VectorScale( tr.plane.normal, dn, vn );
+			VectorSubtract( vel, vn, vt );
+			// floors grip, edges / step risers / slopes let it slide
+			keep = tr.plane.normal[2] > 0.9f ? 0.7f : 0.92f;
+			VectorMA( rd->p[i], -keep, vt, rd->old[i] );
+			VectorCopy( rd->p[i], start[i] );   // the second pass starts from here
+		} else {
+			VectorCopy( rd->p[i], start[i] );
+		}
+	}
+}
+
 /*
 ===============
 CG_RagdollStep
@@ -613,7 +684,7 @@ One fixed physics step.
 ===============
 */
 static void CG_RagdollStep( ragdoll_t *rd ) {
-	vec3_t start[J_NUM], v, d;
+	vec3_t start[J_NUM], orig[J_NUM], v;
 	float moved = 0;
 	int i, it;
 
@@ -661,63 +732,25 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 
 	// constraints
 	for ( it = 0; it < RD_ITER; it++ ) {
-		for ( i = 0; i < (int)RD_NUM_STICKS; i++ ) {
-			float *a = rd->p[rdSticks[i][0]], *b = rd->p[rdSticks[i][1]];
-			float len, diff;
-			VectorSubtract( b, a, d );
-			len = VectorLength( d );
-			if ( len < 0.001f ) {
-				continue;
-			}
-			diff = ( len - rd->stick[i] ) / len * 0.5f;
-			VectorMA( a, diff, d, a );
-			VectorMA( b, -diff, d, b );
-		}
-		for ( i = 0; i < (int)RD_NUM_LIMITS; i++ ) {
-			float *a = rd->p[rdLimits[i].a], *b = rd->p[rdLimits[i].b];
-			float len, diff;
-			VectorSubtract( b, a, d );
-			len = VectorLength( d );
-			if ( len < 0.001f || len >= rd->limit[i] ) {
-				continue;
-			}
-			diff = ( len - rd->limit[i] ) / len * 0.5f;
-			VectorMA( a, diff, d, a );
-			VectorMA( b, -diff, d, b );
-		}
-		CG_RagdollJointLimits( rd );
-		CG_RagdollSelfCollide( rd );
+		CG_RagdollConstrain( rd );
 	}
 
-	// collide with the world
+	// collide with the world, then let the joints settle against what they
+	// hit and collide again (so constraints can't drag a joint into a step)
+	memcpy( orig, start, sizeof( orig ) );
+	CG_RagdollCollide( rd, start );
+	for ( it = 0; it < 2; it++ ) {
+		CG_RagdollConstrain( rd );
+	}
+	CG_RagdollCollide( rd, start );
 	for ( i = 0; i < J_NUM; i++ ) {
-		trace_t tr;
-		vec3_t mins, maxs;
-		float r = rdRadius[i];
-
-		VectorSet( mins, -r, -r, -r );
-		VectorSet( maxs, r, r, r );
-		CG_Trace( &tr, start[i], mins, maxs, rd->p[i], rd->entityNum, MASK_SOLID );
-		if ( tr.allsolid ) {
-			VectorCopy( start[i], rd->p[i] );
-			VectorCopy( start[i], rd->old[i] );
-		} else if ( tr.fraction < 1.0f ) {
-			vec3_t vel, vn, vt;
-			float dn;
-			VectorSubtract( rd->p[i], start[i], vel );
-			VectorMA( tr.endpos, 0.05f, tr.plane.normal, rd->p[i] );
-			// friction: keep a bit of the sliding motion, none into the surface
-			dn = DotProduct( vel, tr.plane.normal );
-			VectorScale( tr.plane.normal, dn, vn );
-			VectorSubtract( vel, vn, vt );
-			VectorMA( rd->p[i], -0.55f, vt, rd->old[i] );
-		}
-		moved += Distance( rd->p[i], start[i] );
+		moved += Distance( rd->p[i], orig[i] );
 	}
 
-	// settled?
-	if ( moved < 0.15f ) {
-		if ( ++rd->stillSteps > 45 ) {
+	// settled? (a little longer than before, so a body balanced on an
+	// edge gets the chance to tip off it)
+	if ( moved < 0.12f ) {
+		if ( ++rd->stillSteps > 75 ) {
 			rd->sleeping = qtrue;
 		}
 	} else {

@@ -3,8 +3,7 @@
 Generates the gore textures in misc/uwp/xbox/gore/ (see code/cgame/cg_gore.c
 and misc/uwp/xbox/scripts/gore.shader).
 
-Alpha holds how thick the blood is; the colour comes from vertex colours,
-which cg_gore.c darkens with the level's light at that spot. Every
+Each effect is an absorption texture (see save()), one per blood colour. Every
 texture's outer rows/columns are transparent, because the effects "grow"
 by stretching the texture with clamped coordinates.
 """
@@ -18,22 +17,34 @@ OUT = os.path.join(ROOT, "misc", "uwp", "xbox", "gore")
 
 
 
+# How much light thick blood lets through, per channel (red, green, blue).
+# The blood is drawn as a filter over the surface (blendFunc GL_ZERO
+# GL_ONE_MINUS_SRC_COLOR), so it's lit exactly like the floor or wall under
+# it: dark red in daylight, nearly black in shadow, never brighter than the
+# surface itself.
+TRANSMIT = {
+    "": (0.40, 0.035, 0.03),          # red
+    "_green": (0.06, 0.30, 0.04),     # green blood option
+}
+
+
 def save(density, name):
-    """density: L image (0..255). Alpha = density; RGB is the blood colour
-    itself (dark red, a little darker where it's thickest), like the game's
-    own blood decals. Vertex colours only darken it for the level's light;
-    green blood uses the renderer's automatic "#green" variant."""
+    """density: L image (0..255). Writes an "absorption" texture per blood
+    colour: RGB = how much of each channel the blood takes away (0 = clear,
+    255 = black). cg_gore.c fades effects by scaling it with vertex colours."""
     w, h = density.size
     d = density.load()
-    img = Image.new("RGBA", (w, h))
-    p = img.load()
-    for y in range(h):
-        for x in range(w):
-            v = d[x, y] / 255.0
-            k = 1.0 - 0.35 * v
-            p[x, y] = (int(72 * k), int(6 * k), int(5 * k), int(255 * min(1.0, v * 1.05)))
-    img.save(os.path.join(OUT, f"{name}.tga"))
-    print("wrote", f"{name}.tga")
+    for suffix, tr in TRANSMIT.items():
+        img = Image.new("RGBA", (w, h))
+        p = img.load()
+        for y in range(h):
+            for x in range(w):
+                v = min(1.0, d[x, y] / 255.0 * 1.05)
+                # thickest parts a little darker still
+                k = [1.0 - c * (1.0 - 0.35 * v) for c in tr]
+                p[x, y] = tuple(int(255 * v * kk) for kk in k) + (int(255 * v),)
+        img.save(os.path.join(OUT, f"{name}{suffix}.tga"))
+        print("wrote", f"{name}{suffix}.tga")
 
 
 def clear_border(img, n=2):

@@ -4167,6 +4167,16 @@ static void CG_Draw2D(stereoFrame_t stereoFrame) {
 		return;
 	}
 
+	// RealRTCWX skulls: the newsreel film look goes over the picture; Blind
+	// leaves only fades and scopes
+	CG_XbSkullsDraw2D();
+	if ( CG_Skull( 1 << 11 ) && !cg.cameraMode ) {
+		CG_DrawFlashBlend();
+		CG_DrawWeapReticle();
+		CG_DrawGameSavedString();
+		return;
+	}
+
 	if ( cg.cameraMode ) { //----(SA)	no 2d when in camera view
 		CG_DrawFlashBlend();    // (for fades)
 	//	return;

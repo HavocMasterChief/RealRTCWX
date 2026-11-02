@@ -281,6 +281,9 @@ static void CG_GoreColor( float light, float alpha, byte *out ) {
 	}
 	out[0] = out[1] = out[2] = (byte)( 255 * alpha );
 	out[3] = 255;
+	if ( CG_Skull( 1 << 7 ) ) {
+		CG_XbPaintModulate( light, out );     // Confetti Blood: paint colours
+	}
 }
 
 /*

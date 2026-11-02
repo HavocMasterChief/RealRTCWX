@@ -154,6 +154,12 @@ void GL_Cull( int cullType ) {
 		{
 			cullFront = !cullFront;
 		}
+#ifdef RTCW_UWP
+		if ( backEnd.viewParms.xbFlipX && !backEnd.projection2D )
+		{
+			cullFront = !cullFront;     // Mirror World skull
+		}
+#endif
 
 		qglCullFace( cullFront ? GL_FRONT : GL_BACK );
 	}

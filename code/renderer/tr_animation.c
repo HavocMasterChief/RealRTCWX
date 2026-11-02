@@ -1146,6 +1146,19 @@ void R_AddBodyHoles( void ) {
 			v[k].st[1] = sy > 0 ? 1 : 0;
 			v[k].modulate[0] = v[k].modulate[1] = v[k].modulate[2] = v[k].modulate[3] = 255;
 		}
+		{
+			// Confetti Blood skull: paint colours (what the filter leaves)
+			extern cvar_t *r_xbSkulls;
+			if ( r_xbSkulls && ( r_xbSkulls->integer & ( 1 << 7 ) ) && h->kind != 2 ) {
+				static const byte keep[4][3] = { { 255, 255, 0 }, { 255, 0, 255 }, { 0, 0, 255 }, { 0, 255, 0 } };
+				int pk = ( i * 3 + h->variant ) % 4;
+				for ( k = 0; k < 4; k++ ) {
+					v[k].modulate[0] = keep[pk][0];
+					v[k].modulate[1] = keep[pk][1];
+					v[k].modulate[2] = keep[pk][2];
+				}
+			}
+		}
 		RE_AddPolyToScene( sh[h->kind][h->variant % 3], 4, v );
 	}
 	tr_numBodyHoles = 0;

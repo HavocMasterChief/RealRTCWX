@@ -2885,7 +2885,7 @@ char *AIFunc_BattleChase( cast_state_t *cs ) {
 		 ( cs->startGrenadeFlushTime < level.time - 3000 ) &&
 		 ( COM_BitCheck( cs->bs->cur_ps.weapons, WP_GRENADE_LAUNCHER ) ) &&
 		 ( AICast_GotEnoughAmmoForWeapon( cs, WP_GRENADE_LAUNCHER ) ) &&
-		 ( cs->weaponFireTimes[WP_GRENADE_LAUNCHER] < level.time - (int)( 1000 + aicast_skillscale * 1000 ) ) &&
+		 ( cs->weaponFireTimes[WP_GRENADE_LAUNCHER] < level.time - G_SkullGrenadeDelay( (int)( 1000 + aicast_skillscale * 1000 ) ) ) &&
 		 ( ( cs->weaponNum == WP_GRENADE_LAUNCHER ) || !( cs->castScriptStatus.scriptFlags & SFL_NOCHANGEWEAPON ) ) &&
 		 ( Distance( cs->bs->origin, cs->vislist[cs->enemyNum].visible_pos ) > 100 ) &&
 		 ( Distance( cs->bs->origin, cs->vislist[cs->enemyNum].visible_pos ) < 1400 ) ) {
@@ -4827,7 +4827,7 @@ char *AIFunc_Battle( cast_state_t *cs ) {
 			 ( cs->castScriptStatus.castScriptEventIndex < 0 ) &&
 			 (   (   ( COM_BitCheck( cs->bs->cur_ps.weapons, WP_GRENADE_LAUNCHER ) ) &&
 					 ( AICast_GotEnoughAmmoForWeapon( cs, WP_GRENADE_LAUNCHER ) ) &&
-					 ( cs->weaponFireTimes[WP_GRENADE_LAUNCHER] < level.time - (int)( aicast_skillscale * 3000 ) ) ) ||
+					 ( cs->weaponFireTimes[WP_GRENADE_LAUNCHER] < level.time - G_SkullGrenadeDelay( (int)( aicast_skillscale * 3000 ) ) ) ) ||
 				 (   ( COM_BitCheck( cs->bs->cur_ps.weapons, WP_GRENADE_PINEAPPLE ) ) &&
 					( AICast_GotEnoughAmmoForWeapon( cs, WP_GRENADE_PINEAPPLE ) ) &&
 					( cs->weaponFireTimes[WP_GRENADE_PINEAPPLE] < level.time - (int)( aicast_skillscale * 3000 ) ) ) ) &&
@@ -4921,7 +4921,7 @@ char *AIFunc_Battle( cast_state_t *cs ) {
 		 ( cs->startGrenadeFlushTime < level.time - 3000 ) &&
 		 ( COM_BitCheck( cs->bs->cur_ps.weapons, WP_GRENADE_LAUNCHER ) ) &&
 		 ( AICast_GotEnoughAmmoForWeapon( cs, WP_GRENADE_LAUNCHER ) ) &&
-		 ( cs->weaponFireTimes[WP_GRENADE_LAUNCHER] < level.time - (int)( aicast_skillscale * 3000 ) ) &&
+		 ( cs->weaponFireTimes[WP_GRENADE_LAUNCHER] < level.time - G_SkullGrenadeDelay( (int)( aicast_skillscale * 3000 ) ) ) &&
 		 ( ( cs->weaponNum == WP_GRENADE_LAUNCHER ) || !( cs->castScriptStatus.scriptFlags & SFL_NOCHANGEWEAPON ) ) &&
 		 ( Distance( cs->bs->origin, cs->vislist[cs->enemyNum].real_visible_pos ) > 100 ) &&
 		 ( Distance( cs->bs->origin, cs->vislist[cs->enemyNum].real_visible_pos ) < 2000 ) ) {

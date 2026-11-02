@@ -1772,6 +1772,7 @@ int Cmd_WolfKick_f( gentity_t *ent ) {
 		}
 
 		G_Damage( traceEnt, ent, ent, forward, tr.endpos, damage, 0, MOD_KICKED );   //----(SA)	modified
+		G_SkullKick( ent, traceEnt, forward );     // RealRTCWX Boot Camp skull
 	}
 
 	return ( 1 );
@@ -2249,6 +2250,10 @@ void ClientCommand( int clientNum ) {
 
 	if ( Q_stricmp( cmd, "xbcheat" ) == 0 ) {
 		Cmd_XbCheat_f( ent );
+		return;
+	}
+	if ( Q_stricmp( cmd, "xbblast" ) == 0 ) {     // RealRTCWX skulls (g_xbskulls.c)
+		Cmd_XbBlast_f( ent );
 		return;
 	}
 

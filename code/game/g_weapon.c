@@ -977,6 +977,11 @@ qboolean Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t st
         reflectBullet = qtrue;
     }
 
+    // RealRTCWX Toy Soldiers skull: over a shrunken enemy's head, the bullet flies on
+    if ( G_SkullToyMiss( attacker, traceEnt, tr.endpos ) ) {
+        return Bullet_Fire_Extended( traceEnt, attacker, tr.endpos, end, 0, damage, recursion + 1 );
+    }
+
     // send bullet impact for clients and bats
     if ( traceEnt->takedamage && traceEnt->client && !reflectBullet ) {
         tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_FLESH );
@@ -1035,6 +1040,15 @@ qboolean Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t st
         } else {
             tent->s.otherEntityNum2 = ENTITYNUM_NONE;
         }
+
+        // RealRTCWX Ricochet skull: the player's bullets bounce once off walls
+        if ( !reflectBullet && !traceEnt->takedamage && G_SkullRicochet( attacker, recursion ) ) {
+            vec3_t rstart, rend;
+            tent->s.otherEntityNum = attacker->s.number;
+            VectorMA( tr.endpos, 2, reflect, rstart );
+            VectorMA( rstart, 8192, reflect, rend );
+            Bullet_Fire_Extended( attacker, attacker, rstart, rend, 0, effectiveDamage * 3 / 4, recursion + 1 );
+        }
     }
     tent->s.otherEntityNum = attacker->s.number;
 
@@ -1063,6 +1077,7 @@ qboolean Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t st
             }
 
             G_DamageExt( traceEnt, attacker, attacker, forward, tr.endpos, effectiveDamage, ( g_weaponfalloff.integer ? DAMAGE_DISTANCEFALLOFF : 0 ), ammoTable[attacker->s.weapon].mod, &hitType );
+            G_SkullBulletHit( attacker, traceEnt, tr.endpos );     // RealRTCWX Explosive Rounds skull
 
 			if (explosiveRounds)
 			{

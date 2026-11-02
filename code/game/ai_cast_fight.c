@@ -983,7 +983,7 @@ qboolean AICast_WeaponUsable( cast_state_t *cs, int weaponNum ) {
 		if ( cs->enemyNum < 0 ) {
 			return qfalse;
 		}
-		delay = 5000;
+		delay = G_SkullGrenadeDelay( 5000 );    // RealRTCWX Catch skull
 		if ( dist > 0 && dist < 200 ) {
 			return qfalse;
 		}
@@ -1870,7 +1870,9 @@ void AICast_RecordWeaponFire( gentity_t *ent ) {
 	// do sighting
 	range = AICast_GetWeaponSoundRange( cs->lastWeaponFiredWeaponNum );
 
-	AICast_AudibleEvent( cs->entityNum, cs->lastWeaponFiredPos, range );
+	if ( !G_SkullSilent( ent ) ) {     // RealRTCWX Silent Assassin skull
+		AICast_AudibleEvent( cs->entityNum, cs->lastWeaponFiredPos, range );
+	}
 
 	if ( cs->bs ) {   // real player's don't need to play AI sounds
 		AIChar_AttackSound( cs );

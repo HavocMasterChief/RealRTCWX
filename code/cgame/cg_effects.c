@@ -340,6 +340,12 @@ void CG_Bleed( vec3_t origin, int entityNum ) {
 
 	cent = &cg_entities[entityNum];
 
+	// RealRTCWX Confetti Blood skull: hits burst into confetti instead
+	if ( CG_Skull( 1 << 7 ) ) {
+		CG_XbConfetti( origin, 10, 120 );
+		return;
+	}
+
 	if ( cent->currentState.aiChar == AICHAR_ZOMBIE || cent->currentState.aiChar == AICHAR_ZOMBIE_SURV 
 		|| cent->currentState.aiChar == AICHAR_ZOMBIE_FLAME  || cent->currentState.aiChar == AICHAR_ZOMBIE_GHOST ) {
 		CG_ParticleBloodCloudZombie( cent, origin, vec3_origin );

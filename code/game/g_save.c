@@ -1409,9 +1409,11 @@ qboolean G_SaveGame( char *username ) {
 	// RealRTCWX: whether this playthrough used cheats (save/<name>.cht)
 	{
 		fileHandle_t cf;
-		char cheat = trap_Cvar_VariableIntegerValue( "g_cheatedRun" ) ? '1' : '0';
+		// "<0|1> <skulls>": the cheat mark, then the skulls in use
+		const char *txt = va( "%c %i", trap_Cvar_VariableIntegerValue( "g_cheatedRun" ) ? '1' : '0',
+							  trap_Cvar_VariableIntegerValue( "g_xbskulls" ) );
 		if ( trap_FS_FOpenFile( va( "save\\%s.cht", username ), &cf, FS_WRITE ) >= 0 ) {
-			trap_FS_Write( &cheat, 1, cf );
+			trap_FS_Write( txt, strlen( txt ), cf );
 			trap_FS_FCloseFile( cf );
 		}
 	}
@@ -1477,15 +1479,23 @@ void G_LoadGame( char *filename ) {
 			*dot = 0;
 		}
 		Q_strcat( cht, sizeof( cht ), ".cht" );
-		if ( trap_FS_FOpenFile( cht, &cf, FS_READ ) > 0 ) {
-			trap_FS_Read( &c, 1, cf );
-			trap_FS_FCloseFile( cf );
-		} else if ( cf ) {
-			trap_FS_FCloseFile( cf );
-		}
-		trap_Cvar_Set( "g_cheatedRun", c == '1' ? "1" : "0" );
-		if ( filename ) {
-			trap_Cvar_Set( "g_xbcheats", "0" );   // a different save; a death reload keeps the toggles
+		{
+			char buf[32];
+			int len = trap_FS_FOpenFile( cht, &cf, FS_READ );
+			memset( buf, 0, sizeof( buf ) );
+			if ( len > 0 ) {
+				trap_FS_Read( buf, len < 31 ? len : 31, cf );
+				trap_FS_FCloseFile( cf );
+				c = buf[0];
+			} else if ( cf ) {
+				trap_FS_FCloseFile( cf );
+			}
+			trap_Cvar_Set( "g_cheatedRun", c == '1' ? "1" : "0" );
+			if ( filename ) {
+				trap_Cvar_Set( "g_xbcheats", "0" );   // a different save; a death reload keeps the toggles
+				// the skulls that playthrough was using (none without cheats)
+				trap_Cvar_Set( "g_xbskulls", ( c == '1' && buf[1] == ' ' ) ? va( "%i", atoi( buf + 2 ) ) : "0" );
+			}
 		}
 	}
 

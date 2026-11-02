@@ -862,6 +862,21 @@ int G_GetArmorCap( gclient_t *client );
 void G_Armory_Confirm( gentity_t *ent, const char *weaponArg, const char *equipArg );
 void Fill_Clip( playerState_t *ps, int weapon );
 void    Add_Ammo( gentity_t *ent, int weapon, int count, qboolean fillClip );
+
+// g_xbskulls.c (RealRTCWX Skulls)
+int G_Skulls( void );
+qboolean G_Skull( int bit );
+int G_SkullDamage( gentity_t *targ, gentity_t *attacker, int damage );
+void G_SkullKill( gentity_t *targ, gentity_t *attacker, int mod, qboolean headshot, const vec3_t point );
+void G_SkullBulletHit( gentity_t *attacker, gentity_t *traceEnt, const vec3_t pos );
+qboolean G_SkullToyMiss( gentity_t *attacker, gentity_t *traceEnt, const vec3_t pos );
+qboolean G_SkullRicochet( gentity_t *attacker, int recursion );
+void G_SkullKick( gentity_t *attacker, gentity_t *traceEnt, const vec3_t forward );
+void G_SkullDrop( gentity_t *self, gentity_t *drop, int weapon );
+int G_SkullGrenadeDelay( int delay );
+qboolean G_SkullSilent( gentity_t *shooter );
+void G_SkullFrame( void );
+void Cmd_XbBlast_f( gentity_t *ent );
 void Touch_Item( gentity_t *ent, gentity_t *other, trace_t *trace );
 qboolean AddMagicAmmo( gentity_t *receiver, int numOfClips );
 

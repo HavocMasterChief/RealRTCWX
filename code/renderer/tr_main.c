@@ -885,6 +885,17 @@ void R_SetupProjection(viewParms_t *dest, float zProj, qboolean computeFrustum)
 	dest->projectionMatrix[4] = 0;
 	dest->projectionMatrix[8] = (xmax + xmin + 2 * stereoSep) / width;
 	dest->projectionMatrix[12] = 2 * zProj * stereoSep / width;
+#ifdef RTCW_UWP
+	{
+		extern cvar_t *r_xbSkulls;
+		dest->xbFlipX = ( r_xbSkulls && ( r_xbSkulls->integer & ( 1 << 20 ) ) ) ? qtrue : qfalse;
+		if ( dest->xbFlipX ) {
+			dest->projectionMatrix[0] = -dest->projectionMatrix[0];
+			dest->projectionMatrix[8] = -dest->projectionMatrix[8];
+			dest->projectionMatrix[12] = -dest->projectionMatrix[12];
+		}
+	}
+#endif
 
 	dest->projectionMatrix[1] = 0;
 	dest->projectionMatrix[5] = 2 * zProj / height;

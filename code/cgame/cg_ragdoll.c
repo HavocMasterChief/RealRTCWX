@@ -536,8 +536,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		for ( i = 0; i < J_NUM; i++ ) {
 			float d2 = DistanceSquared( rd->p[i], hp );
 			float w = exp( -d2 / ( 2.0f * 14.0f * 14.0f ) );
-			VectorScale( hd, 45 + 190 * w, push );
-			push[2] += 20 + 25 * w;
+			VectorScale( hd, ( 45 + 190 * w ) * CG_XbThrowScale(), push );
+			push[2] += ( 20 + 25 * w ) * CG_XbThrowScale();
 			VectorAdd( push, cent->currentState.pos.trDelta, push );
 			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
 		}
@@ -862,7 +862,7 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 		VectorScale( v, RD_AIRDRAG, v );
 		VectorCopy( rd->p[i], rd->old[i] );
 		VectorAdd( rd->p[i], v, rd->p[i] );
-		rd->p[i][2] -= RD_GRAVITY * RD_STEP * RD_STEP;
+		rd->p[i][2] -= RD_GRAVITY * CG_XbGravityScale() * RD_STEP * RD_STEP;     // Moon Gravity skull
 	}
 
 	// muscle tone: pull each joint toward where the death pose puts it,
@@ -1048,7 +1048,7 @@ hits is knocked along the shot and bleeds. Done here rather than on the
 server, which only knows the box where the body died, not where it is now.
 ===============
 */
-void CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
+int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 	vec3_t dir, far, c1, c2, hit;
 	ragdoll_t *best = NULL;
 	float bestS = 2.0f, len;
@@ -1057,7 +1057,7 @@ void CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 	VectorSubtract( end, start, dir );
 	len = VectorNormalize( dir );
 	if ( len < 1 ) {
-		return;
+		return -1;
 	}
 	VectorMA( end, 24, dir, far );  // the server's hit box can stop the bullet just short of the body
 	for ( i = 0; i < RD_MAX; i++ ) {
@@ -1081,14 +1081,15 @@ void CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 		}
 	}
 	if ( !best ) {
-		return;
+		return -1;
 	}
 	CG_RagdollWake( best );
 	{
 		vec3_t vel;
-		VectorScale( dir, 230, vel );
-		vel[2] += 25;
-		CG_RagdollKick( best, hit, vel, 10.0f, 0.12f );
+		float f = CG_XbThrowScale();      // Ragdoll Launcher / Boot Camp skulls
+		VectorScale( dir, 230 * f, vel );
+		vel[2] += 25 * ( f > 1 ? f * 0.6f : 1 );
+		CG_RagdollKick( best, hit, vel, 10.0f, f > 1 ? 0.5f : 0.12f );
 	}
 	if ( best->entityNum < MAX_CLIENTS ) {
 		CG_Bleed( hit, best->entityNum );
@@ -1097,6 +1098,7 @@ void CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 	if ( CG_PointContents( hit, -1 ) & CONTENTS_WATER ) {
 		CG_GoreWaterBlood( hit, 2 );
 	}
+	return best->entityNum;
 }
 
 /*
@@ -1109,6 +1111,7 @@ Throws every body in reach of a blast that isn't behind a wall.
 */
 void CG_RagdollExplosion( const vec3_t origin, float radius, float strength ) {
 	int i, j;
+	strength *= CG_XbThrowScale();      // Ragdoll Launcher skull
 	for ( i = 0; i < RD_MAX; i++ ) {
 		ragdoll_t *rd = &rdBodies[i];
 		trace_t tr;
@@ -1373,7 +1376,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			for ( i = 0; i < J_NUM; i++ ) {
 				if ( IS_NAN( rd->p[i][0] ) || IS_NAN( rd->p[i][1] ) || IS_NAN( rd->p[i][2] ) ||
 					 Distance( rd->p[i], rd->p[J_PELVIS] ) > 120 ||
-					 Distance( rd->p[J_PELVIS], rd->pose.origin ) > 2048 ) {
+					 Distance( rd->p[J_PELVIS], rd->pose.origin ) > 8192 ) {
 					break;
 				}
 			}

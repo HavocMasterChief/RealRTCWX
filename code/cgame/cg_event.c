@@ -2187,13 +2187,17 @@ case EV_FILL_CLIP_FULL:
 	case EV_WOLFKICK_HIT_WALL:
 		DEBUGNAME( "EV_WOLFKICK_HIT_WALL" );
 		ByteToDir( es->eventParm, dir );
+		cg_xbKickHit = qtrue;   // Boot Camp skull
 		CG_Bullet( es->pos.trBase, es->otherEntityNum, dir, qfalse, ENTITYNUM_WORLD, qtrue, es->otherEntityNum2 );
+		cg_xbKickHit = qfalse;
 		trap_S_StartSound( NULL, es->number, CHAN_AUTO, cgs.media.fkickwall );
 		break;
 
 	case EV_WOLFKICK_HIT_FLESH:
 		DEBUGNAME( "EV_WOLFKICK_HIT_FLESH" );
+		cg_xbKickHit = qtrue;
 		CG_Bullet( es->pos.trBase, es->otherEntityNum, dir, qtrue, es->eventParm, qtrue, es->otherEntityNum2 );
+		cg_xbKickHit = qfalse;
 		trap_S_StartSound( NULL, es->number, CHAN_AUTO, cgs.media.fkickflesh );
 		break;
 

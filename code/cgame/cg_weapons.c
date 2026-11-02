@@ -3826,6 +3826,9 @@ Add the weapon, and flash for the player's view
 ==============
 */
 void CG_AddViewWeapon( playerState_t *ps ) {
+	if ( CG_Skull( 1 << 11 ) ) {
+		return;     // RealRTCWX Blind skull: no weapon on screen
+	}
 	refEntity_t hand;
 	vec3_t fovOffset;
 	vec3_t angles;
@@ -7229,8 +7232,12 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 	{
 		vec3_t rstart;
 		if ( sourceEntityNum == cg.snap->ps.clientNum ) {
+			int hitBody;
 			VectorCopy( cg.refdef.vieworg, rstart );
-			CG_RagdollBullet( rstart, end );
+			hitBody = CG_RagdollBullet( rstart, end );
+			if ( hitBody >= 0 && !wolfkick ) {
+				CG_XbSkullCorpseHit( hitBody, end );    // Kaboom / Explosive Rounds skulls
+			}
 		} else if ( sourceEntityNum >= 0 && CG_CalcMuzzlePoint( sourceEntityNum, rstart ) ) {
 			CG_RagdollBullet( rstart, end );
 		}

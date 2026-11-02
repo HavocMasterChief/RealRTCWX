@@ -830,6 +830,14 @@ static void CG_ServerCommand( void ) {
 		return;
 	}
 
+	if ( !strcmp( cmd, "xbparty" ) ) {  // RealRTCWX skulls (cg_xbskulls.c)
+		CG_XbParty_f();
+		return;
+	}
+	if ( !strcmp( cmd, "xbgun" ) ) {
+		CG_XbGun_f();
+		return;
+	}
 	if ( !strcmp( cmd, "xbach" ) ) {    // RealRTCWX: an achievement (cg_achievements.c)
 		CG_AchUnlock( CG_Argv( 1 ) );
 		return;

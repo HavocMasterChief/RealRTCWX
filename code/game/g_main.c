@@ -2908,6 +2908,8 @@ void G_RunFrame( int levelTime ) {
 
 	// Ridah, check if we are reloading, and times have expired
 	CheckReloadStatus();
+
+	G_SkullFrame();     // RealRTCWX skulls (g_xbskulls.c)
 }
 
 /*

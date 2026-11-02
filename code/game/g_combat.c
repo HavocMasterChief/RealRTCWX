@@ -150,6 +150,7 @@ void TossClientWeapons( gentity_t *self )
 		if (!(self->client->ps.persistant[PERS_HWEAPON_USE]))
 		{
 			drop = Drop_Item(self, item, 0, qfalse);
+			G_SkullDrop( self, drop, weapon );     // RealRTCWX Famine skull
 		}
 	}
 
@@ -957,6 +958,7 @@ void G_DamageExt( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	int asave;
 	int knockback;
 	int hitEventType = HIT_NONE;
+	int xbWasAlive = targ->health > 0;  // RealRTCWX skulls: kills, not hits on corpses
 
 	if ( hitEventOut ) {
 		*hitEventOut = HIT_NONE;
@@ -965,6 +967,8 @@ void G_DamageExt( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	if ( !targ->takedamage ) {
 		return;
 	}
+
+	damage = G_SkullDamage( targ, attacker, damage );   // Mythic skull
 
 	// RealRTCWX cheat menu: one-hit kills (the player's attacks only)
 	if ( attacker && attacker->client && !( attacker->r.svFlags & SVF_CASTAI ) && targ != attacker &&
@@ -1500,6 +1504,9 @@ void G_DamageExt( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 			}
 
 			targ->enemy = attacker;
+			if ( xbWasAlive ) {     // RealRTCWX skulls: Vampire, Party Pooper, Bullet Time, Gun Game
+				G_SkullKill( targ, attacker, mod, hitEventType == HIT_HEADSHOT ? qtrue : qfalse, point );
+			}
 			if ( targ->die ) { // Ridah, mg42 doesn't have die func (FIXME)
 				targ->die( targ, inflictor, attacker, take, mod );
 			}

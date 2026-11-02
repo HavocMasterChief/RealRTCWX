@@ -4448,6 +4448,8 @@ CG_Player
 ===============
 */
 void CG_Player( centity_t *cent ) {
+	float xbToy, xbScale[3];
+	int xbI;
 	int i;
 	clientInfo_t    *ci;
 	refEntity_t legs;
@@ -4514,10 +4516,15 @@ void CG_Player( centity_t *cent ) {
 //----(SA)	added
 	// setting the legs axis should pass the scale down through the other parts/tags/etc.
 	// and will need to be 'undone' for the weapon
-	if ( ci->playermodelScale[0] ) {
-		VectorScale( legs.axis[0], ci->playermodelScale[0], legs.axis[0] );
-		VectorScale( legs.axis[1], ci->playermodelScale[1], legs.axis[1] );
-		VectorScale( legs.axis[2], ci->playermodelScale[2], legs.axis[2] );
+	// RealRTCWX Toy Soldiers skull: enemies at half size
+	xbToy = ( CG_Skull( 1 << 17 ) && cent->currentState.aiChar && cent->currentState.number != cg.snap->ps.clientNum ) ? 0.5f : 1.0f;
+	for ( xbI = 0; xbI < 3; xbI++ ) {
+		xbScale[xbI] = ( ci->playermodelScale[0] ? ci->playermodelScale[xbI] : 1.0f ) * xbToy;
+	}
+	if ( ci->playermodelScale[0] || xbToy != 1.0f ) {
+		VectorScale( legs.axis[0], xbScale[0], legs.axis[0] );
+		VectorScale( legs.axis[1], xbScale[1], legs.axis[1] );
+		VectorScale( legs.axis[2], xbScale[2], legs.axis[2] );
 		legs.nonNormalizedAxes  = qtrue;
 		torso.nonNormalizedAxes = qtrue;
 		head.nonNormalizedAxes  = qtrue;
@@ -4628,8 +4635,8 @@ void CG_Player( centity_t *cent ) {
 		VectorCopy(cent->lerpOrigin, legs.origin);
 	}
 
-	if ( ci->playermodelScale[0] != 0 ) {  // player scaled, adjust for the (-24) offset of player legs origin to ground
-		legs.origin[2] -= 24.0f * ( 1.0f - ci->playermodelScale[2] );
+	if ( ci->playermodelScale[0] != 0 || xbToy != 1.0f ) {  // player scaled, adjust for the (-24) offset of player legs origin to ground
+		legs.origin[2] -= 24.0f * ( 1.0f - xbScale[2] );
 	}
 
 	VectorCopy( lightorigin, legs.lightingOrigin );
@@ -4726,6 +4733,14 @@ void CG_Player( centity_t *cent ) {
 	VectorCopy( lightorigin, head.lightingOrigin );
 
 	CG_PositionRotatedEntityOnTag( &head, &torso, "tag_head" );
+
+	// RealRTCWX Big Head skull: enemies' heads twice the size
+	if ( CG_Skull( 1 << 0 ) && cent->currentState.aiChar && cent->currentState.number != cg.snap->ps.clientNum ) {
+		VectorScale( head.axis[0], 2.0f, head.axis[0] );
+		VectorScale( head.axis[1], 2.0f, head.axis[1] );
+		VectorScale( head.axis[2], 2.0f, head.axis[2] );
+		head.nonNormalizedAxes = qtrue;
+	}
 
 	head.shadowPlane = shadowPlane;
 	head.renderfx = renderfx;

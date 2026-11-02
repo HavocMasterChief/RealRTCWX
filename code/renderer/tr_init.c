@@ -145,6 +145,7 @@ cvar_t  *r_shadows;
 cvar_t  *r_portalsky;   //----(SA)	added
 cvar_t  *r_flares;
 #ifdef RTCW_UWP
+cvar_t  *r_xbSkulls;      // RealRTCWX skulls (g_xbskulls): Mirror World, paint-coloured bullet holes
 cvar_t  *r_xbResTest;     // diagnostic: 0 full, 1 75%, 2 50% 3D view (tr_scene.c)
 #endif
 cvar_t  *r_mode;
@@ -1324,6 +1325,7 @@ void R_Register( void ) {
 	r_flares = ri.Cvar_Get( "r_flares", "1", CVAR_ARCHIVE );
 #ifdef RTCW_UWP
 	r_xbResTest = ri.Cvar_Get( "r_xbResTest", "0", 0 );
+	r_xbSkulls = ri.Cvar_Get( "g_xbskulls", "0", 0 );
 #endif
 	r_znear = ri.Cvar_Get( "r_znear", "2", CVAR_CHEAT );
 	ri.Cvar_CheckRange( r_znear, 0.001f, 200, qfalse );

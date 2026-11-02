@@ -1286,6 +1286,9 @@ static int CG_CalcViewValues( void ) {
 		// done.
 	}
 
+	// RealRTCWX Drunk skull
+	CG_XbSkullsViewAngles( cg.refdefViewAngles );
+
 	// position eye relative to origin
 	AnglesToAxis( cg.refdefViewAngles, cg.refdef.viewaxis );
 
@@ -1662,6 +1665,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 	// update cvars
 	CG_UpdateCvars();
+	CG_XbSkullsFrame();     // RealRTCWX skulls (cg_xbskulls.c)
 /*
 	// RF, if we should force a weapon, then do so
 	if( !cg.weaponSelect ) {
@@ -1788,6 +1792,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		CG_AddPacketEntities();         // adter calcViewValues, so predicted player state is correct
 		CG_AddMarks();
 		CG_AddGore();
+		CG_XbSkullsAddToScene();
 
 		DEBUGTIME
 

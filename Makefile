@@ -2639,6 +2639,7 @@ Q3CGOBJ_ = \
   $(B)/$(BASEGAME)/cgame/cg_gore.o \
   $(B)/$(BASEGAME)/cgame/cg_ragdoll.o \
   $(B)/$(BASEGAME)/cgame/cg_achievements.o \
+  $(B)/$(BASEGAME)/cgame/cg_xbskulls.o \
   $(B)/$(BASEGAME)/cgame/cg_newdraw.o \
   $(B)/$(BASEGAME)/cgame/cg_particles.o \
   $(B)/$(BASEGAME)/cgame/cg_players.o \
@@ -2716,6 +2717,7 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/g_bot.o \
   $(B)/$(BASEGAME)/game/g_client.o \
   $(B)/$(BASEGAME)/game/g_cmds.o \
+  $(B)/$(BASEGAME)/game/g_xbskulls.o \
   $(B)/$(BASEGAME)/game/g_combat.o \
   $(B)/$(BASEGAME)/game/g_items.o \
   $(B)/$(BASEGAME)/game/g_mem.o \

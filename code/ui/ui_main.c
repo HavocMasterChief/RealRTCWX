@@ -5257,6 +5257,44 @@ God / ammo / one-hit / noclip are bits in g_xbcheats, which the game applies
 every frame (G_XbCheatThink); weapons and health go to the server and land
 when the game resumes.
 */
+/*
+RealRTCWX: Skulls (bits in g_xbskulls, see game/bg_xbskulls.h). Labels
+"Big Head:  ON" are kept in ui_xbs_<n> for the menu.
+*/
+static const char *uiXbSkullNames[] = {
+	"Big Head", "Party Pooper", "Moon Gravity", "Bullet Time", "Ragdoll Launcher",
+	"Kaboom", "Drunk", "Confetti Blood", "Famine", "Mythic", "Catch", "Blind",
+	"Newsreel", "Vampire", "Explosive Rounds", "Gun Game", "Ricochet",
+	"Toy Soldiers", "Silent Assassin", "Hunted", "Mirror World", "Boot Camp"
+};
+
+static void UI_XbSkullLabels( void ) {
+	int bits = (int)trap_Cvar_VariableValue( "g_xbskulls" ), i;
+	for ( i = 0; i < (int)( sizeof( uiXbSkullNames ) / sizeof( uiXbSkullNames[0] ) ); i++ ) {
+		trap_Cvar_Set( va( "ui_xbs_%i", i ), va( "%s:  %s", uiXbSkullNames[i], ( bits & ( 1 << i ) ) ? "ON" : "OFF" ) );
+	}
+}
+
+static void UI_XbSkull( const char *what ) {
+	int bits = (int)trap_Cvar_VariableValue( "g_xbskulls" );
+	if ( !Q_stricmp( what, "refresh" ) ) {
+		UI_XbSkullLabels();
+		return;
+	}
+	if ( !Q_stricmp( what, "clear" ) ) {
+		bits = 0;
+	} else {
+		int n = atoi( what );
+		if ( n < 0 || n >= (int)( sizeof( uiXbSkullNames ) / sizeof( uiXbSkullNames[0] ) ) ) {
+			return;
+		}
+		bits ^= 1 << n;
+		trap_Cvar_Set( "g_cheatedRun", "1" );
+	}
+	trap_Cvar_Set( "g_xbskulls", va( "%i", bits ) );
+	UI_XbSkullLabels();
+}
+
 static void UI_XbCheatLabels( void ) {
 	static const char *names[4] = { "God mode", "Infinite ammo", "One-hit kills", "No clipping" };
 	static const char *cvars[4] = { "ui_xbc_god", "ui_xbc_ammo", "ui_xbc_onehit", "ui_xbc_noclip" };
@@ -5306,6 +5344,12 @@ static void UI_RunMenuScript( char **args ) {
 		}
 		if ( Q_stricmp( name, "xbContinue" ) == 0 ) {
 			UI_XbContinue();
+			return;
+		}
+		if ( Q_stricmp( name, "xbSkull" ) == 0 ) {
+			if ( String_Parse( args, &name2 ) ) {
+				UI_XbSkull( name2 );
+			}
 			return;
 		}
 		if ( Q_stricmp( name, "xbCheat" ) == 0 ) {

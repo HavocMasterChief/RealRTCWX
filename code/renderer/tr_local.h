@@ -587,6 +587,9 @@ typedef struct {
 
 	glfog_t glFog;                  // fog parameters	//----(SA)	added
 
+#ifdef RTCW_UWP
+	qboolean xbFlipX;           // RealRTCWX Mirror World skull: picture flipped left to right
+#endif
 } viewParms_t;
 
 

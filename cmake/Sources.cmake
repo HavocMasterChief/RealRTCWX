@@ -428,6 +428,7 @@ set(CGAME_SRC
   code/cgame/cg_gore.c
   code/cgame/cg_ragdoll.c
   code/cgame/cg_achievements.c
+  code/cgame/cg_xbskulls.c
   code/cgame/cg_newdraw.c
   code/cgame/cg_particles.c
   code/cgame/cg_players.c
@@ -484,6 +485,7 @@ set(GAME_SRC
   code/game/g_bot.c
   code/game/g_client.c
   code/game/g_cmds.c
+  code/game/g_xbskulls.c
   code/game/g_combat.c
   code/game/g_items.c
   code/game/g_mem.c

@@ -349,7 +349,7 @@ menuDef {
 	name "ingame_cheats"
 	visible 0
 	fullscreen 0
-	rect 190 90 300 294
+	rect 190 90 300 315
 	focusColor 1 .75 0 1
 	style 1
 	border 1
@@ -358,7 +358,7 @@ menuDef {
 
 	itemDef {
 		name window
-		rect 0 0 300 294
+		rect 0 0 300 315
 		style WINDOW_STYLE_FILLED
 		border 1
 		bordercolor .5 .4 .3 .8
@@ -550,10 +550,29 @@ menuDef {
 	}
 
 	itemDef {
+		name skulls
+		type ITEM_TYPE_BUTTON
+		text "Skulls..."
+		cvarTest "g_cheatedRun"
+		showCvar { "1" }
+		rect 30 196 240 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor .9 .85 1 1
+		visible 1
+		action { close ingame_cheats ; open ingame_skulls }
+	}
+
+	itemDef {
 		name hidegun
 		type ITEM_TYPE_BUTTON
 		text "Hide / show weapon (screenshots)"
-		rect 30 196 240 18
+		rect 30 217 240 18
 		textfont UI_FONT_DEFAULT
 		textscale .24
 		textalign ITEM_ALIGN_LEFT
@@ -571,7 +590,7 @@ menuDef {
 		cvarTest "g_cheatedRun"
 		showCvar { "1" }
 		text "Achievements are cheat-locked on this playthrough"
-		rect 30 219 240 16
+		rect 30 240 240 16
 		textfont UI_FONT_DEFAULT
 		textscale .2
 		textalign ITEM_ALIGN_LEFT
@@ -586,7 +605,7 @@ menuDef {
 		name resetach
 		type ITEM_TYPE_BUTTON
 		text "Reset achievements..."
-		rect 30 243 240 18
+		rect 30 264 240 18
 		textfont UI_FONT_DEFAULT
 		textscale .24
 		textalign ITEM_ALIGN_LEFT
@@ -603,7 +622,7 @@ menuDef {
 		name back
 		type ITEM_TYPE_BUTTON
 		text "Back"
-		rect 30 264 240 18
+		rect 30 285 240 18
 		textfont UI_FONT_DEFAULT
 		textscale .24
 		textalign ITEM_ALIGN_LEFT
@@ -614,6 +633,473 @@ menuDef {
 		forecolor 1 1 1 1
 		visible 1
 		action { close ingame_cheats ; open ingame }
+	}
+
+}
+
+menuDef {
+	name "ingame_skulls"
+	visible 0
+	fullscreen 0
+	rect 70 60 500 297
+	focusColor 1 .75 0 1
+	style 1
+	border 1
+	onOpen { uiScript xbSkull refresh }
+	onESC { close ingame_skulls ; open ingame_cheats }
+
+	itemDef {
+		name window
+		rect 0 0 500 297
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .4 .3 .8
+		backcolor .07 .05 .04 .94
+		visible 1
+		decoration
+	}
+	itemDef {
+		name window
+		rect 2 2 496 22
+		style WINDOW_STYLE_FILLED
+		backcolor .45 .1 .07 .45
+		visible 1
+		decoration
+	}
+	itemDef {
+		name title
+		text "SKULLS"
+		rect 0 2 500 22
+		textfont UI_FONT_DEFAULT
+		textscale .27
+		textalign ITEM_ALIGN_CENTER
+		textalignx 250
+		textaligny 17
+		forecolor .94 .89 .78 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name label
+		text "Skulls change how the game plays. Mix any you like."
+		rect 30 30 240 16
+		textfont UI_FONT_DEFAULT
+		textscale .2
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 13
+		forecolor .8 .72 .58 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name skull0
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_0"
+		rect 12 50 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 0 }
+	}
+
+	itemDef {
+		name skull1
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_1"
+		rect 12 69 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 1 }
+	}
+
+	itemDef {
+		name skull2
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_2"
+		rect 12 88 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 2 }
+	}
+
+	itemDef {
+		name skull3
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_3"
+		rect 12 107 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 3 }
+	}
+
+	itemDef {
+		name skull4
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_4"
+		rect 12 126 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 4 }
+	}
+
+	itemDef {
+		name skull5
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_5"
+		rect 12 145 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 5 }
+	}
+
+	itemDef {
+		name skull6
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_6"
+		rect 12 164 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 6 }
+	}
+
+	itemDef {
+		name skull7
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_7"
+		rect 12 183 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 7 }
+	}
+
+	itemDef {
+		name skull8
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_8"
+		rect 12 202 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 8 }
+	}
+
+	itemDef {
+		name skull9
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_9"
+		rect 12 221 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 9 }
+	}
+
+	itemDef {
+		name skull10
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_10"
+		rect 12 240 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 10 }
+	}
+
+	itemDef {
+		name skull11
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_11"
+		rect 250 50 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 11 }
+	}
+
+	itemDef {
+		name skull12
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_12"
+		rect 250 69 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 12 }
+	}
+
+	itemDef {
+		name skull13
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_13"
+		rect 250 88 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 13 }
+	}
+
+	itemDef {
+		name skull14
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_14"
+		rect 250 107 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 14 }
+	}
+
+	itemDef {
+		name skull15
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_15"
+		rect 250 126 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 15 }
+	}
+
+	itemDef {
+		name skull16
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_16"
+		rect 250 145 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 16 }
+	}
+
+	itemDef {
+		name skull17
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_17"
+		rect 250 164 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 17 }
+	}
+
+	itemDef {
+		name skull18
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_18"
+		rect 250 183 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 18 }
+	}
+
+	itemDef {
+		name skull19
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_19"
+		rect 250 202 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 19 }
+	}
+
+	itemDef {
+		name skull20
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_20"
+		rect 250 221 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 20 }
+	}
+
+	itemDef {
+		name skull21
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbs_21"
+		rect 250 240 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { uiScript xbSkull 21 }
+	}
+
+	itemDef {
+		name skullsoff
+		type ITEM_TYPE_BUTTON
+		text "All skulls off"
+		rect 12 267 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 .7 .6 1
+		visible 1
+		action { uiScript xbSkull clear }
+	}
+
+	itemDef {
+		name skullsback
+		type ITEM_TYPE_BUTTON
+		text "Back"
+		rect 250 267 230 18
+		textfont UI_FONT_DEFAULT
+		textscale .24
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 14
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action { close ingame_skulls ; open ingame_cheats }
 	}
 
 }

@@ -1310,6 +1310,15 @@ usercmd_t CL_CreateCmd( void ) {
 	// get basic movement from joystick
 	CL_JoystickMove( &cmd );
 
+#ifdef RTCW_UWP
+	// RealRTCWX Mirror World skull: the picture is flipped left to right, so
+	// turning and strafing are too (left on the stick is still left on screen)
+	if ( Cvar_VariableIntegerValue( "g_xbskulls" ) & ( 1 << 20 ) ) {
+		cl.viewangles[YAW] = oldAngles[YAW] - ( cl.viewangles[YAW] - oldAngles[YAW] );
+		cmd.rightmove = -cmd.rightmove;
+	}
+#endif
+
 	// check to make sure the angles haven't wrapped
 	if ( cl.viewangles[PITCH] - oldAngles[PITCH] > 90 ) {
 		cl.viewangles[PITCH] = oldAngles[PITCH] + 90;

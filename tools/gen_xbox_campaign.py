@@ -326,7 +326,7 @@ def main():
         for n, (text, val) in enumerate(skills):
             body += button(f"xb_skill{val}", text, 312, 172 + 28 * n, 276, 22,
                            f"close {mname} ; setcvar g_gameskill {val} ; setcvar g_level_was_selected 1 ; "
-                           f"setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; uiScript StartCampaign", scale=".25")
+                           f"setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign", scale=".25")
         body += f'''
 	itemDef {{
 		name padY

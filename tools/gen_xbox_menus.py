@@ -414,6 +414,12 @@ menuDef {{
 '''
 
 
+SKULLS = ["Big Head", "Party Pooper", "Moon Gravity", "Bullet Time", "Ragdoll Launcher",
+          "Kaboom", "Drunk", "Confetti Blood", "Famine", "Mythic", "Catch", "Blind",
+          "Newsreel", "Vampire", "Explosive Rounds", "Gun Game", "Ricochet",
+          "Toy Soldiers", "Silent Assassin", "Hunted", "Mirror World", "Boot Camp"]
+
+
 def cheat_menus():
     back = "close ingame_cheats ; open ingame"
     body = _label("Using a cheat turns achievements off", 30) + _label("for this playthrough (all of its saves).", 44)
@@ -426,6 +432,8 @@ def cheat_menus():
         body += _btn("cheat_" + cmd, text, y, f"uiScript xbCheat {cmd}", show="1",
                      cvar=f"ui_xbc_{cmd}" if toggle else None)
         y += 21
+    body += _btn("skulls", "Skulls...", y, "close ingame_cheats ; open ingame_skulls", show="1", color=".9 .85 1 1")
+    y += 21
     body += _btn("hidegun", "Hide / show weapon (screenshots)", y, 'exec "toggle cg_drawGun"')
     y += 21
     body += _label("Achievements are cheat-locked on this playthrough", y + 2, ".2", ".72 .27 .18 1") .replace('name label', 'name locked\n\t\tcvarTest "g_cheatedRun"\n\t\tshowCvar { "1" }')
@@ -434,6 +442,20 @@ def cheat_menus():
     y += 21
     body += _btn("back", "Back", y, back)
     out = _window("ingame_cheats", (190, 90, 300, y + 30), "CHEATS", body, back, on_open="uiScript xbCheat refresh")
+
+    # Skulls: two columns of toggles (labels from ui_xbs_<n>, see UI_XbSkull)
+    sk = SKULLS
+    b = _label("Skulls change how the game plays. Mix any you like.", 30, ".2")
+    half = (len(sk) + 1) // 2
+    for n, desc in enumerate(sk):
+        col, row = divmod(n, half)
+        b += _btn(f"skull{n}", desc, 50 + row * 19, f"uiScript xbSkull {n}",
+                  w=230, x=12 + col * 238, cvar=f"ui_xbs_{n}")
+    yb = 50 + half * 19 + 8
+    b += _btn("skullsoff", "All skulls off", yb, "uiScript xbSkull clear", w=230, x=12, color="1 .7 .6 1")
+    b += _btn("skullsback", "Back", yb, "close ingame_skulls ; open ingame_cheats", w=230, x=250)
+    out += _window("ingame_skulls", (70, 60, 500, yb + 30), "SKULLS", b,
+                   "close ingame_skulls ; open ingame_cheats", on_open="uiScript xbSkull refresh")
 
     # enable confirmation
     b = _label("Achievements won't unlock for the rest", 32) + _label("of this playthrough, in any of its saves.", 46)

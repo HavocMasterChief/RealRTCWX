@@ -28,7 +28,7 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 
 #include "cg_local.h"
 
-#define RD_MAX          16      // renderer slots (RD_MAX_SLOTS in tr_animation.c)
+#define RD_MAX          32      // renderer slots (RD_MAX_SLOTS in tr_animation.c)
 #define RD_SEGS         11
 #define RD_STEP         ( 1.0f / 60.0f )
 #define RD_ITER         8
@@ -154,6 +154,7 @@ typedef struct {
 } ragdoll_t;
 
 static ragdoll_t rdBodies[RD_MAX];
+static byte rdDeclined[MAX_GENTITIES];   // dead bodies that keep their death animation
 static void CG_RagdollInitPairs( ragdoll_t *rd );
 static int rdStamp;
 
@@ -207,6 +208,7 @@ void CG_RagdollReset( void ) {
 	}
 	memset( rdBodies, 0, sizeof( rdBodies ) );
 	memset( rdHits, 0, sizeof( rdHits ) );
+	memset( rdDeclined, 0, sizeof( rdDeclined ) );
 }
 
 static ragdoll_t *CG_RagdollFind( int entityNum ) {
@@ -328,8 +330,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	ragdoll_t *rd = NULL;
 	orientation_t o;
 	refEntity_t pose;
-	vec3_t push, toBody;
-	int i, oldest = 0, slot;
+	vec3_t push, toBody, rest[J_NUM];
+	int i, oldest = -1, slot;
 
 	if ( body->nonNormalizedAxes ) {
 		return NULL;    // scaled characters: the model space math assumes plain axes
@@ -338,27 +340,37 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	pose.ragdoll = 0;
 	pose.ragdollStamp = 0;
 
-	// take a free body, or the oldest one
-	for ( i = 0; i < RD_MAX; i++ ) {
-		if ( !rdBodies[i].active ) {
-			rd = &rdBodies[i];
-			break;
-		}
-		if ( rdBodies[i].startTime < rdBodies[oldest].startTime ) {
-			oldest = i;
-		}
-	}
-	if ( !rd ) {
-		rd = &rdBodies[oldest];
-	}
-	slot = (int)( rd - rdBodies ) + 1;
-
 	// the joints, in model space, for the frozen pose
 	for ( i = 0; i < J_NUM; i++ ) {
 		if ( trap_R_LerpBone( &o, &pose, rdBoneNames[i] ) < 0 ) {
 			return NULL;    // not a Bip01 skeleton (dogs, creatures): no ragdoll
 		}
-		VectorCopy( o.origin, rd->rest[i] );
+		VectorCopy( o.origin, rest[i] );
+	}
+
+	// take a free body, else one whose corpse hasn't been in view for a
+	// while. Never one that's still being drawn: stealing those made every
+	// corpse in a crowded room restart its ragdoll each frame (flicker,
+	// bodies snapping back to the death animation)
+	for ( i = 0; i < RD_MAX; i++ ) {
+		if ( !rdBodies[i].active ) {
+			rd = &rdBodies[i];
+			break;
+		}
+		if ( oldest < 0 || rdBodies[i].lastSeen < rdBodies[oldest].lastSeen ) {
+			oldest = i;
+		}
+	}
+	if ( !rd ) {
+		if ( oldest < 0 || cg.time - rdBodies[oldest].lastSeen < 1000 ) {
+			return NULL;    // all in use: this one keeps its death animation
+		}
+		trap_R_SetRagdoll( rdBodies[oldest].slot, NULL );
+		rd = &rdBodies[oldest];
+	}
+	slot = (int)( rd - rdBodies ) + 1;
+	for ( i = 0; i < J_NUM; i++ ) {
+		VectorCopy( rest[i], rd->rest[i] );
 	}
 
 	memset( rd->data, 0, sizeof( rd->data ) );
@@ -847,15 +859,23 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			trap_R_SetRagdoll( rd->slot, NULL );
 			rd->active = qfalse;
 		}
+		rdDeclined[cent->currentState.number] = 0;
+		return;
+	}
+	if ( rdDeclined[cent->currentState.number] ) {
 		return;
 	}
 	if ( rd && rd->hModel != body->hModel ) {
+		trap_R_SetRagdoll( rd->slot, NULL );
 		rd->active = qfalse;
 		rd = NULL;
 	}
 	if ( !rd ) {
 		rd = CG_RagdollStart( cent, body );
 		if ( !rd ) {
+			// decided once per death: retrying every frame would restart
+			// the body (and cost bone lookups) over and over
+			rdDeclined[cent->currentState.number] = 1;
 			return;
 		}
 	}
@@ -871,6 +891,25 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 		while ( rd->accum >= RD_STEP && !rd->sleeping ) {
 			CG_RagdollStep( rd );
 			rd->accum -= RD_STEP;
+		}
+		// blown up (bad numbers, or flung far out of the level): give up
+		// on this one rather than drawing garbage
+		{
+			int i;
+			for ( i = 0; i < J_NUM; i++ ) {
+				if ( IS_NAN( rd->p[i][0] ) || IS_NAN( rd->p[i][1] ) || IS_NAN( rd->p[i][2] ) ||
+					 Distance( rd->p[i], rd->p[J_PELVIS] ) > 120 ||
+					 Distance( rd->p[J_PELVIS], rd->pose.origin ) > 2048 ) {
+					break;
+				}
+			}
+			if ( i < J_NUM ) {
+				CG_Printf( "ragdoll: body %i blew up, back to its death animation\n", rd->entityNum );
+				trap_R_SetRagdoll( rd->slot, NULL );
+				rd->active = qfalse;
+				rdDeclined[cent->currentState.number] = 1;
+				return;
+			}
 		}
 		CG_RagdollPose( rd );
 	}

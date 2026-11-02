@@ -1887,7 +1887,7 @@ is moved with its part's transform. Tags are bones too, so heads, helmets
 and gear attached to tags follow automatically.
 ===========================================================================
 */
-#define RD_MAX_SLOTS    16
+#define RD_MAX_SLOTS    32
 #define RD_NUM_SEGS     11
 
 static float rd_data[RD_MAX_SLOTS + 1][RD_NUM_SEGS][12];   // R[3][3] row-major, t[3]

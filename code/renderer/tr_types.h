@@ -117,6 +117,7 @@ typedef enum {
 #define REFLAG_FULL_LOD     8   // force a FULL lod
 #define REFLAG_WOUNDS       128 // RealRTCWX: draw recorded bullet wounds on the skin (RE_AddWound)
 #define REFLAG_WOUNDS_GREEN 256 // ... in green (green blood option)
+#define REFLAG_WOUNDS_DUST  512 // ... dry (zombies): holes only, no blood
 
 typedef struct {
 	refEntityType_t reType;

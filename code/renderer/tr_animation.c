@@ -1093,7 +1093,63 @@ typedef struct {
 	int num;
 	short vert[WOUND_VERTS];
 	byte weight[WOUND_VERTS];
+	short anchor;           // the vertex the bullet hole sits on
+	byte variant;
 } rdWound_t;
+
+/*
+Bullet holes: each wound's hole is a small decal on its anchor vertex. The
+skinned position is only known here, in the back end, so it's collected
+now and drawn as a poly with the next frame's scene (R_AddBodyHoles,
+called from RE_RenderScene) - one frame behind, invisible in practice.
+*/
+#define BODYHOLE_MAX 384
+typedef struct {
+	vec3_t pos, normal;
+	byte kind;              // 0 red, 1 green, 2 dust
+	byte variant;
+} bodyHole_t;
+static bodyHole_t tr_bodyHoles[BODYHOLE_MAX];
+static int tr_numBodyHoles;
+
+void R_AddBodyHoles( void ) {
+	static qhandle_t sh[3][3];
+	static const char *kinds[3] = { "", "#green", "_dust" };
+	int i, k;
+
+	if ( !sh[0][0] ) {
+		for ( i = 0; i < 3; i++ ) {
+			for ( k = 0; k < 3; k++ ) {
+				sh[k][i] = RE_RegisterShader( va( "gore/bodyhole%i%s", i + 1, kinds[k] ) );
+			}
+		}
+	}
+	for ( i = 0; i < tr_numBodyHoles; i++ ) {
+		bodyHole_t *h = &tr_bodyHoles[i];
+		polyVert_t v[4];
+		vec3_t up, right, c;
+		float a = h->variant * 2.1f, sz = 1.7f + 0.25f * h->variant;
+		vec3_t t1, t2;
+
+		PerpendicularVector( t1, h->normal );
+		CrossProduct( h->normal, t1, t2 );
+		// turn each variant a different way so the holes don't line up
+		VectorScale( t1, cos( a ) * sz, right );
+		VectorMA( right, sin( a ) * sz, t2, right );
+		CrossProduct( h->normal, right, up );
+		VectorMA( h->pos, 0.3f, h->normal, c );
+		for ( k = 0; k < 4; k++ ) {
+			float sx = ( k == 0 || k == 3 ) ? -1 : 1, sy = ( k < 2 ) ? -1 : 1;
+			VectorMA( c, sx, right, v[k].xyz );
+			VectorMA( v[k].xyz, sy, up, v[k].xyz );
+			v[k].st[0] = sx > 0 ? 1 : 0;
+			v[k].st[1] = sy > 0 ? 1 : 0;
+			v[k].modulate[0] = v[k].modulate[1] = v[k].modulate[2] = v[k].modulate[3] = 255;
+		}
+		RE_AddPolyToScene( sh[h->kind][h->variant % 3], 4, v );
+	}
+	tr_numBodyHoles = 0;
+}
 
 typedef struct {
 	vec3_t pos, dir;        // world space
@@ -1156,6 +1212,8 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 			float *c = tess.xyz[baseVertex + p->bestVert];
 			w->surf = surface;
 			w->num = 0;
+			w->anchor = (short)p->bestVert;
+			w->variant = (byte)( ( ew->numWounds * 7 + refent->entityNum ) % 3 );
 			for ( j = 0; j < count && w->num < WOUND_VERTS; j++ ) {
 				float dist;
 				VectorSubtract( tess.xyz[baseVertex + j], c, d );
@@ -1204,6 +1262,21 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 		rdWound_t *w = &ew->wound[i];
 		if ( w->surf != surface ) {
 			continue;
+		}
+		// the hole, in world space, for the next frame's scene
+		if ( w->anchor < count && tr_numBodyHoles < BODYHOLE_MAX ) {
+			bodyHole_t *h = &tr_bodyHoles[tr_numBodyHoles++];
+			float *lp = tess.xyz[baseVertex + w->anchor], *ln = tess.normal[baseVertex + w->anchor];
+			for ( k = 0; k < 3; k++ ) {
+				h->pos[k] = refent->origin[k] + lp[0] * refent->axis[0][k] + lp[1] * refent->axis[1][k] + lp[2] * refent->axis[2][k];
+				h->normal[k] = ln[0] * refent->axis[0][k] + ln[1] * refent->axis[1][k] + ln[2] * refent->axis[2][k];
+			}
+			VectorNormalize( h->normal );
+			h->kind = ( refent->reFlags & REFLAG_WOUNDS_DUST ) ? 2 : ( refent->reFlags & REFLAG_WOUNDS_GREEN ) ? 1 : 0;
+			h->variant = w->variant;
+		}
+		if ( refent->reFlags & REFLAG_WOUNDS_DUST ) {
+			continue;   // zombies: the hole, no blood soaking the skin
 		}
 		for ( j = 0; j < w->num; j++ ) {
 			int v = w->vert[j];
@@ -2185,6 +2258,22 @@ int RE_LerpBone( orientation_t *out, const refEntity_t *refent, const char *bone
 
 	memset( out, 0, sizeof( *out ) );
 	model = R_GetModelByHandle( refent->hModel );
+	if ( !boneName || !strcmp( boneName, "?list" ) ) {
+		// RealRTCWX: print the model's skeleton (ragdoll diagnostics)
+		if ( !model ) {
+			return -1;
+		}
+		ri.Printf( PRINT_ALL, "model '%s': type %i%s\n", model->name, model->type,
+				   model->type == MOD_MDS ? " (MDS skeleton)" : " (no skeleton)" );
+		if ( model->type == MOD_MDS && model->mds ) {
+			mds = model->mds;
+			bi = ( mdsBoneInfo_t * )( (byte *)mds + mds->ofsBones );
+			for ( i = 0; i < mds->numBones; i++ ) {
+				ri.Printf( PRINT_ALL, "  bone %i '%s' parent %i\n", i, bi[i].name, bi[i].parent );
+			}
+		}
+		return -1;
+	}
 	if ( !model || model->type != MOD_MDS || !model->mds ) {
 		return -1;
 	}

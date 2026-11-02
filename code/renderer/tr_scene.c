@@ -428,6 +428,13 @@ void RE_RenderScene( const refdef_t *fd ) {
 		ri.Error( ERR_DROP, "R_RenderScene: NULL worldmodel" );
 	}
 
+	// RealRTCWX: bullet holes on characters (collected while drawing the
+	// last frame, see tr_animation.c)
+	if ( !( fd->rdflags & RDF_NOWORLDMODEL ) ) {
+		extern void R_AddBodyHoles( void );
+		R_AddBodyHoles();
+	}
+
 	memcpy( tr.refdef.text, fd->text, sizeof( tr.refdef.text ) );
 
 	tr.refdef.x = fd->x;

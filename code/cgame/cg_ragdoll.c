@@ -291,10 +291,28 @@ static qboolean CG_RagdollBleeds( int aiChar ) {
 	}
 }
 
+// zombies: bullet holes, but dry (no blood soaking the skin)
+static qboolean CG_RagdollDryWounds( int aiChar ) {
+	switch ( aiChar ) {
+	case AICHAR_ZOMBIE:
+	case AICHAR_ZOMBIE_SURV:
+	case AICHAR_ZOMBIE_FLAME:
+	case AICHAR_ZOMBIE_GHOST:
+	case AICHAR_WARZOMBIE:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
 static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t dir ) {
+	int ai;
 	if ( entityNum < 0 || entityNum >= MAX_CLIENTS || entityNum == cg.snap->ps.clientNum ||
-		 !cg_blood.integer || cg_bloodMode.integer == BLOODMODE_OFF ||
-		 !CG_RagdollBleeds( cg_entities[entityNum].currentState.aiChar ) ) {
+		 !cg_blood.integer || cg_bloodMode.integer == BLOODMODE_OFF ) {
+		return;
+	}
+	ai = cg_entities[entityNum].currentState.aiChar;
+	if ( !CG_RagdollBleeds( ai ) && !CG_RagdollDryWounds( ai ) ) {
 		return;
 	}
 	trap_R_AddWound( entityNum, point, dir );
@@ -305,11 +323,6 @@ static qboolean CG_RagdollEligible( centity_t *cent ) {
 		return qfalse;
 	}
 	switch ( cent->currentState.aiChar ) {
-	case AICHAR_ZOMBIE:
-	case AICHAR_ZOMBIE_SURV:
-	case AICHAR_ZOMBIE_FLAME:
-	case AICHAR_ZOMBIE_GHOST:
-	case AICHAR_WARZOMBIE:
 	case AICHAR_LOPER:
 	case AICHAR_LOPER_SPECIAL:
 	case AICHAR_HELGA:
@@ -317,7 +330,7 @@ static qboolean CG_RagdollEligible( centity_t *cent ) {
 	case AICHAR_PROTOSOLDIER:
 	case AICHAR_SUPERSOLDIER:
 	case AICHAR_SUPERSOLDIER_LAB:
-		return qfalse;  // special deaths (burning, dissolving, bosses)
+		return qfalse;  // special deaths (bosses, lopers, armoured soldiers)
 	default:
 		return qtrue;
 	}
@@ -396,6 +409,27 @@ CG_RagdollStart
 Freeze the current pose and read the joints from it.
 ===============
 */
+// log (once per model) why a character can't have a ragdoll, so new
+// skeletons (the dog) can be mapped. The renderer lists the model's bones.
+static void CG_RagdollWhyNot( centity_t *cent, const refEntity_t *body, const char *why ) {
+	static qhandle_t seen[32];
+	static int numSeen;
+	int i;
+	for ( i = 0; i < numSeen; i++ ) {
+		if ( seen[i] == body->hModel ) {
+			return;
+		}
+	}
+	if ( numSeen < 32 ) {
+		seen[numSeen++] = body->hModel;
+	}
+	CG_Printf( "ragdoll: aiChar %i (model %i) gets no ragdoll: %s\n", cent->currentState.aiChar, body->hModel, why );
+	{
+		orientation_t o;
+		trap_R_LerpBone( &o, body, "?list" );     // prints the skeleton
+	}
+}
+
 static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	ragdoll_t *rd = NULL;
 	orientation_t o;
@@ -404,6 +438,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	int i, oldest = -1, slot;
 
 	if ( body->nonNormalizedAxes ) {
+		CG_RagdollWhyNot( cent, body, "scaled model" );
 		return NULL;    // scaled characters: the model space math assumes plain axes
 	}
 	pose = *body;
@@ -413,6 +448,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	// the joints, in model space, for the frozen pose
 	for ( i = 0; i < J_NUM; i++ ) {
 		if ( trap_R_LerpBone( &o, &pose, rdBoneNames[i] ) < 0 ) {
+			CG_RagdollWhyNot( cent, body, va( "no bone '%s'", rdBoneNames[i] ) );
 			return NULL;    // not a Bip01 skeleton (dogs, creatures): no ragdoll
 		}
 		VectorCopy( o.origin, rest[i] );
@@ -1235,6 +1271,8 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 		if ( cg_bloodMode.integer == BLOODMODE_GREEN ) {
 			body->reFlags |= REFLAG_WOUNDS_GREEN;
 		}
+	} else if ( cent->currentState.number != cg.snap->ps.clientNum && CG_RagdollDryWounds( cent->currentState.aiChar ) ) {
+		body->reFlags |= REFLAG_WOUNDS | REFLAG_WOUNDS_DUST;
 	}
 
 	rd = CG_RagdollFind( cent->currentState.number );

@@ -142,3 +142,114 @@ gore/screensplat3
 		alphaGen vertex
 	}
 }
+
+// Bullet holes on characters (renderer: R_ApplyWounds / R_AddBodyHoles;
+// textures from tools/gen_bodyhole_textures.py). Absorption like the rest.
+
+gore/bodyhole1
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole1.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}
+
+gore/bodyhole1#green
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole1_green.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}
+
+gore/bodyhole1_dust
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole1_dust.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}
+
+gore/bodyhole2
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole2.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}
+
+gore/bodyhole2#green
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole2_green.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}
+
+gore/bodyhole2_dust
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole2_dust.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}
+
+gore/bodyhole3
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole3.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}
+
+gore/bodyhole3#green
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole3_green.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}
+
+gore/bodyhole3_dust
+{
+	polygonOffset
+	nopicmip
+	cull none
+	{
+		clampmap gore/bodyhole3_dust.tga
+		blendFunc GL_ZERO GL_ONE_MINUS_SRC_COLOR
+		rgbGen vertex
+	}
+}

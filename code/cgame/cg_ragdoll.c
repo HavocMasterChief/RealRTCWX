@@ -336,6 +336,13 @@ void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter ) {
 	VectorCopy( dir, rdHits[entityNum].dir );
 	if ( !cg_xbKickHit ) {
 		CG_RagdollAddWound( entityNum, point, dir );
+		// a rifle round goes through: an exit wound on the far side
+		if ( CG_RagdollWeaponForce( shooter, 0 ) >= 2.5f ) {     // (one round, not a shotgun's pellets added up)
+			vec3_t far, back;
+			VectorMA( point, 30, dir, far );
+			VectorNegate( dir, back );
+			CG_RagdollAddWound( entityNum, far, back );
+		}
 	}
 }
 
@@ -1702,6 +1709,12 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 			CG_Bleed( hit, best->entityNum );
 		}
 		CG_GoreSpray( hit, dir, CG_RagdollWeaponForce( rdShooter, len ), best->entityNum );
+		if ( CG_RagdollWeaponForce( rdShooter, len ) >= 2.5f ) {
+			vec3_t far, back;
+			VectorMA( hit, 30, dir, far );
+			VectorNegate( dir, back );
+			CG_RagdollAddWound( best->entityNum, far, back );
+		}
 		CG_RagdollAddWound( best->entityNum, hit, dir );
 	}
 	if ( CG_PointContents( hit, -1 ) & CONTENTS_WATER ) {
@@ -1880,6 +1893,9 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	// bullet wounds drawn on the skin (alive or dead)
 	if ( cent->currentState.number != cg.snap->ps.clientNum && CG_RagdollBleeds( cent->currentState.aiChar ) ) {
 		body->reFlags |= REFLAG_WOUNDS;
+		if ( CG_BloodExtreme() ) {
+			body->reFlags |= REFLAG_WOUNDS_SOAK;    // wounds soak out through the clothes
+		}
 		if ( cg_bloodMode.integer == BLOODMODE_GREEN ) {
 			body->reFlags |= REFLAG_WOUNDS_GREEN;
 		}

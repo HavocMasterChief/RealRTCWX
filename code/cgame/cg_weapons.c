@@ -6923,6 +6923,7 @@ void CG_MissileHitPlayer( centity_t *cent, int weapon, vec3_t origin, vec3_t dir
 	switch ( weapon ) {
 		// knives just make the flesh hit sound.  no other effects
 	case WP_KNIFE:
+		CG_GoreKnife( origin, entityNum );      // (cg_gore.c)
 		i = rand() % 4;
 		if ( cgs.media.sfx_knifehit[i] ) {
 			trap_S_StartSound( origin, cent->currentState.number, CHAN_WEAPON, cgs.media.sfx_knifehit[i] );

@@ -1084,17 +1084,22 @@ skin however the body moves.
 */
 #define WOUND_MAX_ENTS      128
 #define WOUND_MAX           24
-#define WOUND_VERTS         12
-#define WOUND_PENDING       4
+#define WOUND_VERTS         40
+#define WOUND_PENDING       6
 #define WOUND_RADIUS        3.5f
+#define WOUND_SOAK_RADIUS   9.0f    // Extreme: how far a wound soaks out through the clothes
+#define WOUND_SOAK_TIME     15000   // ... over this long
+#define WOUND_SPLASH_RADIUS 4.5f    // blood from someone else's wound: a stain, no hole
 
 typedef struct {
 	const mdsSurface_t *surf;
 	int num;
 	short vert[WOUND_VERTS];
-	byte weight[WOUND_VERTS];
+	byte weight[WOUND_VERTS];   // the vertex's distance from the wound (0..WOUND_SOAK_RADIUS as 0..255)
 	short anchor;           // the vertex the bullet hole sits on
 	byte variant;
+	byte splash;            // a stain only (blood from someone else), no hole
+	int born;               // backEnd time it was found (soaking grows from here)
 } rdWound_t;
 
 /*
@@ -1173,6 +1178,7 @@ typedef struct {
 	const mdsSurface_t *bestSurf;
 	int bestVert;
 	float bestDist;
+	byte splash;
 } rdWoundPending_t;
 
 typedef struct {
@@ -1202,6 +1208,9 @@ void RE_AddWound( int entityNum, const vec3_t pos, const vec3_t dir ) {
 	memset( p, 0, sizeof( *p ) );
 	VectorCopy( pos, p->pos );
 	VectorCopy( dir, p->dir );
+	// a direction longer than 1.5 marks a splash: blood landing on this body
+	// from someone else's wound (cg_gore.c), a stain with no hole
+	p->splash = VectorLength( dir ) > 1.5f;
 	p->bestDist = 1e9f;
 }
 
@@ -1230,14 +1239,33 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 			w->num = 0;
 			w->anchor = (short)p->bestVert;
 			w->variant = (byte)( ( ew->numWounds * 7 + refent->entityNum ) % 3 );
-			for ( j = 0; j < count && w->num < WOUND_VERTS; j++ ) {
+			w->splash = p->splash;
+			w->born = backEnd.refdef.time;
+			// every vertex within the soak radius, nearest kept when there are too many
+			for ( j = 0; j < count; j++ ) {
 				float dist;
+				byte db;
 				VectorSubtract( tess.xyz[baseVertex + j], c, d );
 				dist = VectorLength( d );
-				if ( dist < WOUND_RADIUS ) {
+				if ( dist >= WOUND_SOAK_RADIUS ) {
+					continue;
+				}
+				db = (byte)( 255.0f * dist / WOUND_SOAK_RADIUS );
+				if ( w->num < WOUND_VERTS ) {
 					w->vert[w->num] = (short)j;
-					w->weight[w->num] = (byte)( 255 * ( 1.0f - 0.6f * dist / WOUND_RADIUS ) );
+					w->weight[w->num] = db;
 					w->num++;
+				} else {
+					int far = 0, q;
+					for ( q = 1; q < WOUND_VERTS; q++ ) {
+						if ( w->weight[q] > w->weight[far] ) {
+							far = q;
+						}
+					}
+					if ( db < w->weight[far] ) {
+						w->vert[far] = (short)j;
+						w->weight[far] = db;
+					}
 				}
 			}
 			ew->pending[i] = ew->pending[--ew->numPending];
@@ -1292,7 +1320,7 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 			continue;
 		}
 		// the hole, in world space, for the next frame's scene
-		if ( w->anchor < count && tr_numBodyHoles < BODYHOLE_MAX ) {
+		if ( !w->splash && w->anchor < count && tr_numBodyHoles < BODYHOLE_MAX ) {
 			bodyHole_t *h = &tr_bodyHoles[tr_numBodyHoles++];
 			float *lp = tess.xyz[baseVertex + w->anchor], *ln = tess.normal[baseVertex + w->anchor];
 			for ( k = 0; k < 3; k++ ) {
@@ -1306,12 +1334,35 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 		if ( refent->reFlags & REFLAG_WOUNDS_DUST ) {
 			continue;   // zombies: the hole, no blood soaking the skin
 		}
-		for ( j = 0; j < w->num; j++ ) {
-			int v = w->vert[j];
-			if ( v < count && tess.woundTint[baseVertex + v] < w->weight[j] ) {
-				tess.woundTint[baseVertex + v] = w->weight[j];
-				tess.woundAny = qtrue;
-				tess.woundGreen = ( refent->reFlags & REFLAG_WOUNDS_GREEN ) ? qtrue : qfalse;
+		{
+			// how far it has spread: a fresh wound its own size, soaking
+			// outward through the clothes on Extreme
+			float r = WOUND_RADIUS, strength = 1.0f;
+			if ( w->splash ) {
+				r = WOUND_SPLASH_RADIUS;
+				strength = 0.65f;
+			} else if ( refent->reFlags & REFLAG_WOUNDS_SOAK ) {
+				float age = (float)( backEnd.refdef.time - w->born ) / WOUND_SOAK_TIME;
+				if ( age < 0 ) {
+					age = 0;
+				} else if ( age > 1 ) {
+					age = 1;
+				}
+				r = WOUND_RADIUS + ( WOUND_SOAK_RADIUS - WOUND_RADIUS ) * sqrt( age );
+			}
+			for ( j = 0; j < w->num; j++ ) {
+				float dist = w->weight[j] * ( WOUND_SOAK_RADIUS / 255.0f );
+				int v = w->vert[j];
+				byte t;
+				if ( dist >= r || v >= count ) {
+					continue;
+				}
+				t = (byte)( 255.0f * strength * ( 1.0f - 0.6f * dist / r ) );
+				if ( tess.woundTint[baseVertex + v] < t ) {
+					tess.woundTint[baseVertex + v] = t;
+					tess.woundAny = qtrue;
+					tess.woundGreen = ( refent->reFlags & REFLAG_WOUNDS_GREEN ) ? qtrue : qfalse;
+				}
 			}
 		}
 	}

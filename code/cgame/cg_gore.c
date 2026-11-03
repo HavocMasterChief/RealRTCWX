@@ -60,6 +60,21 @@ static void QDECL CG_GoreLog( const char *fmt, ... ) {
 #define GORE_MAX_POOLS          24
 #define GORE_MAX_DROPS          256
 static int goDropLimit = GORE_MAX_DROPS;     // blood droplets in the air at once (the governor lowers it)
+
+// wounded and still alive: where they were hit (relative to them), until when
+static struct {
+	int until, next;
+	vec3_t ofs;
+	int arteryUntil, arteryNext;   // Extreme: a neck hit spurts while they're still on their feet
+} goBleeders[MAX_CLIENTS];
+static struct {
+	int next;
+	vec3_t last;
+	int squirtStart, squirtUntil, squirtNext;   // Extreme: the wound pumps for a few seconds after death
+	qboolean seenAlive;     // (a body that was already dead when the level loaded doesn't)
+	int arteryTime;         // last hit in the neck (Extreme: a long arterial squirt)
+	int knifeTime;          // last knife hit (a throat-slit spray, a quick pool)
+} goBodyDrips[MAX_GENTITIES];
 #define GORE_MAX_DRIPS          16
 #define GORE_MAX_RUNS           24
 #define GORE_POOL_MAX_POINTS    384
@@ -850,7 +865,8 @@ static void CG_GoreCheckBodies( void ) {
 		{
 			vec3_t wound;
 			qboolean rag = CG_RagdollWound( num, wound );
-			if ( goPooled[num] || cg.time - goDeadTime[num] < ( rag ? 2000 : 1200 ) || !CG_GoreBleeds( s ) ) {
+			int wait = ( cg.time - goBodyDrips[num].knifeTime < 3000 ) ? 400 : ( rag ? 2000 : 1200 );
+			if ( goPooled[num] || cg.time - goDeadTime[num] < wait || !CG_GoreBleeds( s ) ) {
 				continue;
 			}
 			goPooled[num] = qtrue;
@@ -1178,17 +1194,7 @@ typedef struct {
 static goreDrop_t goDrops[GORE_MAX_DROPS];
 static int goDropMarksThisFrame, goDropMarkFrame;
 
-// wounded and still alive: where they were hit (relative to them), until when
-static struct {
-	int until, next;
-	vec3_t ofs;
-} goBleeders[MAX_CLIENTS];
-static struct {
-	int next;
-	vec3_t last;
-	int squirtStart, squirtUntil, squirtNext;   // Extreme: the wound pumps for a few seconds after death
-	qboolean seenAlive;     // (a body that was already dead when the level loaded doesn't)
-} goBodyDrips[MAX_GENTITIES];
+
 
 static void CG_GoreDropsReset( void ) {
 	memset( goDrops, 0, sizeof( goDrops ) );
@@ -1222,8 +1228,117 @@ A bullet hit flesh at 'point' going along 'dir'. 'force' is the weapon's
 (a pistol round 1, a rifle ~3, one shotgun pellet ~0.4).
 ===============
 */
-void CG_GoreSpray( const vec3_t point, const vec3_t dir, float force, int entityNum ) {
+/*
+===============
+CG_GoreExtremeHit
+
+Extreme extras for one bullet hit: a red mist at the wound, blood on
+anyone standing in the spray, and a neck hit opening an artery.
+===============
+*/
+static void CG_GoreExtremeHit( const vec3_t entry, const vec3_t exitPt, const vec3_t dir, float force, int entityNum ) {
+	qboolean green = ( cg_bloodMode.integer == BLOODMODE_GREEN );
+	int i;
+
+	// mist, bigger for heavier rounds
+	{
+		vec3_t vel;
+		VectorScale( dir, 25, vel );
+		vel[2] += 6;
+		CG_SmokePuff( exitPt, vel, 5 + 3.5f * ( force > 4 ? 4 : force ), 1, 1, 1, 0.55f, 500 + 150 * force, cg.time, 0, 0,
+					  green ? cgs.media.bloodCloudShaderGreen : cgs.media.bloodCloudShader );
+	}
+	// whoever stands just past them in the spray gets some of it
+	if ( cg.snap ) {
+		for ( i = 0; i < cg.snap->numEntities; i++ ) {
+			entityState_t *es = &cg.snap->entities[i];
+			vec3_t c, to;
+			float d;
+			if ( es->eType != ET_PLAYER || es->number == entityNum || es->number == cg.snap->ps.clientNum ||
+				 es->number >= MAX_GENTITIES ) {
+				continue;
+			}
+			VectorCopy( cg_entities[es->number].lerpOrigin, c );
+			c[2] = exitPt[2] < c[2] ? c[2] : exitPt[2] > c[2] + 60 ? c[2] + 60 : exitPt[2];
+			VectorSubtract( c, exitPt, to );
+			d = VectorNormalize( to );
+			if ( d > 72 || DotProduct( to, dir ) < 0.4f ) {
+				continue;
+			}
+			{
+				vec3_t from, splash;
+				VectorMA( c, -20, to, from );
+				VectorScale( to, 2.0f, splash );   // (length 2: a stain, no hole)
+				trap_R_AddWound( es->number, from, splash );
+			}
+		}
+	}
+	// a neck hit opens an artery
+	if ( entityNum >= 0 && entityNum < MAX_CLIENTS && cg_entities[entityNum].currentState.aiChar && !cg_reloading.integer ) {
+		vec3_t head, torso, legs, neck;
+		CG_GetBleedOrigin( head, torso, legs, entityNum );
+		VectorSubtract( torso, head, neck );
+		VectorMA( head, 0.3f, neck, neck );
+		if ( Distance( entry, neck ) < 7.5f ) {
+			goBodyDrips[entityNum].arteryTime = cg.time;
+			if ( !( cg_entities[entityNum].currentState.eFlags & EF_DEAD ) ) {
+				VectorSubtract( neck, cg_entities[entityNum].lerpOrigin, goBleeders[entityNum].ofs );
+				goBleeders[entityNum].arteryUntil = cg.time + 3500;
+				goBleeders[entityNum].arteryNext = cg.time + 100;
+			}
+		}
+	}
+}
+
+/*
+===============
+CG_GoreKnife
+
+A knife hit: a throat-slit style spray across the blade's path, an artery
+on Extreme, and the pool under the body starts sooner.
+===============
+*/
+void CG_GoreKnife( const vec3_t point, int entityNum ) {
+	vec3_t fwd, side;
+	int i, n;
+	if ( !CG_GoreEnabled() || CG_Skull( 1 << 7 ) || entityNum < 0 || entityNum >= MAX_GENTITIES ||
+		 entityNum == cg.snap->ps.clientNum || !CG_GoreBleeds( &cg_entities[entityNum].currentState ) ) {
+		return;
+	}
+	VectorSubtract( point, cg.refdef.vieworg, fwd );
+	fwd[2] = 0;
+	if ( VectorNormalize( fwd ) < 0.01f ) {
+		VectorSet( fwd, 1, 0, 0 );
+	}
+	VectorSet( side, -fwd[1], fwd[0], 0 );
+	if ( rand() & 1 ) {
+		VectorNegate( side, side );
+	}
+	n = CG_BloodExtreme() ? 18 : 7;
+	for ( i = 0; i < n; i++ ) {
+		vec3_t v;
+		float t = random();
+		VectorScale( side, 0.6f + t, v );
+		VectorMA( v, 0.3f + 0.4f * random(), fwd, v );
+		v[2] = 0.15f + random() * 0.35f;
+		VectorNormalize( v );
+		VectorScale( v, 140 + random() * 160, v );
+		CG_GoreNewDrop( point, v, 1.0f + random() * 0.9f );
+	}
+	goBodyDrips[entityNum].knifeTime = cg.time;
+	if ( CG_BloodExtreme() ) {
+		goBodyDrips[entityNum].arteryTime = cg.time;
+		if ( entityNum < MAX_CLIENTS && !( cg_entities[entityNum].currentState.eFlags & EF_DEAD ) ) {
+			VectorSubtract( point, cg_entities[entityNum].lerpOrigin, goBleeders[entityNum].ofs );
+			goBleeders[entityNum].arteryUntil = cg.time + 3000;
+			goBleeders[entityNum].arteryNext = cg.time + 150;
+		}
+	}
+}
+
+void CG_GoreSpray( const vec3_t point0, const vec3_t dir, float force, int entityNum ) {
 	qboolean extreme = CG_BloodExtreme();
+	const float *point = point0;
 	int i, n, back;
 	float k;
 
@@ -1243,6 +1358,16 @@ void CG_GoreSpray( const vec3_t point, const vec3_t dir, float force, int entity
 	}
 	if ( n > ( extreme ? 40 : 16 ) ) {
 		n = extreme ? 40 : 16;
+	}
+	// a rifle round goes clean through: the spray starts from the exit
+	// wound on the far side (cg_ragdoll.c puts a hole there too)
+	{
+		vec3_t exitPt;
+		VectorMA( point, force >= 2.5f ? 10.0f : 0.0f, dir, exitPt );
+		if ( extreme ) {
+			CG_GoreExtremeHit( point, exitPt, dir, force, entityNum );
+		}
+		point = exitPt;
 	}
 	// exit spray: a tight, fast jet along the bullet, whichever way it was
 	// going (shot upward, it paints the ceiling); air drag slows it so a
@@ -1422,6 +1547,28 @@ static void CG_GoreUpdateBleeders( void ) {
 		if ( !( es->eFlags & EF_DEAD ) ) {
 			goBodyDrips[num].seenAlive = qtrue;
 			goBodyDrips[num].squirtStart = goBodyDrips[num].squirtUntil = 0;
+			// Extreme: an opened artery spurts while they're still standing
+			if ( num < MAX_CLIENTS && goBleeders[num].arteryUntil > cg.time && cg.time >= goBleeders[num].arteryNext ) {
+				vec3_t out;
+				int k;
+				goBleeders[num].arteryNext = cg.time + 260 + rand() % 80;
+				VectorAdd( cg_entities[num].lerpOrigin, goBleeders[num].ofs, w );
+				VectorCopy( goBleeders[num].ofs, out );
+				out[2] = 0;
+				if ( VectorNormalize( out ) < 0.01f ) {
+					VectorSet( out, 1, 0, 0 );
+				}
+				out[2] = 0.5f;
+				for ( k = 0; k < 5; k++ ) {
+					VectorCopy( out, v );
+					v[0] += crandom() * 0.2f;
+					v[1] += crandom() * 0.2f;
+					v[2] += crandom() * 0.15f;
+					VectorNormalize( v );
+					VectorScale( v, 170 + random() * 110, v );
+					CG_GoreNewDrop( w, v, 1.0f + random() * 0.8f );
+				}
+			}
 			if ( num < MAX_CLIENTS && goBleeders[num].until > cg.time && cg.time >= goBleeders[num].next ) {
 				goBleeders[num].next = cg.time + 180 + rand() % 220;
 				VectorAdd( cg_entities[num].lerpOrigin, goBleeders[num].ofs, w );
@@ -1437,8 +1584,9 @@ static void CG_GoreUpdateBleeders( void ) {
 		// death, in pulses that weaken as the heart stops
 		if ( !goBodyDrips[num].squirtStart ) {
 			goBodyDrips[num].squirtStart = cg.time;
-			if ( goBodyDrips[num].seenAlive && CG_BloodExtreme() && CG_GoreBleeds( es ) && random() < 0.4f ) {
-				goBodyDrips[num].squirtUntil = cg.time + 2500 + rand() % 3000;
+			qboolean artery = cg.time - goBodyDrips[num].arteryTime < 1500;
+			if ( goBodyDrips[num].seenAlive && CG_BloodExtreme() && CG_GoreBleeds( es ) && ( artery || random() < 0.4f ) ) {
+				goBodyDrips[num].squirtUntil = cg.time + ( artery ? 5000 + rand() % 2000 : 2500 + rand() % 3000 );
 				goBodyDrips[num].squirtNext = cg.time + 250;
 			}
 		}
@@ -1600,8 +1748,18 @@ void CG_GoreScreenSplat( const vec3_t origin, int count ) {
 		GORE_ALLOC( goScreen, GORE_MAX_SCREEN, s );
 		s->active = qtrue;
 		s->startTime = cg.time;
-		s->x = 0.12f + random() * 0.76f;
-		s->y = 0.08f + random() * 0.70f;
+		{
+			// on the side of the screen it came from
+			vec3_t right, up;
+			float sx, sy;
+			AngleVectors( cg.refdefViewAngles, NULL, right, up );
+			sx = DotProduct( delta, right ) / DotProduct( delta, forward );   // -1..1-ish across the view
+			sy = DotProduct( delta, up ) / DotProduct( delta, forward );
+			s->x = 0.5f + 0.45f * ( sx > 1 ? 1 : sx < -1 ? -1 : sx ) + crandom() * 0.18f;
+			s->y = 0.45f - 0.4f * ( sy > 1 ? 1 : sy < -1 ? -1 : sy ) + crandom() * 0.18f;
+			s->x = s->x < 0.08f ? 0.08f : s->x > 0.92f ? 0.92f : s->x;
+			s->y = s->y < 0.06f ? 0.06f : s->y > 0.85f ? 0.85f : s->y;
+		}
 		s->size = ( 0.18f + random() * 0.22f ) * ( 1.3f - dist / GORE_SCREEN_RANGE * 0.6f );
 		s->slide = 0.02f + random() * 0.06f;
 		s->variant = rand() % 3;

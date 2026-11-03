@@ -2382,6 +2382,7 @@ void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter );
 void CG_RagdollSetShooter( int shooter );
 float CG_RagdollShotForce( int shooter, float dist );
 void CG_GoreSpray( const vec3_t point, const vec3_t dir, float force, int entityNum );
+void CG_GoreKnife( const vec3_t point, int entityNum );
 int CG_RagdollBullet( const vec3_t start, const vec3_t end );
 // cg_xbskulls.c
 extern int cg_xbSkulls;

@@ -338,10 +338,10 @@ void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter ) {
 		CG_RagdollAddWound( entityNum, point, dir );
 		// a rifle round goes through: an exit wound on the far side
 		if ( CG_RagdollWeaponForce( shooter, 0 ) >= 2.5f ) {     // (one round, not a shotgun's pellets added up)
-			vec3_t far, back;
-			VectorMA( point, 30, dir, far );
+			vec3_t farSide, back;
+			VectorMA( point, 30, dir, farSide );
 			VectorNegate( dir, back );
-			CG_RagdollAddWound( entityNum, far, back );
+			CG_RagdollAddWound( entityNum, farSide, back );
 		}
 	}
 }
@@ -1710,10 +1710,10 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 		}
 		CG_GoreSpray( hit, dir, CG_RagdollWeaponForce( rdShooter, len ), best->entityNum );
 		if ( CG_RagdollWeaponForce( rdShooter, len ) >= 2.5f ) {
-			vec3_t far, back;
-			VectorMA( hit, 30, dir, far );
+			vec3_t farSide, back;
+			VectorMA( hit, 30, dir, farSide );
 			VectorNegate( dir, back );
-			CG_RagdollAddWound( best->entityNum, far, back );
+			CG_RagdollAddWound( best->entityNum, farSide, back );
 		}
 		CG_RagdollAddWound( best->entityNum, hit, dir );
 	}

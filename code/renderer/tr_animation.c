@@ -1256,15 +1256,15 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 					w->weight[w->num] = db;
 					w->num++;
 				} else {
-					int far = 0, q;
+					int farthest = 0, q;
 					for ( q = 1; q < WOUND_VERTS; q++ ) {
-						if ( w->weight[q] > w->weight[far] ) {
-							far = q;
+						if ( w->weight[q] > w->weight[farthest] ) {
+							farthest = q;
 						}
 					}
-					if ( db < w->weight[far] ) {
-						w->vert[far] = (short)j;
-						w->weight[far] = db;
+					if ( db < w->weight[farthest] ) {
+						w->vert[farthest] = (short)j;
+						w->weight[farthest] = db;
 					}
 				}
 			}

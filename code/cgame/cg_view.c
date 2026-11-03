@@ -1803,6 +1803,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		CG_AddMarks();
 		CG_AddGore();
 		CG_XbSkullsAddToScene();
+		CG_RagdollAddLimbs();       // Extreme: severed arms and legs
 
 		DEBUGTIME
 

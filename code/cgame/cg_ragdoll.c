@@ -191,6 +191,10 @@ typedef struct {
 	int shoveTime;       // bullet shoves taken since then (capped)
 	float shoved;
 	float corpseDamage;  // force taken since death (Extreme: enough and it comes apart)
+	int severedMask;     // body parts cut off (drawn collapsed into the stump), 1 << segment
+	byte severRoot[RD_SEGS];    // the joint each cut part collapses into
+	refEntity_t lastRef; // how it was last drawn (for a severed limb's copy)
+	qboolean haveRef;
 	int rig;             // RD_RIG_*
 	qboolean sleeping;
 	float data[RD_SEGS][12];
@@ -219,6 +223,12 @@ static void CG_RagdollInitPairs( ragdoll_t *rd );
 static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t dir );
 static void CG_RagdollLoadSaved( void );
 static void CG_RagdollPose( ragdoll_t *rd );
+static void CG_RagdollSever( ragdoll_t *rd, int joint, const vec3_t dir );
+void CG_RagdollLimbsReset( void );
+static void CG_RagdollCollapseSeg( ragdoll_t *rd, int s, const vec3_t at );
+static qboolean CG_GoreEnabled_Ragdoll( void ) {
+	return cg_blood.integer && cg_bloodMode.integer != BLOODMODE_OFF;
+}
 static void CG_RagdollCleanStart( ragdoll_t *rd );
 static void CG_RagdollDogInit( ragdoll_t *rd );
 
@@ -377,6 +387,7 @@ void CG_RagdollReset( void ) {
 		}
 	}
 	memset( rdBodies, 0, sizeof( rdBodies ) );
+	CG_RagdollLimbsReset();
 	memset( rdHeadless, 0, sizeof( rdHeadless ) );
 	memset( rdGibbed, 0, sizeof( rdGibbed ) );
 	memset( rdBurn, 0, sizeof( rdBurn ) );
@@ -726,6 +737,9 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->shoveTime = 0;
 	rd->shoved = 0;
 	rd->corpseDamage = 0;
+	rd->severedMask = 0;
+	rd->lastRef = *body;
+	rd->haveRef = qtrue;
 	// Extreme: died burning, or to the Tesla gun
 	if ( CG_BloodExtreme() ) {
 		if ( CG_EntOnFire( cent ) ) {
@@ -780,6 +794,12 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 				bestD = dd;
 				rd->wound = i;
 			}
+		}
+		// Extreme: a heavy killing round into an arm or a leg takes it off
+		if ( rdHits[rd->entityNum].force >= 3.0f && rd->wound != J_HEAD && rd->wound != J_CHEST &&
+			 rd->wound != J_PELVIS && bestD < 10.0f * 10.0f && random() < 0.7f ) {
+			rd->haveRef = qtrue;
+			CG_RagdollSever( rd, rd->wound, hd );
 		}
 		if ( rd->wound == J_HEAD && bestD < 10.0f * 10.0f ) {
 			// Extreme: a sniper round or a close shotgun blast takes the head off
@@ -1578,6 +1598,18 @@ CG_RagdollPose
 Turn the joints into a rotation + translation per body part, in model space.
 ===============
 */
+// draw one body part shrunk to (nearly) a point at 'at' (model space)
+static void CG_RagdollCollapseSeg( ragdoll_t *rd, int s, const vec3_t at ) {
+	float *d = rd->data[s];
+	int i;
+	for ( i = 0; i < 9; i++ ) {
+		d[i] = ( i == 0 || i == 4 || i == 8 ) ? 0.001f : 0.0f;
+	}
+	for ( i = 0; i < 3; i++ ) {
+		d[9 + i] = at[i] - 0.001f * rd->rest[rdSegs[s].anchor][i];
+	}
+}
+
 static void CG_RagdollPose( ragdoll_t *rd ) {
 	vec3_t cur[J_NUM];
 	int s, i, j, k;
@@ -1634,6 +1666,10 @@ static void CG_RagdollPose( ragdoll_t *rd ) {
 			ra[i] = R[i][0] * rd->rest[rdSegs[s].anchor][0] + R[i][1] * rd->rest[rdSegs[s].anchor][1] +
 					R[i][2] * rd->rest[rdSegs[s].anchor][2];
 			d[9 + i] = cur[rdSegs[s].anchor][i] - ra[i];
+		}
+		// a part that's been cut off shrinks into its stump
+		if ( rd->severedMask & ( 1 << s ) ) {
+			CG_RagdollCollapseSeg( rd, s, cur[rd->severRoot[s]] );
 		}
 	}
 }
@@ -1733,6 +1769,19 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 			wf = 5.0f - best->shoved;
 		}
 		if ( wf > 0 ) {
+			// Extreme: a heavy round into a limb takes it off
+			if ( wf >= 3.0f && random() < 0.6f ) {
+				int c, nearest = J_PELVIS;
+				float bd = 1e9f;
+				for ( c = 0; c < J_NUM; c++ ) {
+					float dd = DistanceSquared( best->p[c], hit );
+					if ( dd < bd ) {
+						bd = dd;
+						nearest = c;
+					}
+				}
+				CG_RagdollSever( best, nearest, dir );
+			}
 			best->shoved += wf;
 			best->corpseDamage += wf;
 			// Extreme: a body that keeps taking hits comes apart
@@ -1814,6 +1863,21 @@ void CG_RagdollExplosion( const vec3_t origin, float radius, float strength ) {
 			f = strength * f * f;
 			away[2] += 0.6f;    // blasts lift
 			VectorMA( rd->old[j], -RD_STEP * f, away, rd->old[j] );
+		}
+		// Extreme: right next to it, limbs come off
+		if ( Distance( rd->p[J_PELVIS], origin ) < 110 && random() < 0.6f ) {
+			static const int roots[4] = { J_LSHOULDER, J_RSHOULDER, J_LHIP, J_RHIP };
+			vec3_t away;
+			int k = rand() & 3;
+			VectorSubtract( rd->p[roots[k]], origin, away );
+			VectorNormalize( away );
+			CG_RagdollSever( rd, roots[k], away );
+			if ( Distance( rd->p[J_PELVIS], origin ) < 60 ) {
+				k = ( k + 1 + ( rand() % 3 ) ) & 3;
+				VectorSubtract( rd->p[roots[k]], origin, away );
+				VectorNormalize( away );
+				CG_RagdollSever( rd, roots[k], away );
+			}
 		}
 	}
 }
@@ -2119,6 +2183,8 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	body->renderfx |= RF_LIGHTING_ORIGIN;
 	body->ragdoll = rd->slot;
 	body->ragdollStamp = ++rdStamp;
+	rd->lastRef = *body;
+	rd->haveRef = qtrue;
 }
 
 /*
@@ -2242,5 +2308,239 @@ void CG_RagdollCheckSave( void ) {
 			break;
 		}
 		CG_RagdollWriteSave( tok );
+	}
+}
+
+
+/*
+===========================================================================
+Dismemberment (Extreme)
+
+A very hard hit on an arm or a leg (a rifle round, a close shotgun blast,
+an explosion right next to it) cuts it off. The body draws that part shrunk
+into the stump; the limb is a copy of the body with only that part showing,
+simulated as a short chain of joints that falls, bounces and comes to rest.
+===========================================================================
+*/
+#define RD_MAX_LIMBS    12
+#define RD_LIMB_SLOT0   ( RD_MAX + 1 )      // renderer slots after the bodies'
+
+typedef struct {
+	qboolean active;
+	int startTime;
+	ragdoll_t r;            // copy of the body; only the chain joints move
+	refEntity_t ref;
+	int keepMask;           // segments drawn
+	int chain[3], n;        // joints simulated, root first
+	float len[2];
+	vec3_t root0, others0[J_NUM];
+	int still;
+	qboolean asleep;
+} rdLimb_t;
+
+static rdLimb_t rdLimbsActive[RD_MAX_LIMBS];
+
+void CG_RagdollLimbsReset( void ) {
+	int i;
+	for ( i = 0; i < RD_MAX_LIMBS; i++ ) {
+		if ( rdLimbsActive[i].active ) {
+			trap_R_SetRagdoll( RD_LIMB_SLOT0 + i, NULL );
+		}
+	}
+	memset( rdLimbsActive, 0, sizeof( rdLimbsActive ) );
+}
+
+// which part a hit at 'joint' cuts off; qfalse if it isn't a limb
+static qboolean CG_RagdollCutFor( int joint, int *mask, int chain[3], int *n ) {
+	switch ( joint ) {
+	case J_LSHOULDER: *mask = ( 1 << 3 ) | ( 1 << 4 ); chain[0] = J_LSHOULDER; chain[1] = J_LELBOW; chain[2] = J_LHAND; *n = 3; return qtrue;
+	case J_LELBOW: case J_LHAND: *mask = 1 << 4; chain[0] = J_LELBOW; chain[1] = J_LHAND; *n = 2; return qtrue;
+	case J_RSHOULDER: *mask = ( 1 << 5 ) | ( 1 << 6 ); chain[0] = J_RSHOULDER; chain[1] = J_RELBOW; chain[2] = J_RHAND; *n = 3; return qtrue;
+	case J_RELBOW: case J_RHAND: *mask = 1 << 6; chain[0] = J_RELBOW; chain[1] = J_RHAND; *n = 2; return qtrue;
+	case J_LHIP: *mask = ( 1 << 7 ) | ( 1 << 8 ); chain[0] = J_LHIP; chain[1] = J_LKNEE; chain[2] = J_LFOOT; *n = 3; return qtrue;
+	case J_LKNEE: case J_LFOOT: *mask = 1 << 8; chain[0] = J_LKNEE; chain[1] = J_LFOOT; *n = 2; return qtrue;
+	case J_RHIP: *mask = ( 1 << 9 ) | ( 1 << 10 ); chain[0] = J_RHIP; chain[1] = J_RKNEE; chain[2] = J_RFOOT; *n = 3; return qtrue;
+	case J_RKNEE: case J_RFOOT: *mask = 1 << 10; chain[0] = J_RKNEE; chain[1] = J_RFOOT; *n = 2; return qtrue;
+	default: return qfalse;
+	}
+}
+
+// cut off the part a hit at 'joint' takes, flying along 'dir'
+static void CG_RagdollSever( ragdoll_t *rd, int joint, const vec3_t dir ) {
+	int mask, chain[3], n, i, s, slot, oldest = 0;
+	rdLimb_t *l = NULL;
+
+	if ( !CG_BloodExtreme() || rd->rig == RD_RIG_DOG || !rd->haveRef || CG_Skull( 1 << 7 ) ||
+		 !CG_RagdollBleeds( cg_entities[rd->entityNum].currentState.aiChar ) ||
+		 !CG_RagdollCutFor( joint, &mask, chain, &n ) || ( rd->severedMask & mask ) ) {
+		return;
+	}
+	for ( i = 0; i < RD_MAX_LIMBS; i++ ) {
+		if ( !rdLimbsActive[i].active ) {
+			l = &rdLimbsActive[i];
+			break;
+		}
+		if ( rdLimbsActive[i].startTime < rdLimbsActive[oldest].startTime ) {
+			oldest = i;
+		}
+	}
+	if ( !l ) {
+		l = &rdLimbsActive[oldest];
+	}
+	slot = RD_LIMB_SLOT0 + (int)( l - rdLimbsActive );
+	memset( l, 0, sizeof( *l ) );
+	l->active = qtrue;
+	l->startTime = cg.time;
+	l->r = *rd;
+	l->r.slot = slot;
+	l->r.severedMask = 0;
+	l->keepMask = mask;
+	l->n = n;
+	for ( i = 0; i < n; i++ ) {
+		l->chain[i] = chain[i];
+	}
+	for ( i = 0; i + 1 < n; i++ ) {
+		l->len[i] = Distance( rd->p[chain[i]], rd->p[chain[i + 1]] );
+	}
+	VectorCopy( rd->p[chain[0]], l->root0 );
+	memcpy( l->others0, rd->p, sizeof( l->others0 ) );
+	// thrown along the shot, tumbling a little
+	for ( i = 0; i < n; i++ ) {
+		vec3_t v;
+		VectorScale( dir, 160 + random() * 80 + 40 * i, v );
+		v[2] += 90 + random() * 60;
+		v[0] += crandom() * 30 * i;
+		v[1] += crandom() * 30 * i;
+		VectorMA( l->r.p[chain[i]], -RD_STEP, v, l->r.old[chain[i]] );
+	}
+	l->ref = rd->lastRef;
+
+	// the body: that part shrinks into the stump, which bleeds
+	for ( s = 0; s < RD_SEGS; s++ ) {
+		if ( mask & ( 1 << s ) ) {
+			rd->severRoot[s] = (byte)chain[0];
+		}
+	}
+	rd->severedMask |= mask;
+	rd->wound = chain[0];       // (the squirt comes from here now)
+	CG_RagdollAddWound( rd->entityNum, rd->p[chain[0]], dir );
+	CG_GoreHeadBurst( rd->p[chain[0]], dir, rd->entityNum );
+	trap_S_StartSound( rd->p[chain[0]], ENTITYNUM_WORLD, CHAN_AUTO, cgs.media.gibSound );
+	CG_RagdollWake( rd );
+	CG_Printf( "ragdoll: body %i lost a limb (joint %i)\n", rd->entityNum, joint );
+}
+
+static void CG_RagdollLimbStep( rdLimb_t *l ) {
+	int i, it;
+	float moved = 0;
+	vec3_t start[3], shift;
+	for ( i = 0; i < l->n; i++ ) {
+		float *p = l->r.p[l->chain[i]], *o = l->r.old[l->chain[i]];
+		vec3_t v;
+		VectorCopy( p, start[i] );
+		VectorSubtract( p, o, v );
+		VectorScale( v, RD_AIRDRAG, v );
+		VectorCopy( p, o );
+		VectorAdd( p, v, p );
+		p[2] -= RD_GRAVITY * CG_XbGravityScale() * RD_STEP * RD_STEP;
+	}
+	for ( it = 0; it < 4; it++ ) {
+		for ( i = 0; i + 1 < l->n; i++ ) {
+			float *a = l->r.p[l->chain[i]], *b = l->r.p[l->chain[i + 1]];
+			vec3_t d;
+			float len = Distance( a, b ), diff;
+			if ( len < 0.001f ) {
+				continue;
+			}
+			VectorSubtract( b, a, d );
+			diff = ( len - l->len[i] ) / len * 0.5f;
+			VectorMA( a, diff, d, a );
+			VectorMA( b, -diff, d, b );
+		}
+	}
+	for ( i = 0; i < l->n; i++ ) {
+		float *p = l->r.p[l->chain[i]], *o = l->r.old[l->chain[i]];
+		trace_t tr;
+		vec3_t mins = { -2, -2, -2 }, maxs = { 2, 2, 2 };
+		CG_Trace( &tr, start[i], mins, maxs, p, l->r.entityNum, RD_MASK );
+		if ( tr.allsolid ) {
+			VectorCopy( start[i], p );
+			VectorCopy( start[i], o );
+		} else if ( tr.fraction < 1.0f ) {
+			vec3_t v, vt;
+			float dn;
+			VectorSubtract( p, o, v );
+			VectorMA( tr.endpos, 0.05f, tr.plane.normal, p );
+			dn = DotProduct( v, tr.plane.normal );
+			VectorMA( v, -dn, tr.plane.normal, vt );
+			VectorMA( p, -0.6f, vt, o );        // grips and rolls to a stop
+			if ( dn < -2.0f && CG_GoreEnabled_Ragdoll() ) {
+				CG_ImpactMark( CG_BloodDot(), tr.endpos, tr.plane.normal, random() * 360,
+							   1, 1, 1, 1, qtrue, 4 + random() * 4, qfalse, CG_BloodMarkTime() );
+			}
+		}
+		moved += Distance( p, start[i] );
+	}
+	// the rest of the skeleton rides along with the cut end (only so the
+	// limb's frames stay well defined; those parts aren't drawn)
+	VectorSubtract( l->r.p[l->chain[0]], l->root0, shift );
+	for ( i = 0; i < J_NUM; i++ ) {
+		int k, inChain = 0;
+		for ( k = 0; k < l->n; k++ ) {
+			inChain |= ( l->chain[k] == i );
+		}
+		if ( !inChain ) {
+			VectorAdd( l->others0[i], shift, l->r.p[i] );
+			VectorCopy( l->r.p[i], l->r.old[i] );
+		}
+	}
+	l->r.steps++;
+	if ( moved < 0.05f * l->n ) {
+		if ( ++l->still > 45 ) {
+			l->asleep = qtrue;
+		}
+	} else {
+		l->still = 0;
+	}
+}
+
+void CG_RagdollAddLimbs( void ) {
+	int i, s;
+	for ( i = 0; i < RD_MAX_LIMBS; i++ ) {
+		rdLimb_t *l = &rdLimbsActive[i];
+		vec3_t root;
+		if ( !l->active ) {
+			continue;
+		}
+		if ( cg.time - l->startTime > 180000 || !CG_BloodExtreme() ) {
+			trap_R_SetRagdoll( l->r.slot, NULL );
+			l->active = qfalse;
+			continue;
+		}
+		if ( !l->asleep ) {
+			int steps = 0;
+			l->r.accum += cg.frametime * 0.001f;
+			if ( l->r.accum > 0.1f ) {
+				l->r.accum = 0.1f;
+			}
+			while ( l->r.accum >= RD_STEP && steps < 3 ) {
+				CG_RagdollLimbStep( l );
+				l->r.accum -= RD_STEP;
+				steps++;
+			}
+			CG_RagdollPose( &l->r );
+			CG_RagdollToModel( &l->r.pose, l->r.p[l->chain[0]], root );
+			for ( s = 0; s < RD_SEGS; s++ ) {
+				if ( !( l->keepMask & ( 1 << s ) ) ) {
+					CG_RagdollCollapseSeg( &l->r, s, root );
+				}
+			}
+		}
+		trap_R_SetRagdoll( l->r.slot, &l->r.data[0][0] );
+		l->ref.ragdoll = l->r.slot;
+		l->ref.ragdollStamp = ++rdStamp;
+		VectorCopy( l->r.p[l->chain[0]], l->ref.lightingOrigin );
+		l->ref.renderfx |= RF_LIGHTING_ORIGIN;
+		trap_R_AddRefEntityToScene( &l->ref );
 	}
 }

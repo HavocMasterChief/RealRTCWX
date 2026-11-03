@@ -1454,6 +1454,7 @@ static qboolean ParseShader( char **text ) {
 	int s;
 
 	s = 0;
+	tr.allowCompress = qfalse;     // RealRTCWX: each shader starts from the default
 
 	token = COM_ParseExt( text, qtrue );
 	if ( token[0] != '{' ) {
@@ -2672,9 +2673,10 @@ static shader_t *FinishShader( void ) {
 	ComputeStageIteratorFunc();
 
 	// RF default back to no compression for next shader
-	if ( r_ext_compressed_textures->integer == 2 ) {
-		tr.allowCompress = qfalse;
-	}
+	// (RealRTCWX: in every mode. With 1, one shader saying "nocompress" left
+	// allowCompress at -1, so every image loaded after it went up
+	// uncompressed: only ~190 of ~900 were compressed.)
+	tr.allowCompress = qfalse;
 
 	return GeneratePermanentShader();
 }

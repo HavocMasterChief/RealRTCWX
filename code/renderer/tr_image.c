@@ -195,6 +195,35 @@ int R_UWP_TextureMemoryMB( int *compressedCount ) {
 	if ( compressedCount ) {
 		*compressedCount = comp;
 	}
+	// the biggest uncompressed ones, for the log
+	{
+		int k, j, best;
+		static byte shown[MAX_DRAWIMAGES];
+		memset( shown, 0, sizeof( shown ) );
+		for ( k = 0; k < 10; k++ ) {
+			double bestPx = 0;
+			best = -1;
+			for ( j = 0; j < tr.numImages; j++ ) {
+				image_t *im = tr.images[j];
+				double px = (double)im->uploadWidth * im->uploadHeight;
+				if ( shown[j] || im->internalFormat == GL_COMPRESSED_RGB_S3TC_DXT1_EXT ||
+					 im->internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT1_EXT ||
+					 im->internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT ) {
+					continue;
+				}
+				if ( px > bestPx ) {
+					bestPx = px;
+					best = j;
+				}
+			}
+			if ( best < 0 ) {
+				break;
+			}
+			shown[best] = 1;
+			ri.Printf( PRINT_ALL, "  uncompressed: %ix%i %s\n", tr.images[best]->uploadWidth,
+					   tr.images[best]->uploadHeight, tr.images[best]->imgName );
+		}
+	}
 	return (int)( total / ( 1024 * 1024 ) );
 }
 

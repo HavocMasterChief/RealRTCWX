@@ -5346,6 +5346,23 @@ static void UI_RunMenuScript( char **args ) {
 			UI_XbContinue();
 			return;
 		}
+		if ( Q_stricmp( name, "xbSurvBegin" ) == 0 ) {
+			// RealRTCWX survival: start with or without the cheats/skulls set
+			// on the options screen (achievements are off for a cheated run)
+			if ( (int)trap_Cvar_VariableValue( "ui_xbSurvCheats" ) ) {
+				trap_Cvar_Set( "g_cheatedRun", "1" );
+			} else {
+				trap_Cvar_Set( "g_cheatedRun", "0" );
+				trap_Cvar_Set( "g_xbcheats", "0" );
+				trap_Cvar_Set( "g_xbskulls", "0" );
+			}
+			Menus_CloseAll();
+			{
+				char *sargs = "StartSurvival";
+				UI_RunMenuScript( &sargs );
+			}
+			return;
+		}
 		if ( Q_stricmp( name, "xbSkull" ) == 0 ) {
 			if ( String_Parse( args, &name2 ) ) {
 				UI_XbSkull( name2 );

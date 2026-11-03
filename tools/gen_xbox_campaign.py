@@ -16,7 +16,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from gen_xbox_menus import split_items  # noqa: E402
+from gen_xbox_menus import split_items, skulls_window  # noqa: E402
 
 
 def field(item, key):
@@ -155,6 +155,145 @@ menuDef {{
 {body}
 }}
 '''
+
+
+def survival_menus():
+    """Survival, like the campaign: pick a map, then the options (with
+    cheats and skulls), then Begin."""
+    src = os.path.join(ROOT, "main", "ui", "survival_menu.menu")
+    its = items(open(src, encoding="latin-1").read())
+    by_name = lambda n: [i for i in its if field(i, 'name') == n]
+    background = by_name("realrtcw_background")[0] + "\n" + by_name("realrtcw_logo")[0] + "\n"
+    previews = "\n".join(i.replace('{', '{\n\t\tdecoration', 1) for i in by_name("mappreview"))
+    maplist = by_name("maplist")[0]
+
+    # --- 1. map selection
+    ml = set_rect(re.sub(r'\brect\s+[-\d.]+\s+[-\d.]+\s+[\d.]+\s+[\d.]+', 'rect 40 140 280 290', maplist, count=1))
+    ml = set_field(ml, "elementheight", "18")
+    ml = set_field(ml, "textscale", ".26")
+    ml = set_field(ml, "visible", "1")
+    ml = re.sub(r'^(\s*)name\s+\S+', lambda m: m.group(1) + 'name padList', ml, count=1, flags=re.M)
+    # the three previews, moved to the right of the list
+    prev = previews
+    prev = re.sub(r'\brect\s+29\s+146\s+151\s+114', 'rect 341 141 258 154', prev)
+    prev = re.sub(r'\brect\s+28\s+145\s+152\s+115', 'rect 340 140 260 156', prev)
+    prev = re.sub(r'\brect\s+186\s+146\s+72\s+54', 'rect 341 301 127 74', prev)
+    prev = re.sub(r'\brect\s+185\s+145\s+73\s+55', 'rect 340 300 129 76', prev)
+    prev = re.sub(r'\brect\s+186\s+206\s+72\s+54', 'rect 472 301 127 74', prev)
+    prev = re.sub(r'\brect\s+185\s+205\s+73\s+55', 'rect 471 300 129 76', prev)
+    prev = prev.replace("visible\t\t\t\t1", "visible 1").replace("visible\t\t\t1", "visible 1")
+    filt = by_name("enemies_type")[0]
+    filt = re.sub(r'^(\s*)name\s+\S+', lambda m: m.group(1) + 'name padCycle', filt, count=1, flags=re.M)
+    filt = re.sub(r'\brect\s+[-\d.]+\s+[-\d.]+\s+290\s+12', 'rect 340 386 260 14', filt, count=1)
+    filt = set_field(filt, "textalignx", "100")
+    filt = set_field(filt, "textscale", ".24")
+    filt = set_field(filt, "visible", "1")
+    filt = filt.replace('{', '{\n\t\tdecoration', 1)
+    body = background + label("SURVIVAL", 40, 104, 300, scale=".4", color="1 1 1 1", align="ITEM_ALIGN_LEFT", h=30)
+    body += ml + prev + filt
+    body += label("LB / RB: map filter", 340, 404, 260, scale=".2", color="1 1 1 .6")
+    body += '''
+	itemDef {
+		name padA
+		visible 0
+		decoration
+		action { close survival_menu ; open xbox_survival_opts }
+	}
+'''
+    body += hints("A  Select map          LB / RB  Filter          B  Back")
+    out = menu("survival_menu", body,
+               on_open="uiScript loadArenas ; uiScript skill_surv",
+               on_esc="close survival_menu ; open main")
+
+    # --- 2. options + cheats
+    opts = [i for i in its if field(i, 'group') == "srvCreate" and field(i, 'name') in ("window", "player_class", "soldier_desc", "gameplay")]
+    opts = [set_field(i, "visible", "1") if field(i, 'name') != "soldier_desc" else i for i in opts]
+    # descriptions show by cvarTest; the stock ones were shown with the group
+    opts = [i.replace("visible 0", "visible 1") for i in opts]
+    shifted = [set_rect(i, dx=-250) for i in opts]
+    # class descriptions wrap inside the left panel
+    shifted = [re.sub(r'\brect\s+50\s+185\s+500\s+500', 'rect 50 185 280 62', i) for i in shifted]
+    b = background + label("SURVIVAL", 40, 104, 300, scale=".4", color="1 1 1 1", align="ITEM_ALIGN_LEFT", h=30)
+    b += panel(40, 140, 300, 266)
+    b += "\n".join(shifted)
+    # cheats, on the right
+    b += panel(360, 140, 240, 266, "Cheats")
+    b += f'''
+	itemDef {{
+		name xbsurvcheats
+		type ITEM_TYPE_YESNO
+		text "Use cheats:"
+		cvar "ui_xbSurvCheats"
+		textfont UI_FONT_BIG
+		textscale .22
+		textalign ITEM_ALIGN_RIGHT
+		textalignx 110
+		textaligny 10
+		rect 366 172 228 12
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+	}}
+'''
+    b += label("Achievements are off for a run with cheats.", 366, 190, 228, scale=".18", color=".8 .72 .58 1")
+    y = 210
+    for cmd in ("god", "ammo", "onehit", "noclip"):
+        b += f'''
+	itemDef {{
+		name xbsc_{cmd}
+		type ITEM_TYPE_BUTTON
+		cvar "ui_xbc_{cmd}"
+		cvarTest "ui_xbSurvCheats"
+		showCvar {{ "1" }}
+		textfont UI_FONT_BIG
+		textscale .22
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 13
+		rect 366 {y} 228 18
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		action {{ uiScript xbCheat {cmd} }}
+	}}
+'''
+        y += 22
+    b += f'''
+	itemDef {{
+		name xbsc_skulls
+		type ITEM_TYPE_BUTTON
+		text "Skulls..."
+		cvarTest "ui_xbSurvCheats"
+		showCvar {{ "1" }}
+		textfont UI_FONT_BIG
+		textscale .22
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 13
+		rect 366 {y + 6} 228 18
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07
+		forecolor .9 .85 1 1
+		visible 1
+		action {{ open xbox_surv_skulls }}
+	}}
+'''
+    b += button("xbsurvbegin", "BEGIN", 470, 413, 130, 24, "uiScript xbSurvBegin", scale=".3")
+    b += '''
+	itemDef {
+		name padY
+		visible 0
+		decoration
+		action { uiScript xbSurvBegin }
+	}
+'''
+    b += hints("D-Pad  Change          A  Select          Y  Begin          B  Back")
+    out += menu("xbox_survival_opts", b, on_open="uiScript xbCheat refresh ; uiScript xbSkull refresh",
+                on_esc="close xbox_survival_opts ; open survival_menu")
+    out += skulls_window("xbox_surv_skulls", "close xbox_surv_skulls")
+    return out
 
 
 def load_screen(name, background, ingame):
@@ -364,6 +503,7 @@ def main():
     print("wrote", DST)
 
     write_menu("load.menu", load_screen("load_menu", background, False), "main/ui/load.menu")
+    write_menu("survival_menu.menu", survival_menus(), "main/ui/survival_menu.menu")
     write_menu("ingame_load.menu", load_screen("ingame_load", background, True), "main/ui/ingame_load.menu")
 
 

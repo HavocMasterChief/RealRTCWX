@@ -58,6 +58,8 @@ static void QDECL CG_GoreLog( const char *fmt, ... ) {
 }
 
 #define GORE_MAX_POOLS          24
+#define GORE_MAX_DROPS          256
+static int goDropLimit = GORE_MAX_DROPS;     // blood droplets in the air at once (the governor lowers it)
 #define GORE_MAX_DRIPS          16
 #define GORE_MAX_RUNS           24
 #define GORE_POOL_MAX_POINTS    384
@@ -181,6 +183,7 @@ Called on level load; everything client-side starts clean.
 */
 static void CG_GoreScreenReset( void );
 static void CG_GoreFeetReset( void );
+static void CG_GoreDropsReset( void );
 
 void CG_GoreReset( void ) {
 	CG_GoreScreenReset();
@@ -190,6 +193,7 @@ void CG_GoreReset( void ) {
 	memset( goRuns, 0, sizeof( goRuns ) );
 	memset( goDeadTime, 0, sizeof( goDeadTime ) );
 	memset( goPooled, 0, sizeof( goPooled ) );
+	CG_GoreDropsReset();
 	goRegistered = qfalse;
 }
 
@@ -936,7 +940,11 @@ static void CG_GoreGovernor( void ) {
 	lastTrim = cg.time;
 	CG_GoreLog( "governor: fps %.1f below %.1f (baseline %.1f) - trimming\n", fps, limit, baseline );
 
-	// drips first, then runs, then pools, then decals
+	// fewer blood droplets first, then drips, runs, pools, decals
+	if ( goDropLimit > 48 ) {
+		goDropLimit = goDropLimit * 7 / 10;
+		return;
+	}
 	for ( oldest = -1, i = 0; i < GORE_MAX_DRIPS; i++ ) {
 		if ( goDrips[i].active && ( oldest < 0 || goDrips[i].startTime < goDrips[oldest].startTime ) ) {
 			oldest = i;
@@ -1144,6 +1152,291 @@ CG_AddGore
 Once per frame, alongside the regular marks.
 ===============
 */
+/*
+===========================================================================
+Blood droplets
+
+A hit sprays real droplets: most out the back along the bullet (exit
+wound), a few back toward the shooter. Each flies with gravity and a little
+drag and is drawn as a short streak; where it lands it leaves a splat sized
+by how big and fast it was, smeared along its path on a glancing hit
+(Extreme: ceiling hits start drips, heavy wall hits start runs). Wounded
+characters dribble a few as they move, and so do ragdolls still falling.
+===========================================================================
+*/
+
+
+typedef struct {
+	qboolean active;
+	int startTime;
+	vec3_t pos, vel;
+	float size;
+} goreDrop_t;
+
+static goreDrop_t goDrops[GORE_MAX_DROPS];
+static int goDropMarksThisFrame, goDropMarkFrame;
+
+// wounded and still alive: where they were hit (relative to them), until when
+static struct {
+	int until, next;
+	vec3_t ofs;
+} goBleeders[MAX_CLIENTS];
+static struct {
+	int next;
+	vec3_t last;
+} goBodyDrips[MAX_GENTITIES];
+
+static void CG_GoreDropsReset( void ) {
+	memset( goDrops, 0, sizeof( goDrops ) );
+	memset( goBleeders, 0, sizeof( goBleeders ) );
+	memset( goBodyDrips, 0, sizeof( goBodyDrips ) );
+	goDropLimit = GORE_MAX_DROPS;
+}
+
+static void CG_GoreNewDrop( const vec3_t pos, const vec3_t vel, float size ) {
+	goreDrop_t *d;
+	int i, n = 0;
+	for ( i = 0; i < GORE_MAX_DROPS; i++ ) {
+		n += goDrops[i].active;
+	}
+	if ( n >= goDropLimit ) {
+		return;
+	}
+	GORE_ALLOC( goDrops, GORE_MAX_DROPS, d );
+	d->active = qtrue;
+	d->startTime = cg.time;
+	VectorCopy( pos, d->pos );
+	VectorCopy( vel, d->vel );
+	d->size = size;
+}
+
+/*
+===============
+CG_GoreSpray
+
+A bullet hit flesh at 'point' going along 'dir'. 'force' is the weapon's
+(a pistol round 1, a rifle ~3, one shotgun pellet ~0.4).
+===============
+*/
+void CG_GoreSpray( const vec3_t point, const vec3_t dir, float force, int entityNum ) {
+	qboolean extreme = CG_BloodExtreme();
+	int i, n, back;
+	float k;
+
+	if ( !CG_GoreEnabled() || CG_Skull( 1 << 7 ) || entityNum == cg.snap->ps.clientNum ) {
+		return;     // (you being hit: the screen effects cover it)
+	}
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES && !CG_GoreBleeds( &cg_entities[entityNum].currentState ) ) {
+		return;     // armour, zombies (they have their own dust), bosses
+	}
+	if ( force < 0.2f ) {
+		force = 0.2f;
+	}
+	k = pow( force, 0.7f );
+	n = (int)( ( extreme ? 14.0f : 6.0f ) * k + random() * 2 );
+	if ( n < ( extreme ? 5 : 2 ) ) {
+		n = extreme ? 5 : 2;
+	}
+	if ( n > ( extreme ? 40 : 16 ) ) {
+		n = extreme ? 40 : 16;
+	}
+	// exit spray: a cone along the bullet
+	for ( i = 0; i < n; i++ ) {
+		vec3_t v, p;
+		float sp = 110 + 70 * force + random() * 90, spread = 0.18f + 0.12f * random();
+		VectorCopy( dir, v );
+		v[0] += crandom() * spread;
+		v[1] += crandom() * spread;
+		v[2] += crandom() * spread * 0.7f + 0.08f;
+		VectorNormalize( v );
+		VectorScale( v, sp, v );
+		VectorMA( point, 2 + random() * 3, dir, p );
+		CG_GoreNewDrop( p, v, ( extreme ? 1.3f : 1.0f ) * ( 0.8f + random() * 1.3f ) );
+	}
+	// back-spatter: a fine burst toward the shooter
+	back = extreme ? 3 + rand() % 3 : 1 + rand() % 2;
+	for ( i = 0; i < back; i++ ) {
+		vec3_t v;
+		VectorScale( dir, -1, v );
+		v[0] += crandom() * 0.5f;
+		v[1] += crandom() * 0.5f;
+		v[2] += crandom() * 0.4f + 0.2f;
+		VectorNormalize( v );
+		VectorScale( v, 50 + random() * 70, v );
+		CG_GoreNewDrop( point, v, 0.5f + random() * 0.5f );
+	}
+	// a live character keeps dribbling from the wound for a while
+	if ( entityNum >= 0 && entityNum < MAX_CLIENTS && entityNum != cg.snap->ps.clientNum &&
+		 !( cg_entities[entityNum].currentState.eFlags & EF_DEAD ) ) {
+		VectorSubtract( point, cg_entities[entityNum].lerpOrigin, goBleeders[entityNum].ofs );
+		goBleeders[entityNum].until = cg.time + 4000 + (int)( 2000 * force );
+	}
+}
+
+// draw one in flight: a short streak along its motion
+static void CG_GoreDrawDrop( goreDrop_t *d, qhandle_t shader ) {
+	polyVert_t v[4];
+	vec3_t along, side, toEye, tail;
+	float len = VectorLength( d->vel ) * 0.012f, w = d->size * 0.55f;
+	int i;
+	if ( len < 0.8f ) {
+		len = 0.8f;
+	} else if ( len > 7 ) {
+		len = 7;
+	}
+	VectorNormalize2( d->vel, along );
+	VectorSubtract( cg.refdef.vieworg, d->pos, toEye );
+	CrossProduct( along, toEye, side );
+	if ( VectorNormalize( side ) < 0.001f ) {
+		return;
+	}
+	VectorMA( d->pos, -len, along, tail );
+	VectorMA( d->pos, w, side, v[0].xyz );
+	VectorMA( d->pos, -w, side, v[1].xyz );
+	VectorMA( tail, -w, side, v[2].xyz );
+	VectorMA( tail, w, side, v[3].xyz );
+	v[0].st[0] = 1; v[0].st[1] = 0;
+	v[1].st[0] = 0; v[1].st[1] = 0;
+	v[2].st[0] = 0; v[2].st[1] = 1;
+	v[3].st[0] = 1; v[3].st[1] = 1;
+	for ( i = 0; i < 4; i++ ) {
+		v[i].modulate[0] = 255; v[i].modulate[1] = 255; v[i].modulate[2] = 255; v[i].modulate[3] = 230;
+	}
+	trap_R_AddPolyToScene( shader, 4, v );
+}
+
+// it hit something
+static void CG_GoreDropLand( goreDrop_t *d, const trace_t *tr ) {
+	float speed = VectorLength( d->vel ), r, into;
+	vec3_t dirN, tang;
+
+	if ( goDropMarkFrame != cg.clientFrame ) {
+		goDropMarkFrame = cg.clientFrame;
+		goDropMarksThisFrame = 0;
+	}
+	if ( ++goDropMarksThisFrame > 16 || !CG_GoreVisible( tr ) ) {
+		return;     // (a big spray lands over a few frames anyway)
+	}
+	r = d->size * ( 1.1f + speed / 320.0f );
+	if ( CG_BloodExtreme() ) {
+		r *= 1.35f;
+	}
+	if ( r < 1.2f ) {
+		r = 1.2f;
+	} else if ( r > 9 ) {
+		r = 9;
+	}
+	CG_ImpactMark( CG_BloodDot(), tr->endpos, tr->plane.normal, random() * 360,
+				   1, 1, 1, 1, qtrue, r, qfalse, CG_BloodMarkTime() );
+	// a fast, glancing hit smears along the way it was going
+	VectorNormalize2( d->vel, dirN );
+	into = -DotProduct( dirN, tr->plane.normal );
+	if ( speed > 140 && into < 0.75f ) {
+		int k, steps = ( into < 0.4f ) ? 3 : 2;
+		VectorMA( dirN, into, tr->plane.normal, tang );
+		if ( VectorNormalize( tang ) > 0.01f ) {
+			for ( k = 1; k <= steps; k++ ) {
+				vec3_t p;
+				float rk = r * ( 1.0f - 0.22f * k );
+				VectorMA( tr->endpos, r * 0.9f * k, tang, p );
+				CG_ImpactMark( CG_BloodDot(), p, tr->plane.normal, random() * 360,
+							   1, 1, 1, 1, qtrue, rk, qfalse, CG_BloodMarkTime() );
+			}
+		}
+	}
+	// Extreme: ceilings drip, heavier wall hits can start a run
+	if ( d->size > 1.4f && ( rand() % 3 ) == 0 ) {
+		CG_GoreSurfaceHit( tr->endpos, tr->plane.normal );
+	}
+}
+
+static void CG_GoreUpdateDrops( void ) {
+	float dt = cg.frametime * 0.001f;
+	qhandle_t shader = ( cg_bloodMode.integer == BLOODMODE_GREEN ) ? cgs.media.bloodTrailShaderGreen : cgs.media.bloodTrailShader;
+	int i;
+
+	if ( dt <= 0 ) {
+		dt = 0;
+	} else if ( dt > 0.05f ) {
+		dt = 0.05f;
+	}
+	for ( i = 0; i < GORE_MAX_DROPS; i++ ) {
+		goreDrop_t *d = &goDrops[i];
+		vec3_t to;
+		trace_t tr;
+		if ( !d->active ) {
+			continue;
+		}
+		if ( cg.time - d->startTime > 4000 ) {
+			d->active = qfalse;
+			continue;
+		}
+		if ( dt > 0 ) {
+			d->vel[2] -= 520.0f * dt;
+			VectorScale( d->vel, 1.0f - 0.5f * dt, d->vel );
+			VectorMA( d->pos, dt, d->vel, to );
+			CG_Trace( &tr, d->pos, NULL, NULL, to, -1, ( MASK_SHOT & ~CONTENTS_BODY ) | CONTENTS_PLAYERCLIP );
+			if ( tr.startsolid ) {
+				d->active = qfalse;
+				continue;
+			}
+			if ( tr.fraction < 1.0f ) {
+				if ( !( tr.surfaceFlags & SURF_SKY ) ) {
+					CG_GoreDropLand( d, &tr );
+				}
+				d->active = qfalse;
+				continue;
+			}
+			if ( CG_PointContents( to, -1 ) & CONTENTS_WATER ) {
+				if ( ( rand() & 3 ) == 0 ) {
+					CG_GoreWaterBlood( to, 1 );
+				}
+				d->active = qfalse;
+				continue;
+			}
+			VectorCopy( to, d->pos );
+		}
+		CG_GoreDrawDrop( d, shader );
+	}
+}
+
+// the wounded dribble as they go; so do ragdolls still falling
+static void CG_GoreUpdateBleeders( void ) {
+	int i;
+	if ( !cg.snap ) {
+		return;
+	}
+	for ( i = 0; i < cg.snap->numEntities; i++ ) {
+		entityState_t *es = &cg.snap->entities[i];
+		int num = es->number;
+		vec3_t w, v;
+		if ( es->eType != ET_PLAYER || num < 0 || num >= MAX_GENTITIES ) {
+			continue;
+		}
+		if ( !( es->eFlags & EF_DEAD ) ) {
+			if ( num < MAX_CLIENTS && goBleeders[num].until > cg.time && cg.time >= goBleeders[num].next ) {
+				goBleeders[num].next = cg.time + 180 + rand() % 220;
+				VectorAdd( cg_entities[num].lerpOrigin, goBleeders[num].ofs, w );
+				VectorSet( v, crandom() * 15, crandom() * 15, -20 );
+				CG_GoreNewDrop( w, v, 0.7f + random() * 0.6f );
+			}
+			continue;
+		}
+		if ( num < MAX_CLIENTS ) {
+			goBleeders[num].until = 0;
+		}
+		// a ragdoll still moving: drops from its wound
+		if ( cg.time >= goBodyDrips[num].next && CG_RagdollWound( num, w ) && CG_GoreBleeds( es ) ) {
+			goBodyDrips[num].next = cg.time + 120;
+			if ( Distance( w, goBodyDrips[num].last ) > 3.0f && Distance( w, goBodyDrips[num].last ) < 200.0f ) {
+				VectorSet( v, crandom() * 10, crandom() * 10, -10 );
+				CG_GoreNewDrop( w, v, 0.8f + random() * 0.7f );
+			}
+			VectorCopy( w, goBodyDrips[num].last );
+		}
+	}
+}
+
 void CG_AddGore( void ) {
 	int i;
 	qboolean green = ( cg_bloodMode.integer == BLOODMODE_GREEN );
@@ -1171,6 +1464,8 @@ void CG_AddGore( void ) {
 			CG_GoreUpdateDrip( &goDrips[i] );
 		}
 	}
+	CG_GoreUpdateBleeders();
+	CG_GoreUpdateDrops();
 	CG_GoreUpdateFeet();
 	for ( i = 0; i < GORE_MAX_FEET; i++ ) {
 		if ( goFeet[i].active ) {

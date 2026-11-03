@@ -185,6 +185,9 @@ typedef struct {
 	float jitter;        // recent movement, smoothed
 	float scale;         // drawn size (Toy Soldiers skull: 0.5)
 	int logMask;         // which timing lines have been logged (see CG_RagdollLogFall)
+	vec3_t dogBend[4];   // dog: each leg's bend side, in the body frame of the death pose
+	float dogSide[2];    // dog: same-side shoulder-hip lengths (the body can't twist)
+	qboolean dogTwistLogged;
 	int shoveTime;       // bullet shoves taken since then (capped)
 	float shoved;
 	int rig;             // RD_RIG_*
@@ -199,6 +202,7 @@ static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t 
 static void CG_RagdollLoadSaved( void );
 static void CG_RagdollPose( ragdoll_t *rd );
 static void CG_RagdollCleanStart( ragdoll_t *rd );
+static void CG_RagdollDogInit( ragdoll_t *rd );
 
 // ragdoll poses kept with savegames (save/<name>.rag)
 #define RD_SAVE_MAGIC   0x31474152  // "RAG1"
@@ -237,6 +241,13 @@ static int rdShooter = -1;      // the shooter of the bullet being handled (CG_B
 
 void CG_RagdollSetShooter( int shooter ) {
 	rdShooter = shooter;
+}
+
+static float CG_RagdollWeaponForce( int shooter, float dist );
+
+// the same, for the blood spray (cg_gore.c)
+float CG_RagdollShotForce( int shooter, float dist ) {
+	return CG_RagdollWeaponForce( shooter, dist );
 }
 
 static float CG_RagdollWeaponForce( int shooter, float dist ) {
@@ -781,6 +792,9 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	for ( i = 0; i < (int)RD_NUM_LIMITS; i++ ) {
 		rd->limit[i] = rdLimits[i].frac * Distance( rd->p[rdLimits[i].a], rd->p[rdLimits[i].b] );
 	}
+	if ( rd->rig == RD_RIG_DOG ) {
+		CG_RagdollDogInit( rd );
+	}
 	CG_RagdollCleanStart( rd );    // (after the bone lengths are taken from the pose)
 	CG_RagdollInitPairs( rd );
 	memset( rd->hingeOn, 0, sizeof( rd->hingeOn ) );
@@ -939,6 +953,107 @@ static void CG_RagdollHinge( ragdoll_t *rd, int a, int k, int b, const vec3_t be
 	VectorMA( pk, corr * ( 2.0f / 3.0f ), bp, pk );
 	VectorMA( pa, -corr / 3.0f, bp, pa );
 	VectorMA( pb, -corr / 3.0f, bp, pb );
+}
+
+/*
+===============
+Dog skeleton
+
+A dog's spine runs along the ground and its hips sit close together, so
+the biped's "pelvis frame" (spine up, hips sideways) flipped over when a
+dog landed on its side and the back half twisted round. A dog's body frame
+is the spine forward with the hips AND shoulders for the side, each leg
+bends to the side its death pose bent it, and same-side shoulder-hip braces
+keep the body from corkscrewing.
+===============
+*/
+static const int rdDogLimbs[4][3] = {
+	{ J_LSHOULDER, J_LELBOW, J_LHAND }, { J_RSHOULDER, J_RELBOW, J_RHAND },
+	{ J_LHIP, J_LKNEE, J_LFOOT }, { J_RHIP, J_RKNEE, J_RFOOT }
+};
+
+static void CG_RagdollDogFrame( vec3_t j[J_NUM], vec3_t f[3] ) {
+	vec3_t side, t;
+	VectorSubtract( j[J_CHEST], j[J_PELVIS], f[0] );
+	VectorNormalize( f[0] );
+	VectorSubtract( j[J_RHIP], j[J_LHIP], side );
+	VectorSubtract( j[J_RSHOULDER], j[J_LSHOULDER], t );
+	VectorAdd( side, t, side );
+	VectorMA( side, -DotProduct( side, f[0] ), f[0], f[1] );
+	if ( VectorNormalize( f[1] ) < 0.001f ) {
+		PerpendicularVector( f[1], f[0] );
+	}
+	CrossProduct( f[0], f[1], f[2] );
+}
+
+static void CG_RagdollDogInit( ragdoll_t *rd ) {
+	vec3_t f[3], u, o, off;
+	int i;
+	CG_RagdollDogFrame( rd->rest, f );
+	for ( i = 0; i < 4; i++ ) {
+		float *a = rd->rest[rdDogLimbs[i][0]], *k = rd->rest[rdDogLimbs[i][1]], *b = rd->rest[rdDogLimbs[i][2]];
+		VectorSubtract( b, a, u );
+		VectorNormalize( u );
+		VectorSubtract( k, a, o );
+		VectorMA( o, -DotProduct( o, u ), u, off );
+		if ( VectorNormalize( off ) < 0.001f ) {
+			// straight in the death pose: front knees bend back, hind hocks forward... the
+			// joint between them goes the usual way for a dog
+			VectorScale( f[0], i < 2 ? -1.0f : 1.0f, off );
+		}
+		rd->dogBend[i][0] = DotProduct( off, f[0] );
+		rd->dogBend[i][1] = DotProduct( off, f[1] );
+		rd->dogBend[i][2] = DotProduct( off, f[2] );
+		rd->hingeOn[i] = qtrue;
+	}
+	rd->dogSide[0] = Distance( rd->p[J_LSHOULDER], rd->p[J_LHIP] );
+	rd->dogSide[1] = Distance( rd->p[J_RSHOULDER], rd->p[J_RHIP] );
+	rd->dogTwistLogged = qfalse;
+}
+
+static void CG_RagdollHinge( ragdoll_t *rd, int a, int k, int b, const vec3_t bendDir, qboolean *on );
+
+static void CG_RagdollDogLimits( ragdoll_t *rd ) {
+	vec3_t f[3], bend, d;
+	int i;
+	// same-side braces (no corkscrew)
+	for ( i = 0; i < 2; i++ ) {
+		float *a = rd->p[i ? J_RSHOULDER : J_LSHOULDER], *b = rd->p[i ? J_RHIP : J_LHIP];
+		float len, diff;
+		VectorSubtract( b, a, d );
+		len = VectorLength( d );
+		if ( len < 0.001f ) {
+			continue;
+		}
+		diff = ( len - rd->dogSide[i] ) / len * 0.35f;
+		VectorMA( a, diff, d, a );
+		VectorMA( b, -diff, d, b );
+	}
+	// legs bend only their own way
+	CG_RagdollDogFrame( rd->p, f );
+	for ( i = 0; i < 4; i++ ) {
+		VectorScale( f[0], rd->dogBend[i][0], bend );
+		VectorMA( bend, rd->dogBend[i][1], f[1], bend );
+		VectorMA( bend, rd->dogBend[i][2], f[2], bend );
+		CG_RagdollHinge( rd, rdDogLimbs[i][0], rdDogLimbs[i][1], rdDogLimbs[i][2], bend, &rd->hingeOn[i] );
+	}
+}
+
+// how far the dog's back half has turned against its front half (degrees)
+static float CG_RagdollDogTwist( ragdoll_t *rd ) {
+	vec3_t sp, hips, sh;
+	VectorSubtract( rd->p[J_CHEST], rd->p[J_PELVIS], sp );
+	if ( VectorNormalize( sp ) < 0.001f ) {
+		return 0;
+	}
+	VectorSubtract( rd->p[J_RHIP], rd->p[J_LHIP], hips );
+	VectorSubtract( rd->p[J_RSHOULDER], rd->p[J_LSHOULDER], sh );
+	VectorMA( hips, -DotProduct( hips, sp ), sp, hips );
+	VectorMA( sh, -DotProduct( sh, sp ), sp, sh );
+	if ( VectorNormalize( hips ) < 0.001f || VectorNormalize( sh ) < 0.001f ) {
+		return 0;
+	}
+	return acos( DotProduct( hips, sh ) > 1 ? 1 : DotProduct( hips, sh ) < -1 ? -1 : DotProduct( hips, sh ) ) * 180.0f / M_PI;
 }
 
 static void CG_RagdollJointLimits( ragdoll_t *rd ) {
@@ -1155,6 +1270,8 @@ static void CG_RagdollConstrain( ragdoll_t *rd ) {
 	}
 	if ( rd->rig != RD_RIG_DOG ) {
 		CG_RagdollJointLimits( rd );    // knees/elbows bend one way (a biped's)
+	} else {
+		CG_RagdollDogLimits( rd );
 	}
 	CG_RagdollNeckLimit( rd );
 	CG_RagdollSelfCollide( rd );
@@ -1168,7 +1285,7 @@ static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
 	for ( i = 0; i < J_NUM; i++ ) {
 		trace_t tr;
 		vec3_t mins, maxs;
-		float r = rdRadius[i] * rd->scale;
+		float r = rdRadius[i] * rd->scale * ( ( rd->rig == RD_RIG_DOG && i >= J_LSHOULDER ) ? 0.6f : 1.0f );
 
 		VectorSet( mins, -r, -r, -r );
 		VectorSet( maxs, r, r, r );
@@ -1434,6 +1551,15 @@ static void CG_RagdollPose( ragdoll_t *rd ) {
 		VectorSubtract( cur[rdSegs[s].p1], cur[rdSegs[s].p0], pc );
 		VectorSubtract( cur[rdSegs[s].s1], cur[rdSegs[s].s0], hc );
 		VectorSubtract( cur[J_CHEST], cur[J_PELVIS], h2c );
+		if ( rd->rig == RD_RIG_DOG && s == 0 ) {
+			// dog: the hips alone are too close together to say which way
+			// the back half faces; the shoulders steady it
+			vec3_t t;
+			VectorSubtract( rd->rest[J_RSHOULDER], rd->rest[J_LSHOULDER], t );
+			VectorAdd( hr, t, hr );
+			VectorSubtract( cur[J_RSHOULDER], cur[J_LSHOULDER], t );
+			VectorAdd( hc, t, hc );
+		}
 		for ( i = 0; i < 4; i++ ) {
 			if ( s == rdLimbs[i].seg0 || s == rdLimbs[i].seg1 ) {
 				// limb part: roll follows the limb's bend plane
@@ -1575,6 +1701,7 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 		if ( best->entityNum < MAX_CLIENTS ) {
 			CG_Bleed( hit, best->entityNum );
 		}
+		CG_GoreSpray( hit, dir, CG_RagdollWeaponForce( rdShooter, len ), best->entityNum );
 		CG_RagdollAddWound( best->entityNum, hit, dir );
 	}
 	if ( CG_PointContents( hit, -1 ) & CONTENTS_WATER ) {
@@ -1871,6 +1998,13 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			}
 		}
 		CG_RagdollPose( rd );
+		if ( rd->rig == RD_RIG_DOG && !rd->dogTwistLogged ) {
+			float tw = CG_RagdollDogTwist( rd );
+			if ( tw > 90 ) {
+				rd->dogTwistLogged = qtrue;
+				CG_Printf( "ragdoll: dog %i twisted %.0f degrees front to back\n", rd->entityNum, tw );
+			}
+		}
 		// how fast it's moving early in the fall (tuning the death push)
 		{
 			static const int at[3] = { 100, 500, 1000 };

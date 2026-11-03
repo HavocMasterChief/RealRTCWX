@@ -1242,14 +1242,16 @@ void CG_GoreSpray( const vec3_t point, const vec3_t dir, float force, int entity
 	if ( n > ( extreme ? 40 : 16 ) ) {
 		n = extreme ? 40 : 16;
 	}
-	// exit spray: a cone along the bullet
+	// exit spray: a tight, fast jet along the bullet, whichever way it was
+	// going (shot upward, it paints the ceiling); air drag slows it so a
+	// pistol's lands a few feet out and a rifle's further
 	for ( i = 0; i < n; i++ ) {
 		vec3_t v, p;
-		float sp = 110 + 70 * force + random() * 90, spread = 0.18f + 0.12f * random();
+		float sp = 300 + 120 * force + random() * 150, spread = 0.08f + 0.1f * random();
 		VectorCopy( dir, v );
 		v[0] += crandom() * spread;
 		v[1] += crandom() * spread;
-		v[2] += crandom() * spread * 0.7f + 0.08f;
+		v[2] += crandom() * spread;
 		VectorNormalize( v );
 		VectorScale( v, sp, v );
 		VectorMA( point, 2 + random() * 3, dir, p );
@@ -1374,8 +1376,8 @@ static void CG_GoreUpdateDrops( void ) {
 			continue;
 		}
 		if ( dt > 0 ) {
-			d->vel[2] -= 520.0f * dt;
-			VectorScale( d->vel, 1.0f - 0.5f * dt, d->vel );
+			d->vel[2] -= 386.0f * dt;
+			VectorScale( d->vel, exp( -3.5f * dt ), d->vel );     // a fine spray loses speed fast
 			VectorMA( d->pos, dt, d->vel, to );
 			CG_Trace( &tr, d->pos, NULL, NULL, to, -1, ( MASK_SHOT & ~CONTENTS_BODY ) | CONTENTS_PLAYERCLIP );
 			if ( tr.startsolid ) {

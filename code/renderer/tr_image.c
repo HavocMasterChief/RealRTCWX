@@ -160,6 +160,46 @@ int R_SumOfUsedImages( void ) {
 
 /*
 ===============
+R_UWP_TextureMemoryMB
+
+RealRTCWX: rough texture memory (as the GPU stores it: RGB takes 4 bytes,
+mips add a third), logged after each level loads.
+===============
+*/
+int R_UWP_TextureMemoryMB( int *compressedCount ) {
+	int i, comp = 0;
+	double total = 0;
+	for ( i = 0; i < tr.numImages; i++ ) {
+		image_t *im = tr.images[i];
+		double px = (double)im->uploadWidth * im->uploadHeight, b;
+		switch ( im->internalFormat ) {
+		case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
+		case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
+			b = 0.5; comp++; break;
+		case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
+			b = 1; comp++; break;
+		case GL_LUMINANCE:
+		case GL_LUMINANCE8:
+			b = 1; break;
+		case GL_LUMINANCE_ALPHA:
+		case GL_LUMINANCE8_ALPHA8:
+			b = 2; break;
+		default:
+			b = 4; break;
+		}
+		if ( im->flags & IMGFLAG_MIPMAP ) {
+			b *= 4.0 / 3.0;
+		}
+		total += px * b;
+	}
+	if ( compressedCount ) {
+		*compressedCount = comp;
+	}
+	return (int)( total / ( 1024 * 1024 ) );
+}
+
+/*
+===============
 R_ImageList_f
 ===============
 */
@@ -199,6 +239,7 @@ void R_ImageList_f( void ) {
 				format = "LATC ";
 				// 128 bits per 16 pixels, so 1 byte per pixel
 				break;
+			case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
 			case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
 				format = "DXT1 ";
 				// 64 bits per 16 pixels, so 4 bits per pixel
@@ -1022,9 +1063,13 @@ static void Upload32(   unsigned *data,
                 else
                 {
 #ifndef USE_OPENGLES
-                    if ( !noCompress && glConfig.textureCompression == TC_EXT_COMP_S3TC )
+                    if ( !noCompress && ( glConfig.textureCompression == TC_EXT_COMP_S3TC ||
+                                          glConfig.textureCompression == TC_S3TC_ARB ) )
                     {
-                        internalFormat = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+                        // RealRTCWX: TC_S3TC_ARB (what GL_EXT_texture_compression_s3tc
+                        // sets) fell through to uncompressed RGBA8 here, so the HD
+                        // textures took ~4-8x the memory they needed. No alpha: DXT1.
+                        internalFormat = GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
                     }
                     else if ( !noCompress && glConfig.textureCompression == TC_S3TC )
                     {
@@ -1062,7 +1107,8 @@ static void Upload32(   unsigned *data,
                 else
                 {
 #ifndef USE_OPENGLES
-                    if ( !noCompress && glConfig.textureCompression == TC_EXT_COMP_S3TC )
+                    if ( !noCompress && ( glConfig.textureCompression == TC_EXT_COMP_S3TC ||
+                                          glConfig.textureCompression == TC_S3TC_ARB ) )
                     {
                         internalFormat = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
                     }
@@ -1264,6 +1310,12 @@ image_t *R_CreateImageExt( const char *name, byte *pic, int width, int height, i
 		noCompress = qtrue;
 	}
 	if ( !noCompress && strstr( name, "weapons" ) ) {    // don't compress view weapon skins
+		noCompress = qtrue;
+	}
+	// RealRTCWX: menus, fonts, HUD and other 2D art stay sharp
+	if ( !noCompress && ( name[0] == '*' || !Q_stricmpn( name, "ui", 2 ) || !Q_stricmpn( name, "gfx", 3 ) ||
+						  !Q_stricmpn( name, "fonts", 5 ) || !Q_stricmpn( name, "levelshots", 10 ) ||
+						  !Q_stricmpn( name, "achievements", 12 ) || !Q_stricmpn( name, "menu", 4 ) ) ) {
 		noCompress = qtrue;
 	}
 	// RF, if the shader hasn't specifically asked for it, don't allow compression

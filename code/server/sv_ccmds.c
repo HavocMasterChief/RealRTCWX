@@ -524,7 +524,10 @@ void    SV_LoadGame_f( void ) {
 	}
 
 	// refuse lastcheckpoint until this level has actually saved one, else it's stale from another map
-	if ( !Q_stricmp( filename, "lastcheckpoint" ) && !Cvar_VariableIntegerValue( "g_checkpointReady" ) ) {
+	// (RealRTCWX: only while a level is running; from the menus, e.g. after
+	// restarting the game, the checkpoint is a save like any other)
+	if ( !Q_stricmp( filename, "lastcheckpoint" ) && com_sv_running->integer &&
+		 !Cvar_VariableIntegerValue( "g_checkpointReady" ) ) {
 		Com_Printf( "No checkpoint reached yet on this level.\n" );
 		return;
 	}

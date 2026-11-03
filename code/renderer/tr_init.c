@@ -1658,6 +1658,13 @@ Touch all images to make sure they are resident
 */
 void RE_EndRegistration( void ) {
 	R_IssuePendingRenderCommands();
+#ifdef RTCW_UWP
+	{
+		extern int R_UWP_TextureMemoryMB( int *compressedCount );
+		int comp, mb = R_UWP_TextureMemoryMB( &comp );
+		ri.Printf( PRINT_ALL, "textures: %i images (%i compressed), about %i MB\n", tr.numImages, comp, mb );
+	}
+#endif
 	if (!ri.Sys_LowPhysicalMemory()) {
 		RB_ShowImages();
 	}

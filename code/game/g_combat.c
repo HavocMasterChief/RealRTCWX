@@ -791,6 +791,20 @@ qboolean IsHeadShot( gentity_t *targ, gentity_t *attacker, vec3_t dir, vec3_t po
 		VectorCopy( head->s.angles, head->s.apos.trDelta );
 		VectorSet( head->r.mins, -6, -6, -6 ); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
 		VectorSet( head->r.maxs, 6, 6, 6 ); // changed this z from 0 to 6
+		// RealRTCWX Toy Soldiers skull: the enemy is drawn at half size from
+		// its feet (cg_players.c), so its head is half as high and half as big
+		if ( targ->aiCharacter && G_Skull( 1 << 17 ) ) {
+			vec3_t feet;
+			int k;
+			VectorCopy( targ->r.currentOrigin, feet );
+			feet[2] += targ->r.mins[2];
+			for ( k = 0; k < 3; k++ ) {
+				head->r.currentOrigin[k] = feet[k] + ( head->r.currentOrigin[k] - feet[k] ) * 0.5f;
+			}
+			VectorCopy( head->r.currentOrigin, head->s.origin );
+			VectorSet( head->r.mins, -3.5f, -3.5f, -3.5f );
+			VectorSet( head->r.maxs, 3.5f, 3.5f, 3.5f );
+		}
 		head->clipmask = CONTENTS_SOLID;
 		head->r.contents = CONTENTS_SOLID;
 

@@ -238,3 +238,94 @@ void FBO_PostProcess( void )
 
 	ARB_ProgramDisable();
 }
+
+
+/*
+==============================================================================
+
+RealRTCWX Newsreel skull (g_xbskulls bit 12): the finished 3D picture is
+copied to a texture and drawn back through a fragment program that turns it
+black and white with a sepia tone and a flickering exposure. Runs before the
+HUD (with bloom, see RB_ExecuteRenderCommands), so the HUD keeps its colour;
+cgame draws the grain, scratches and vignette on top.
+
+==============================================================================
+*/
+#ifdef RTCW_UWP
+static const char *newsreelFP =
+	"!!ARBfp1.0\n"
+	"PARAM lumw = { 0.299, 0.587, 0.114, 0 };\n"
+	"PARAM tint = { 1.08, 0.96, 0.78, 1 };\n"
+	"TEMP c, l;\n"
+	"TEX c, fragment.texcoord[0], texture[0], 2D;\n"
+	"DP3 l.x, c, lumw;\n"
+	"MAD_SAT l.x, l.x, program.local[0].x, program.local[0].y;\n"
+	"MUL result.color.xyz, tint, l.xxxx;\n"
+	"MOV result.color.w, 1;\n"
+	"END\n";
+
+void R_XbNewsreel( void ) {
+	extern cvar_t *r_xbSkulls;
+	static GLuint prog;
+	static int state;           // 0 not tried, 1 ready, -1 failed
+	static image_t *screenImg;
+	static int doneFrame = -1;
+	float tw, th, contrast, bright;
+
+	if ( !r_xbSkulls || !( r_xbSkulls->integer & ( 1 << 12 ) ) ) {
+		return;
+	}
+	if ( !backEnd.doneSurfaces || doneFrame == tr.frameCount ) {
+		return;
+	}
+	doneFrame = tr.frameCount;
+
+	if ( state == 0 ) {
+		byte *data;
+		state = -1;
+		if ( !glRefConfig.arbPrograms ) {
+			ri.Printf( PRINT_ALL, "newsreel: no ARB fragment programs\n" );
+			return;
+		}
+		qglGenProgramsARB( 1, &prog );
+		if ( !ARB_CompileProgram( GL_FRAGMENT_PROGRAM_ARB, newsreelFP, prog ) ) {
+			return;
+		}
+		data = ri.Hunk_AllocateTempMemory( 2048 * 2048 * 4 );
+		Com_Memset( data, 0, 2048 * 2048 * 4 );
+		screenImg = R_CreateImage( "*xbnewsreel", data, 2048, 2048, IMGTYPE_COLORALPHA, IMGFLAG_NONE, 0 );
+		ri.Hunk_FreeTempMemory( data );
+		state = 1;
+		ri.Printf( PRINT_ALL, "newsreel: post-process ready\n" );
+	}
+	if ( state < 0 || glConfig.vidWidth > 2048 || glConfig.vidHeight > 2048 ) {
+		return;
+	}
+
+	if ( !backEnd.projection2D ) {
+		RB_SetGL2D();
+	}
+	GL_SelectTexture( 0 );
+	GL_Bind( screenImg );
+	qglCopyTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+
+	GL_State( GLS_DEPTHTEST_DISABLE | GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO );
+	// old film: a bit more contrast, and the exposure flickers
+	contrast = 1.25f;
+	bright = -0.08f + 0.05f * ( ( rand() & 255 ) / 255.0f ) - ( ( rand() & 31 ) == 0 ? 0.08f : 0 );
+	ARB_ProgramEnable( 0, prog );
+	qglProgramLocalParameter4fARB( GL_FRAGMENT_PROGRAM_ARB, 0, contrast, bright, 0, 0 );
+
+	tw = glConfig.vidWidth / 2048.0f;
+	th = glConfig.vidHeight / 2048.0f;
+	qglColor4f( 1, 1, 1, 1 );
+	qglBegin( GL_QUADS );
+		// the copy is bottom-up, the 2D projection top-down
+		qglTexCoord2f( 0, th ); qglVertex2f( 0, 0 );
+		qglTexCoord2f( tw, th ); qglVertex2f( glConfig.vidWidth, 0 );
+		qglTexCoord2f( tw, 0 ); qglVertex2f( glConfig.vidWidth, glConfig.vidHeight );
+		qglTexCoord2f( 0, 0 ); qglVertex2f( 0, glConfig.vidHeight );
+	qglEnd();
+	ARB_ProgramDisable();
+}
+#endif

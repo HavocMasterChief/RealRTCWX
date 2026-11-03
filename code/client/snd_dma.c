@@ -805,6 +805,15 @@ static void S_Base_MainStartSound( vec3_t origin, int entityNum, int entchannel,
 	ch->rightvol = ch->master_vol;		// unless the game isn't running
 	ch->doppler = qfalse;
 	ch->fullVolume = fullVolume;
+#ifdef RTCW_UWP
+	// RealRTCWX Toy Soldiers skull: enemies' voices squeak (played faster,
+	// through the doppler resampler in snd_mix.c)
+	if ( entchannel == CHAN_VOICE && entityNum > 0 && entityNum < MAX_CLIENTS &&
+		 ( Cvar_VariableIntegerValue( "g_xbskulls" ) & ( 1 << 17 ) ) ) {
+		ch->doppler = qtrue;
+		ch->dopplerScale = ch->oldDopplerScale = 1.45f;
+	}
+#endif
 
 	if ( ch->fixed_origin ) {
 		S_SpatializeOrigin( ch->origin, ch->master_vol, &ch->leftvol, &ch->rightvol, SOUND_RANGE_DEFAULT );

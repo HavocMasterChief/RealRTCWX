@@ -153,7 +153,7 @@ void CG_XbSkullCorpseHit( int entityNum, const vec3_t point ) {
 		xbLastBlast = cg.time;
 		return;
 	}
-	if ( CG_Skull( SKULL_EXPLOSIVE ) && ( cg.time - xbLastBlast > 150 || cg.time < xbLastBlast ) ) {
+	if ( CG_Skull( SKULL_EXPLOSIVE ) && ( cg.time - xbLastBlast > 60 || cg.time < xbLastBlast ) ) {
 		trap_SendClientCommand( va( "xbblast %i %i %i 0", (int)point[0], (int)point[1], (int)point[2] ) );
 		xbLastBlast = cg.time;
 	}
@@ -214,34 +214,21 @@ void CG_XbSkullsViewAngles( vec3_t angles ) {
 
 /*
 ===============
-Newsreel: grain, scratches, flicker and a vignette over the picture, a
-projector rattling away, and black and white from the next level load
-(the renderer turns textures grey when it loads them: r_greyscale).
+Newsreel: grain, scratches and a vignette over the picture and a projector
+rattling away; the renderer makes the picture black and white with a sepia
+tone and flickering exposure (R_XbNewsreel).
 ===============
 */
 static qhandle_t nrGrain, nrScratch, nrVignette;
 
+// (black and white is the renderer's: R_XbNewsreel in tr_arb.c)
 static void CG_XbNewsreelCheck( void ) {
-	static int wasOn = -1;
-	char buf[16];
-	int on = CG_Skull( SKULL_NEWSREEL ) ? 1 : 0;
-	if ( on == wasOn ) {
-		return;
-	}
-	wasOn = on;
-	trap_Cvar_VariableStringBuffer( "r_greyscale", buf, sizeof( buf ) );
-	if ( on ) {
-		if ( atoi( buf ) != 1 ) {
-			trap_Cvar_Set( "xb_greyscaleSaved", buf );
-			trap_Cvar_Set( "r_greyscale", "1" );
-		}
-	} else {
-		char saved[16];
-		trap_Cvar_VariableStringBuffer( "xb_greyscaleSaved", saved, sizeof( saved ) );
-		if ( saved[0] ) {
-			trap_Cvar_Set( "r_greyscale", saved );
-			trap_Cvar_Set( "xb_greyscaleSaved", "" );
-		}
+	// builds before 63 switched r_greyscale for this; put it back once
+	char saved[16];
+	trap_Cvar_VariableStringBuffer( "xb_greyscaleSaved", saved, sizeof( saved ) );
+	if ( saved[0] ) {
+		trap_Cvar_Set( "r_greyscale", saved );
+		trap_Cvar_Set( "xb_greyscaleSaved", "" );
 	}
 }
 
@@ -253,14 +240,7 @@ static void CG_XbNewsreelDraw( void ) {
 	if ( !CG_Skull( SKULL_NEWSREEL ) ) {
 		return;
 	}
-	// sepia wash and flicker (darken by a varying amount)
-	flick = 0.10f + 0.08f * random();
-	if ( ( rand() & 31 ) == 0 ) {
-		flick += 0.12f;
-	}
-	Vector4Set( c, 0.12f, 0.08f, 0.02f, flick + 0.12f );
-	trap_R_SetColor( c );
-	CG_DrawPic( -200, 0, 1040, 480, cgs.media.whiteShader );
+	(void)flick;
 	// grain: the noise texture at a random offset every frame
 	Vector4Set( c, 1, 1, 1, 0.55f );
 	trap_R_SetColor( c );

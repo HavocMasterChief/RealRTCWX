@@ -2204,6 +2204,18 @@ case EV_FILL_CLIP_FULL:
 	case EV_WOLFKICK_MISS:
 		DEBUGNAME( "EV_WOLFKICK_MISS" );
 		trap_S_StartSound( NULL, es->number, CHAN_AUTO, cgs.media.fkickmiss );
+		// RealRTCWX: corpses are ragdolls only here, so the server's kick
+		// can't hit them - try the bodies in front of my foot
+		if ( es->otherEntityNum == cg.snap->ps.clientNum ) {
+			vec3_t kfwd, kend;
+			AngleVectors( cg.refdefViewAngles, kfwd, NULL, NULL );
+			VectorMA( cg.refdef.vieworg, 80, kfwd, kend );
+			cg_xbKickHit = qtrue;
+			if ( CG_RagdollBullet( cg.refdef.vieworg, kend ) >= 0 ) {
+				trap_S_StartSound( NULL, es->number, CHAN_AUTO, cgs.media.fkickflesh );
+			}
+			cg_xbKickHit = qfalse;
+		}
 		break;
 
 	case EV_QUICKGRENS:

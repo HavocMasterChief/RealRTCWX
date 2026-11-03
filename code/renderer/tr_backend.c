@@ -1774,12 +1774,24 @@ void RB_ExecuteRenderCommands( const void *data ) {
 			//Check if it's time for BLOOM!
 			R_BloomScreen();
 #endif
+#ifdef RTCW_UWP
+			{
+				extern void R_XbNewsreel( void );
+				R_XbNewsreel();     // Newsreel skull (tr_arb.c)
+			}
+#endif
 			data = RB_StretchPic( data );
 			break;
 		case RC_STRETCH_PIC_GRADIENT:
 #ifdef USE_BLOOM
 			//Check if it's time for BLOOM!
 			R_BloomScreen();
+#endif
+#ifdef RTCW_UWP
+			{
+				extern void R_XbNewsreel( void );
+				R_XbNewsreel();     // Newsreel skull (tr_arb.c)
+			}
 #endif
 			data = RB_StretchPicGradient( data );
 			break;
@@ -1793,6 +1805,12 @@ void RB_ExecuteRenderCommands( const void *data ) {
 #ifdef USE_BLOOM
 			//Check if it's time for BLOOM!
 			R_BloomScreen();
+#endif
+#ifdef RTCW_UWP
+			{
+				extern void R_XbNewsreel( void );
+				R_XbNewsreel();     // Newsreel skull (tr_arb.c)
+			}
 #endif
 			data = RB_SwapBuffers( data );
 			break;

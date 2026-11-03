@@ -825,8 +825,15 @@ void S_PaintChannels( int endtime ) {
 
 			sampleOffset = ltime - ch->startSample;
 			count = end - ltime;
-			if ( sampleOffset + count > sc->soundLength ) {
-				count = sc->soundLength - sampleOffset;
+			{
+				// a sped-up voice (Toy Soldiers skull) runs out sooner
+				int len = sc->soundLength;
+				if ( ch->doppler && ch->dopplerScale > 1.0f && ch->entchannel == CHAN_VOICE ) {
+					len = (int)( ( sc->soundLength - 2 ) / ch->dopplerScale );
+				}
+				if ( sampleOffset + count > len ) {
+					count = len - sampleOffset;
+				}
 			}
 
 			if ( count > 0 ) {

@@ -97,6 +97,7 @@ Bullets
 ===============
 */
 static int xbLastBlastTime;
+static gentity_t *xbLastBlastEnt;
 
 // a small blast (Explosive Rounds) or a corpse going up (Kaboom)
 static void G_SkullBlast( gentity_t *attacker, const vec3_t pos, qboolean big ) {
@@ -116,10 +117,13 @@ void G_SkullBulletHit( gentity_t *attacker, gentity_t *traceEnt, const vec3_t po
 		 !G_Skull( SKULL_EXPLOSIVE ) ) {
 		return;
 	}
-	if ( level.time - xbLastBlastTime < 80 && level.time >= xbLastBlastTime ) {
-		return;     // a shotgun blast or a burst makes one bang, not ten
+	// every bullet that hits blasts; a shotgun's pellets hitting the same
+	// target in the same frame make one bang, not ten
+	if ( level.time == xbLastBlastTime && traceEnt == xbLastBlastEnt ) {
+		return;
 	}
 	xbLastBlastTime = level.time;
+	xbLastBlastEnt = traceEnt;
 	G_SkullBlast( attacker, pos, qfalse );
 }
 

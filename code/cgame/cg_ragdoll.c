@@ -158,6 +158,7 @@ typedef struct {
 	int stillSteps;
 	int awakeSteps;      // steps since it last woke (jittering bodies get put to sleep)
 	float jitter;        // recent movement, smoothed
+	float scale;         // drawn size (Toy Soldiers skull: 0.5)
 	qboolean sleeping;
 	float data[RD_SEGS][12];
 } ragdoll_t;
@@ -218,7 +219,9 @@ void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter ) {
 	rdHits[entityNum].time = cg.time;
 	VectorCopy( point, rdHits[entityNum].point );
 	VectorCopy( dir, rdHits[entityNum].dir );
-	CG_RagdollAddWound( entityNum, point, dir );
+	if ( !cg_xbKickHit ) {
+		CG_RagdollAddWound( entityNum, point, dir );
+	}
 }
 
 /*
@@ -356,10 +359,13 @@ static void CG_RagdollToWorld( const refEntity_t *ref, const vec3_t m, vec3_t ou
 
 static void CG_RagdollToModel( const refEntity_t *ref, const vec3_t w, vec3_t out ) {
 	vec3_t d;
+	int k;
 	VectorSubtract( w, ref->origin, d );
-	out[0] = DotProduct( d, ref->axis[0] );
-	out[1] = DotProduct( d, ref->axis[1] );
-	out[2] = DotProduct( d, ref->axis[2] );
+	for ( k = 0; k < 3; k++ ) {
+		// axes may be scaled (a shrunken character): undo it
+		float l2 = DotProduct( ref->axis[k], ref->axis[k] );
+		out[k] = DotProduct( d, ref->axis[k] ) / ( l2 > 0.0001f ? l2 : 1.0f );
+	}
 }
 
 // limbs: root, hinge, end joint, and the body parts that roll with them
@@ -438,8 +444,12 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	int i, oldest = -1, slot;
 
 	if ( body->nonNormalizedAxes ) {
-		CG_RagdollWhyNot( cent, body, "scaled model" );
-		return NULL;    // scaled characters: the model space math assumes plain axes
+		// a uniformly scaled character (Toy Soldiers) works; stretched ones don't
+		float l0 = VectorLength( body->axis[0] ), l1 = VectorLength( body->axis[1] ), l2 = VectorLength( body->axis[2] );
+		if ( fabs( l0 - l1 ) > 0.02f || fabs( l0 - l2 ) > 0.02f || l0 < 0.1f ) {
+			CG_RagdollWhyNot( cent, body, "non-uniformly scaled model" );
+			return NULL;
+		}
 	}
 	pose = *body;
 	pose.ragdoll = 0;
@@ -503,6 +513,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->startTime = rd->lastSeen = cg.time;
 	rd->hModel = body->hModel;
 	rd->pose = pose;
+	rd->scale = body->nonNormalizedAxes ? VectorLength( body->axis[0] ) : 1.0f;
 	rd->accum = 0;
 	rd->stillSteps = 0;
 	rd->awakeSteps = 0;
@@ -653,7 +664,7 @@ static void CG_RagdollInitPairs( ragdoll_t *rd ) {
 							   rd->p[rdCaps[j].a], rd->p[rdCaps[j].b], &s, &t, c1, c2 );
 			rd->pair[rd->numPairs].a = i;
 			rd->pair[rd->numPairs].b = j;
-			rd->pair[rd->numPairs].minDist = MIN( rdCaps[i].r + rdCaps[j].r, d * 0.9f );
+			rd->pair[rd->numPairs].minDist = MIN( ( rdCaps[i].r + rdCaps[j].r ) * rd->scale, d * 0.9f );
 			rd->numPairs++;
 		}
 	}
@@ -795,7 +806,7 @@ static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
 	for ( i = 0; i < J_NUM; i++ ) {
 		trace_t tr;
 		vec3_t mins, maxs;
-		float r = rdRadius[i];
+		float r = rdRadius[i] * rd->scale;
 
 		VectorSet( mins, -r, -r, -r );
 		VectorSet( maxs, r, r, r );
@@ -1091,10 +1102,12 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 		vel[2] += 25 * ( f > 1 ? f * 0.6f : 1 );
 		CG_RagdollKick( best, hit, vel, 10.0f, f > 1 ? 0.5f : 0.12f );
 	}
-	if ( best->entityNum < MAX_CLIENTS ) {
-		CG_Bleed( hit, best->entityNum );
+	if ( !cg_xbKickHit ) {     // a kick: no blood, no bullet hole
+		if ( best->entityNum < MAX_CLIENTS ) {
+			CG_Bleed( hit, best->entityNum );
+		}
+		CG_RagdollAddWound( best->entityNum, hit, dir );
 	}
-	CG_RagdollAddWound( best->entityNum, hit, dir );
 	if ( CG_PointContents( hit, -1 ) & CONTENTS_WATER ) {
 		CG_GoreWaterBlood( hit, 2 );
 	}

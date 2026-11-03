@@ -2376,6 +2376,7 @@ void CG_AchDrawMissionRow( float y, float alpha );
 void CG_GoreAddDrip( const vec3_t origin, int life );
 void CG_GoreWaterBlood( const vec3_t point, int puffs );
 void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter );
+void CG_RagdollSetShooter( int shooter );
 int CG_RagdollBullet( const vec3_t start, const vec3_t end );
 // cg_xbskulls.c
 extern int cg_xbSkulls;

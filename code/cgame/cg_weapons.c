@@ -7229,6 +7229,7 @@ void CG_Bullet( vec3_t end, int sourceEntityNum, vec3_t normal, qboolean flesh, 
 		}
 	}
 	// dead bodies can be shot (see cg_ragdoll.c)
+	CG_RagdollSetShooter( sourceEntityNum );    // (how hard each gun shoves)
 	{
 		vec3_t rstart;
 		if ( sourceEntityNum == cg.snap->ps.clientNum ) {

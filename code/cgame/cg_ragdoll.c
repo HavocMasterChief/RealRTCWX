@@ -35,13 +35,13 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 #define RD_STEP         ( 1.0f / 60.0f )
 #define RD_ITER         8
 #define RD_GRAVITY      330.0f  // a bit under real gravity (1 unit ~ 1 inch): falls read better at game scale
-#define RD_AIRDRAG      0.984f  // velocity kept per step
+#define RD_AIRDRAG      0.988f  // velocity kept per step
 // "muscle tone": joints are pulled toward the death pose (relative to the
 // pelvis) so limbs don't flop like rope; strong at first, fading to a light
 // stiffness that stays
-#define RD_MUSCLE_START 0.20f
+#define RD_MUSCLE_START 0.10f
 #define RD_MUSCLE_END   0.0f    // fully limp once it fades (arms used to stay held out)
-#define RD_MUSCLE_FADE  1.7f    // seconds (a body sags as it falls rather than going limp at once)
+#define RD_MUSCLE_FADE  1.2f    // seconds
 #define RD_HIT_WINDOW   1200    // ms: a hit this recent shapes the fall
 
 enum {
@@ -181,6 +181,8 @@ typedef struct {
 	int awakeSteps;      // steps since it last woke (jittering bodies get put to sleep)
 	float jitter;        // recent movement, smoothed
 	float scale;         // drawn size (Toy Soldiers skull: 0.5)
+	int shoveTime;       // bullet shoves taken since then (capped)
+	float shoved;
 	int rig;             // RD_RIG_*
 	qboolean sleeping;
 	float data[RD_SEGS][12];
@@ -212,7 +214,72 @@ static int rdStamp;
 static struct {
 	int time;
 	vec3_t point, dir;
+	float force;        // weapon force of the hits landing together (a shotgun's pellets add up)
 } rdHits[MAX_GENTITIES];
+
+/*
+===============
+CG_RagdollWeaponForce
+
+How hard one hit from 'shooter''s gun shoves a body, a pistol round being
+1. Real bullets carry very little momentum; these are the weapons' real
+momentum relative to each other (heavier and faster rounds more), and the
+whole scale is exaggerated so it reads. A shotgun's ~4.5 is split over its
+12 pellets, so it slams up close and barely moves anything far away.
+===============
+*/
+static int rdShooter = -1;      // the shooter of the bullet being handled (CG_Bullet)
+
+void CG_RagdollSetShooter( int shooter ) {
+	rdShooter = shooter;
+}
+
+static float CG_RagdollWeaponForce( int shooter, float dist ) {
+	int w;
+	float f, near, far, minF;
+
+	if ( cg_xbKickHit ) {
+		return 2.0f;
+	}
+	if ( shooter < 0 || shooter >= MAX_GENTITIES ) {
+		return 1.0f;
+	}
+	w = ( shooter == cg.snap->ps.clientNum ) ? cg.snap->ps.weapon : cg_entities[shooter].currentState.weapon;
+	near = 256; far = 1024; minF = 0.6f;      // handgun / SMG rounds lose a little with range
+	switch ( w ) {
+	case WP_LUGER: case WP_SILENCER: case WP_TT33: case WP_DUAL_TT33: case WP_HDM:
+	case WP_MP40: case WP_STEN: case WP_PPSH: case WP_MP34:
+		f = 1.0f; break;
+	case WP_COLT: case WP_AKIMBO: case WP_THOMPSON: case WP_DELISLE: case WP_DELISLESCOPE:
+		f = 1.4f; break;
+	case WP_REVOLVER:
+		f = 1.8f; break;
+	case WP_MP44: case WP_FG42: case WP_FG42SCOPE: case WP_M1941: case WP_M1941SCOPE:
+		f = 2.0f; near = 512; far = 2048; minF = 0.85f; break;
+	case WP_G43: case WP_M1GARAND: case WP_GARAND:
+		f = 3.0f; near = 1024; far = 4096; minF = 0.9f; break;
+	case WP_MAUSER: case WP_MOSIN: case WP_SNIPERRIFLE: case WP_SNOOPERSCOPE: case WP_BAR: case WP_SNIPER:
+		f = 3.2f; near = 1024; far = 4096; minF = 0.9f; break;
+	case WP_BROWNING: case WP_MG42M: case WP_DUMMY_MG42:
+		f = 3.5f; near = 1024; far = 4096; minF = 0.9f; break;
+	case WP_M97: case WP_AUTO5: case WP_M30:
+		f = 4.5f / 12.0f; near = 96; far = 768; minF = 0.2f; break;   // per pellet
+	case WP_VENOM:
+		f = 2.5f; break;
+	case WP_TESLA: case WP_FLAMETHROWER:
+		f = 0.15f; break;
+	default:
+		f = 1.0f; break;
+	}
+	if ( dist > near ) {
+		float k = ( dist - near ) / ( far - near );
+		if ( k > 1 ) {
+			k = 1;
+		}
+		f *= 1.0f - ( 1.0f - minF ) * k;
+	}
+	return f;
+}
 
 /*
 ===============
@@ -238,6 +305,15 @@ void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter ) {
 	VectorSubtract( point, from, dir );
 	if ( VectorNormalize( dir ) < 1 ) {
 		return;
+	}
+	{
+		float f = CG_RagdollWeaponForce( shooter, Distance( from, point ) );
+		// hits landing together (a shotgun's pellets, a burst) add up
+		if ( rdHits[entityNum].time && cg.time - rdHits[entityNum].time < 80 ) {
+			rdHits[entityNum].force += f;
+		} else {
+			rdHits[entityNum].force = f;
+		}
 	}
 	rdHits[entityNum].time = cg.time;
 	VectorCopy( point, rdHits[entityNum].point );
@@ -554,6 +630,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->pose = pose;
 	rd->scale = body->nonNormalizedAxes ? VectorLength( body->axis[0] ) : 1.0f;
 	rd->rig = rigFound;
+	rd->shoveTime = 0;
+	rd->shoved = 0;
 	rd->accum = 0;
 	rd->stillSteps = 0;
 	rd->awakeSteps = 0;
@@ -576,7 +654,14 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		// path, the rest of the body follows a little (a head shot snaps
 		// the head back, a leg shot takes the legs out)
 		const float *hp = rdHits[rd->entityNum].point, *hd = rdHits[rd->entityNum].dir;
-		float bestD = 1e9f;
+		float bestD = 1e9f, wf = rdHits[rd->entityNum].force;
+		// the killing shot's weapon: a pistol mostly crumples them, a rifle
+		// or a shotgun up close knocks them back
+		if ( wf < 0.15f ) {
+			wf = 0.15f;
+		} else if ( wf > 5.0f ) {
+			wf = 5.0f;
+		}
 		for ( i = 0; i < J_NUM; i++ ) {
 			float dd = DistanceSquared( rd->p[i], hp );
 			if ( dd < bestD ) {
@@ -589,8 +674,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 			float w = exp( -d2 / ( 2.0f * 14.0f * 14.0f ) );
 			// a bullet carries little momentum: the hit part jerks, the body
 			// mostly crumples where it stood
-			VectorScale( hd, ( 18 + 95 * w ) * CG_XbThrowScale(), push );
-			push[2] += ( 6 + 10 * w ) * CG_XbThrowScale();
+			VectorScale( hd, ( 10 + 55 * w ) * wf * CG_XbThrowScale(), push );
+			push[2] += ( 5 + 8 * w ) * sqrt( wf ) * CG_XbThrowScale();
 			VectorAdd( push, cent->currentState.pos.trDelta, push );
 			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
 		}
@@ -616,8 +701,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 				k = 0.1f;
 				break;
 			}
-			VectorScale( toBody, ( 35 + random() * 25 ) * k, push );
-			push[2] = 10 * k;
+			VectorScale( toBody, ( 52 + random() * 38 ) * k, push );
+			push[2] = 17 * k;
 			VectorAdd( push, cent->currentState.pos.trDelta, push );
 			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
 		}
@@ -902,19 +987,30 @@ edge and slides off it.
 ===============
 */
 static const struct { int a, b; float r; } rdMidSegs[] = {
-	{ J_PELVIS, J_CHEST, 4.5f },
-	{ J_LHIP, J_LKNEE, 3.0f }, { J_RHIP, J_RKNEE, 3.0f },
-	{ J_LKNEE, J_LFOOT, 2.5f }, { J_RKNEE, J_RFOOT, 2.5f },
-	{ J_LSHOULDER, J_LELBOW, 2.5f }, { J_RSHOULDER, J_RELBOW, 2.5f }
+	{ J_PELVIS, J_CHEST, 3.0f },
+	{ J_LHIP, J_LKNEE, 2.5f }, { J_RHIP, J_RKNEE, 2.5f },
+	{ J_LKNEE, J_LFOOT, 2.0f }, { J_RKNEE, J_RFOOT, 2.0f },
+	{ J_LSHOULDER, J_LELBOW, 2.0f }, { J_RSHOULDER, J_RELBOW, 2.0f }
 };
 #define RD_NUM_MIDSEGS ( sizeof( rdMidSegs ) / sizeof( rdMidSegs[0] ) )
+
+// move a joint by 'fix', stopping at anything solid
+static void CG_RagdollNudge( ragdoll_t *rd, int j, const vec3_t fix ) {
+	trace_t tr;
+	vec3_t to;
+	VectorAdd( rd->p[j], fix, to );
+	CG_Trace( &tr, rd->p[j], NULL, NULL, to, rd->entityNum, MASK_SOLID );
+	if ( !tr.startsolid ) {
+		VectorCopy( tr.endpos, rd->p[j] );
+	}
+}
 
 static void CG_RagdollCollideSegs( ragdoll_t *rd, vec3_t before[J_NUM] ) {
 	int i;
 	for ( i = 0; i < (int)RD_NUM_MIDSEGS; i++ ) {
 		int a = rdMidSegs[i].a, b = rdMidSegs[i].b;
-		vec3_t m0, m1, mins, maxs, fix, vel, vt;
-		float r = rdMidSegs[i].r * rd->scale, dn;
+		vec3_t m0, m1, mins, maxs, fix, d;
+		float r = rdMidSegs[i].r * rd->scale, dn, da, db, va, vb, vm;
 		trace_t tr;
 
 		VectorAdd( before[a], before[b], m0 );
@@ -924,26 +1020,46 @@ static void CG_RagdollCollideSegs( ragdoll_t *rd, vec3_t before[J_NUM] ) {
 		VectorSet( mins, -r, -r, -r );
 		VectorSet( maxs, r, r, r );
 		CG_Trace( &tr, m0, mins, maxs, m1, rd->entityNum, MASK_SOLID );
-		if ( tr.allsolid || tr.fraction >= 1.0f ) {
+		if ( tr.allsolid || tr.startsolid || tr.fraction >= 1.0f ) {
 			continue;
 		}
-		// lift the part out along the surface normal only (it can still
-		// slide along it and tip over the edge)
+		// only an edge under the middle with both ends clear of that surface
+		// (a body across a ledge or a railing); anything else the joints
+		// already handle
+		VectorSubtract( rd->p[a], tr.endpos, d );
+		da = DotProduct( d, tr.plane.normal );
+		VectorSubtract( rd->p[b], tr.endpos, d );
+		db = DotProduct( d, tr.plane.normal );
+		if ( da < r || db < r ) {
+			continue;
+		}
 		VectorSubtract( m1, tr.endpos, fix );
 		dn = DotProduct( fix, tr.plane.normal );
 		if ( dn >= 0 ) {
 			continue;
 		}
+		// hold the middle up on the edge; the ends keep their own motion, so
+		// the part tips over it and slides off
 		VectorScale( tr.plane.normal, -dn + 0.05f, fix );
-		VectorAdd( rd->p[a], fix, rd->p[a] );
-		VectorAdd( rd->p[b], fix, rd->p[b] );
-		// and lose the motion into the surface, with a little friction
-		VectorSubtract( m1, m0, vel );
-		dn = DotProduct( vel, tr.plane.normal );
-		if ( dn < 0 ) {
-			VectorMA( vel, -dn, tr.plane.normal, vt );
-			VectorMA( rd->p[a], -0.85f, vt, rd->old[a] );
-			VectorMA( rd->p[b], -0.85f, vt, rd->old[b] );
+		CG_RagdollNudge( rd, a, fix );
+		CG_RagdollNudge( rd, b, fix );
+		// stop only the middle's motion into the surface (the part keeps
+		// turning), with a touch of friction along it
+		VectorSubtract( rd->p[a], rd->old[a], d );
+		va = DotProduct( d, tr.plane.normal );
+		VectorSubtract( rd->p[b], rd->old[b], d );
+		vb = DotProduct( d, tr.plane.normal );
+		vm = 0.5f * ( va + vb );
+		if ( vm < 0 ) {
+			VectorMA( rd->old[a], vm, tr.plane.normal, rd->old[a] );
+			VectorMA( rd->old[b], vm, tr.plane.normal, rd->old[b] );
+		}
+		{
+			vec3_t ta, tb;
+			VectorSubtract( rd->p[a], rd->old[a], ta );
+			VectorSubtract( rd->p[b], rd->old[b], tb );
+			VectorMA( rd->p[a], -0.97f, ta, rd->old[a] );
+			VectorMA( rd->p[b], -0.97f, tb, rd->old[b] );
 		}
 	}
 }
@@ -1015,14 +1131,9 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 		CG_RagdollConstrain( rd );
 	}
 	CG_RagdollCollide( rd, start );
-	// the middles of the long parts (ledges), then the joints once more so
-	// the lift can't push one into a wall
-	{
-		vec3_t lifted[J_NUM];
-		memcpy( lifted, rd->p, sizeof( lifted ) );
-		CG_RagdollCollideSegs( rd, orig );
-		CG_RagdollCollide( rd, lifted );
-	}
+	// the middles of the long parts, for a body lying across a ledge
+	// (the lift itself stops at walls; see CG_RagdollNudge)
+	CG_RagdollCollideSegs( rd, orig );
 	for ( i = 0; i < J_NUM; i++ ) {
 		moved += Distance( rd->p[i], orig[i] );
 	}
@@ -1200,9 +1311,22 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 	{
 		vec3_t vel;
 		float f = CG_XbThrowScale();      // Ragdoll Launcher / Boot Camp skulls
-		VectorScale( dir, 120 * f, vel );
-		vel[2] += 12 * ( f > 1 ? f * 0.6f : 1 );
-		CG_RagdollKick( best, hit, vel, 10.0f, f > 1 ? 0.5f : 0.12f );
+		float wf = CG_RagdollWeaponForce( rdShooter, len );
+		// a body takes only so much shoving in a short time, so automatic
+		// fire jostles it rather than pushing it along the floor
+		if ( cg.time - best->shoveTime > 250 ) {
+			best->shoveTime = cg.time;
+			best->shoved = 0;
+		}
+		if ( best->shoved + wf > 5.0f ) {
+			wf = 5.0f - best->shoved;
+		}
+		if ( wf > 0 ) {
+			best->shoved += wf;
+			VectorScale( dir, 55 * wf * f, vel );
+			vel[2] += 7 * sqrt( wf ) * ( f > 1 ? f * 0.6f : 1 );
+			CG_RagdollKick( best, hit, vel, 10.0f, f > 1 ? 0.5f : 0.12f );
+		}
 	}
 	if ( !cg_xbKickHit ) {     // a kick: no blood, no bullet hole
 		if ( best->entityNum < MAX_CLIENTS ) {

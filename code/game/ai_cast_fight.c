@@ -371,6 +371,12 @@ qboolean AICast_EntityVisible( cast_state_t *cs, int enemynum, qboolean directvi
 	if ( dist < 384 ) {
 		reactionTime *= 0.5 + 0.5 * ( dist / 384 );
 	}
+	// RealRTCWX: a crouching player who hasn't started a fight with this
+	// one takes it longer to react to
+	if ( !g_entities[enemynum].aiCharacter && g_entities[enemynum].client &&
+		 ( g_entities[enemynum].client->ps.pm_flags & PMF_DUCKED ) && enemynum != cs->enemyNum ) {
+		reactionTime = (int)( reactionTime * 1.6f ) + 250;
+	}
 
 	if ( vis->notvisible_timestamp < ( level.time - reactionTime ) ) {
 		// make sure we've seen them since we've last not seen them (since the visibility checking is spread amongst server frames)

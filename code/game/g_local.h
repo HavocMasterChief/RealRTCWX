@@ -1238,6 +1238,8 @@ extern vmCvar_t g_loadoutCostSmokeGrenade;
 
 extern vmCvar_t g_camoSuitFovScale;
 extern vmCvar_t g_camoSuitRangeScale;
+extern vmCvar_t g_crouchSightScale;
+extern vmCvar_t g_crouchStillSightScale;
 extern vmCvar_t g_camoSuitInnerRadiusScale;
 
 extern vmCvar_t g_playerSurvivalClass;

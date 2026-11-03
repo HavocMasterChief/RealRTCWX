@@ -275,10 +275,17 @@ void CG_FragmentBounceMark( localEntity_t *le, trace_t *trace ) {
 
 		// don't drop too many blood marks
 		if ( !( lastBloodMark > cg.time || lastBloodMark > cg.time - ( CG_BloodExtreme() ? 15 : 100 ) ) ) {
+			if ( le->sizeScale < 0.5f ) {
+				// a tiny piece: a small dot, no runs
+				radius = 2 + ( rand() & 3 );
+				CG_ImpactMark( CG_BloodDot(), trace->endpos, trace->plane.normal, random() * 360,
+							   1,1,1,1, qtrue, radius, qfalse, CG_BloodMarkTime() );
+			} else {
 			radius = 16 + ( rand() & 31 );
 			CG_ImpactMark( CG_BloodDot(), trace->endpos, trace->plane.normal, random() * 360,
 						   1,1,1,1, qtrue, radius, qfalse, CG_BloodMarkTime() );
 			CG_GoreSurfaceHit( trace->endpos, trace->plane.normal );
+			}
 
 			lastBloodMark = cg.time;
 		}

@@ -213,6 +213,8 @@ vmCvar_t g_loadoutCostSmokeGrenade;
 
 vmCvar_t g_camoSuitFovScale;
 vmCvar_t g_camoSuitRangeScale;
+vmCvar_t g_crouchSightScale;        // RealRTCWX: enemy sight range on a crouching player
+vmCvar_t g_crouchStillSightScale;   // ... crouching and standing still
 vmCvar_t g_camoSuitInnerRadiusScale;
 
 cvarTable_t gameCvarTable[] = {
@@ -263,6 +265,8 @@ cvarTable_t gameCvarTable[] = {
 	{&g_loadoutCostSmokeGrenade, "g_loadoutCostSmokeGrenade", "1", CVAR_ARCHIVE | CVAR_CHEAT, 0, qfalse},
 	{&g_camoSuitFovScale, "g_camoSuitFovScale", "0.6", CVAR_ARCHIVE, 0, qfalse},
 	{&g_camoSuitRangeScale, "g_camoSuitRangeScale", "0.5", CVAR_ARCHIVE, 0, qfalse},
+	{&g_crouchSightScale, "g_crouchSightScale", "0.6", CVAR_ARCHIVE, 0, qfalse},
+	{&g_crouchStillSightScale, "g_crouchStillSightScale", "0.45", CVAR_ARCHIVE, 0, qfalse},
 	{&g_camoSuitInnerRadiusScale, "g_camoSuitInnerRadiusScale", "0.5", CVAR_ARCHIVE, 0, qfalse},
 	{&g_class, "g_class", "0", CVAR_ARCHIVE, 0, qfalse},
 	{&g_noobTube, "g_noobTube", "0", CVAR_ARCHIVE, 0, qfalse},

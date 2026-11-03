@@ -505,6 +505,12 @@ void CG_LaunchGib( centity_t *cent, vec3_t origin, vec3_t angles, vec3_t velocit
 	VectorCopy( velocity, le->pos.trDelta );
 	le->pos.trTime = cg.time;
 
+	// RealRTCWX: tiny pieces (a headshot's, see cg_ragdoll.c) don't stay long
+	if ( sizeScale < 0.5f ) {
+		le->endTime = le->startTime + 3500 + random() * 1500;
+		le->leBounceSoundType = LEBS_NONE;
+	}
+
 	re->fadeStartTime       = le->endTime - 1000;
 	re->fadeEndTime         = le->endTime;
 

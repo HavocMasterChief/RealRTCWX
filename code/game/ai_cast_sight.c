@@ -331,6 +331,21 @@ qboolean AICast_CheckVisibility( gentity_t *srcent, gentity_t *destent ) {
 		if ( destent->client && destent->client->ps.perks[PERK_CAMOSUIT] && !AICast_SameTeam( cs, ent ) ) {
 			sightRange *= g_camoSuitRangeScale.value;
 		}
+		// RealRTCWX: crouching makes the player harder to spot (still and
+		// crouched more so), unless they just fired or got hit, or this
+		// enemy is already fighting them
+		if ( destent->client && !destent->aiCharacter && ( destent->client->ps.pm_flags & PMF_DUCKED ) &&
+			 !AICast_SameTeam( cs, ent ) && !( cs->aiState >= AISTATE_COMBAT && cs->enemyNum == destent->s.number ) ) {
+			cast_state_t *pcs = AICast_GetCastState( destent->s.number );
+			qboolean loud = ( pcs && pcs->lastWeaponFired && level.time - pcs->lastWeaponFired < 1500 ) ||
+							destent->pain_debounce_time > level.time - 1000;
+			if ( !loud ) {
+				float speed = VectorLength( destent->client->ps.velocity );
+				float k = ( speed < 20 ) ? g_crouchStillSightScale.value : g_crouchSightScale.value;
+				float r = sightRange * k;
+				sightRange = ( r < 160 ) ? ( sightRange < 160 ? sightRange : 160 ) : r;   // right in front of them, they still see you
+			}
+		}
 		if ( cs->bs && dist > sightRange ) {
 			return qfalse;
 		}

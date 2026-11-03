@@ -34,7 +34,7 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 #define RD_SEGS         11
 #define RD_STEP         ( 1.0f / 60.0f )
 #define RD_ITER         8
-#define RD_GRAVITY      330.0f  // a bit under real gravity (1 unit ~ 1 inch): falls read better at game scale
+#define RD_GRAVITY      386.0f  // real gravity (1 unit ~ 1 inch)
 #define RD_AIRDRAG      0.988f  // velocity kept per step
 // "muscle tone": joints are pulled toward the death pose (relative to the
 // pelvis) so limbs don't flop like rope; strong at first, fading to a light
@@ -43,6 +43,9 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 #define RD_MUSCLE_END   0.0f    // fully limp once it fades (arms used to stay held out)
 #define RD_MUSCLE_FADE  1.2f    // seconds
 #define RD_HIT_WINDOW   1200    // ms: a hit this recent shapes the fall
+// what bodies collide with: the world, and the player-clip brushes that metal
+// walkways and grates are often made of (the grate itself isn't solid)
+#define RD_MASK         ( MASK_SOLID | CONTENTS_PLAYERCLIP )
 
 enum {
 	J_PELVIS, J_CHEST, J_HEAD,
@@ -181,6 +184,7 @@ typedef struct {
 	int awakeSteps;      // steps since it last woke (jittering bodies get put to sleep)
 	float jitter;        // recent movement, smoothed
 	float scale;         // drawn size (Toy Soldiers skull: 0.5)
+	int logMask;         // which timing lines have been logged (see CG_RagdollLogFall)
 	int shoveTime;       // bullet shoves taken since then (capped)
 	float shoved;
 	int rig;             // RD_RIG_*
@@ -194,6 +198,7 @@ static void CG_RagdollInitPairs( ragdoll_t *rd );
 static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t dir );
 static void CG_RagdollLoadSaved( void );
 static void CG_RagdollPose( ragdoll_t *rd );
+static void CG_RagdollCleanStart( ragdoll_t *rd );
 
 // ragdoll poses kept with savegames (save/<name>.rag)
 #define RD_SAVE_MAGIC   0x31474152  // "RAG1"
@@ -309,7 +314,7 @@ void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter ) {
 	{
 		float f = CG_RagdollWeaponForce( shooter, Distance( from, point ) );
 		// hits landing together (a shotgun's pellets, a burst) add up
-		if ( rdHits[entityNum].time && cg.time - rdHits[entityNum].time < 80 ) {
+		if ( rdHits[entityNum].time && cg.time - rdHits[entityNum].time < 200 ) {
 			rdHits[entityNum].force += f;
 		} else {
 			rdHits[entityNum].force = f;
@@ -535,6 +540,54 @@ static void CG_RagdollWhyNot( centity_t *cent, const refEntity_t *body, const ch
 	}
 }
 
+/*
+===============
+CG_RagdollHeadshotChunks
+
+A killing shot to the head: a few tiny pieces fly out the way the bullet
+went, bounce, leave small blood dots and fade (blood setting respected).
+===============
+*/
+void CG_LaunchGib( centity_t *cent, vec3_t origin, vec3_t angles, vec3_t velocity, qhandle_t hModel, float sizeScale, int breakCount );
+
+static void CG_RagdollHeadshotChunks( centity_t *cent, const vec3_t head, const vec3_t dir ) {
+	clientInfo_t *ci;
+	int i, n, models[8], numModels = 0;
+
+	if ( cg_bloodMode.integer == BLOODMODE_OFF || !CG_RagdollBleeds( cent->currentState.aiChar ) ) {
+		return;
+	}
+	if ( CG_Skull( 1 << 7 ) ) {     // Confetti Blood
+		CG_XbConfetti( head, 30, 220 );
+		return;
+	}
+	ci = &cgs.clientinfo[cent->currentState.clientNum];
+	for ( i = 0; i < MAX_GIB_MODELS && numModels < 8; i++ ) {
+		if ( ci->gibModels[i] ) {
+			models[numModels++] = i;
+		}
+	}
+	if ( !numModels ) {
+		return;
+	}
+	n = 6 + ( rand() % 5 );
+	for ( i = 0; i < n; i++ ) {
+		vec3_t vel, ang, org;
+		float sp = 90 + random() * 140;
+		VectorCopy( head, org );
+		org[0] += crandom() * 2;
+		org[1] += crandom() * 2;
+		org[2] += crandom() * 2;
+		// mostly along the shot, spread out in a cone
+		VectorScale( dir, sp, vel );
+		vel[0] += crandom() * 70;
+		vel[1] += crandom() * 70;
+		vel[2] += 40 + random() * 70;
+		VectorSet( ang, random() * 360, random() * 360, random() * 360 );
+		CG_LaunchGib( cent, org, ang, vel, ci->gibModels[models[rand() % numModels]], 0.1f + random() * 0.08f, 0 );
+	}
+}
+
 static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	ragdoll_t *rd = NULL;
 	orientation_t o;
@@ -632,6 +685,16 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->rig = rigFound;
 	rd->shoveTime = 0;
 	rd->shoved = 0;
+	rd->logMask = 0;
+	{
+		static int logged;
+		int ago = rdHits[rd->entityNum].time ? cg.time - rdHits[rd->entityNum].time : -1;
+		if ( logged < 40 ) {
+			logged++;
+			CG_Printf( "ragdoll: body %i falls %i ms after the killing hit, force %.1f\n",
+					   rd->entityNum, ago, ago >= 0 && ago < RD_HIT_WINDOW ? rdHits[rd->entityNum].force : 0.0f );
+		}
+	}
 	rd->accum = 0;
 	rd->stillSteps = 0;
 	rd->awakeSteps = 0;
@@ -657,8 +720,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		float bestD = 1e9f, wf = rdHits[rd->entityNum].force;
 		// the killing shot's weapon: a pistol mostly crumples them, a rifle
 		// or a shotgun up close knocks them back
-		if ( wf < 0.15f ) {
-			wf = 0.15f;
+		if ( wf < 0.5f ) {
+			wf = 0.5f;      // even a pistol moves the part it hit
 		} else if ( wf > 5.0f ) {
 			wf = 5.0f;
 		}
@@ -669,13 +732,18 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 				rd->wound = i;
 			}
 		}
+		if ( rd->wound == J_HEAD && bestD < 10.0f * 10.0f ) {
+			CG_RagdollHeadshotChunks( cent, rd->p[J_HEAD], hd );
+		}
 		for ( i = 0; i < J_NUM; i++ ) {
 			float d2 = DistanceSquared( rd->p[i], hp );
-			float w = exp( -d2 / ( 2.0f * 14.0f * 14.0f ) );
-			// a bullet carries little momentum: the hit part jerks, the body
-			// mostly crumples where it stood
-			VectorScale( hd, ( 10 + 55 * w ) * wf * CG_XbThrowScale(), push );
-			push[2] += ( 5 + 8 * w ) * sqrt( wf ) * CG_XbThrowScale();
+			// the part the killing shot hit leads (a foot shot kicks that
+			// foot out, a head shot snaps the head back); the rest of the
+			// body gets a small share, and feet that weren't hit grip
+			float w = exp( -d2 / ( 2.0f * 9.0f * 9.0f ) );
+			float share = ( i == J_LFOOT || i == J_RFOOT ) ? 0.0f : 8.0f;
+			VectorScale( hd, ( share + 85 * w ) * wf * CG_XbThrowScale(), push );
+			push[2] += ( 3 + 8 * w ) * sqrt( wf ) * CG_XbThrowScale();
 			VectorAdd( push, cent->currentState.pos.trDelta, push );
 			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
 		}
@@ -713,6 +781,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	for ( i = 0; i < (int)RD_NUM_LIMITS; i++ ) {
 		rd->limit[i] = rdLimits[i].frac * Distance( rd->p[rdLimits[i].a], rd->p[rdLimits[i].b] );
 	}
+	CG_RagdollCleanStart( rd );    // (after the bone lengths are taken from the pose)
 	CG_RagdollInitPairs( rd );
 	memset( rd->hingeOn, 0, sizeof( rd->hingeOn ) );
 	for ( i = 0; i < 4; i++ ) {
@@ -893,6 +962,169 @@ static void CG_RagdollJointLimits( ragdoll_t *rd ) {
 }
 
 // one pass over every joint constraint
+/*
+===============
+CG_RagdollNeckLimit
+
+The head stays within ~60 degrees of the spine's direction (it can loll,
+not snap straight back).
+===============
+*/
+static void CG_RagdollNeckLimit( ragdoll_t *rd ) {
+	vec3_t up, h, perp;
+	float len, c, maxC = 0.5f, along;
+	if ( rd->rig == RD_RIG_DOG ) {
+		return;
+	}
+	VectorSubtract( rd->p[J_CHEST], rd->p[J_PELVIS], up );
+	if ( VectorNormalize( up ) < 0.5f ) {
+		return;
+	}
+	VectorSubtract( rd->p[J_HEAD], rd->p[J_CHEST], h );
+	len = VectorLength( h );
+	if ( len < 0.5f ) {
+		return;
+	}
+	c = DotProduct( h, up ) / len;
+	if ( c >= maxC ) {
+		return;
+	}
+	// rotate the neck back to the edge of the cone, keeping its sideways lean
+	along = DotProduct( h, up );
+	VectorMA( h, -along, up, perp );
+	if ( VectorNormalize( perp ) < 0.001f ) {
+		return;
+	}
+	VectorScale( up, len * maxC, h );
+	VectorMA( h, len * 0.866f, perp, h );
+	VectorAdd( rd->p[J_CHEST], h, rd->p[J_HEAD] );
+}
+
+/*
+===============
+CG_RagdollBoneTrace
+
+Joints are balls, so a bone could pass through a table edge, a post or a
+railing with a joint clear on each side, and stay hooked there. Each long
+bone is traced end to end; where it crosses something solid, the end on
+the shorter side is moved back across to the other side of that surface.
+===============
+*/
+static const int rdBones[][2] = {
+	{ J_PELVIS, J_CHEST }, { J_CHEST, J_HEAD },
+	{ J_LSHOULDER, J_LELBOW }, { J_LELBOW, J_LHAND },
+	{ J_RSHOULDER, J_RELBOW }, { J_RELBOW, J_RHAND },
+	{ J_LHIP, J_LKNEE }, { J_LKNEE, J_LFOOT },
+	{ J_RHIP, J_RKNEE }, { J_RKNEE, J_RFOOT }
+};
+#define RD_NUM_BONES ( sizeof( rdBones ) / sizeof( rdBones[0] ) )
+
+// one bone; qtrue if it crossed something and was fixed
+static qboolean CG_RagdollFixBone( ragdoll_t *rd, int a, int b, qboolean keepA ) {
+	trace_t tr, back;
+	int fixed, keep;
+	vec3_t n, d;
+	float dist;
+
+	CG_Trace( &tr, rd->p[a], NULL, NULL, rd->p[b], rd->entityNum, RD_MASK );
+	if ( tr.fraction >= 1.0f || tr.startsolid || tr.allsolid ) {
+		return qfalse;      // clear (or a joint already inside: CG_RagdollCollide's job)
+	}
+	CG_Trace( &back, rd->p[b], NULL, NULL, rd->p[a], rd->entityNum, RD_MASK );
+	if ( back.startsolid || back.allsolid ) {
+		return qfalse;
+	}
+	// the end with more of the bone on its side stays
+	if ( keepA || tr.fraction >= back.fraction ) {
+		keep = a; fixed = b; VectorCopy( tr.plane.normal, n );
+	} else {
+		keep = b; fixed = a; VectorCopy( back.plane.normal, n );
+		VectorCopy( back.endpos, tr.endpos );
+	}
+	(void)keep;
+	// put the moved end back on the kept side of that surface
+	VectorSubtract( rd->p[fixed], tr.endpos, d );
+	dist = DotProduct( d, n );
+	if ( dist < 1.0f ) {
+		vec3_t to;
+		trace_t t2;
+		VectorMA( rd->p[fixed], 1.0f - dist, n, to );
+		CG_Trace( &t2, rd->p[fixed], NULL, NULL, to, rd->entityNum, RD_MASK );
+		if ( !t2.startsolid ) {
+			VectorCopy( t2.endpos, rd->p[fixed] );
+		} else {
+			VectorCopy( to, rd->p[fixed] );
+		}
+		// and it loses its motion into that surface
+		VectorSubtract( rd->p[fixed], rd->old[fixed], d );
+		dist = DotProduct( d, n );
+		if ( dist < 0 ) {
+			VectorMA( rd->old[fixed], dist, n, rd->old[fixed] );
+		}
+		return qtrue;
+	}
+	return qfalse;
+}
+
+static void CG_RagdollBoneTrace( ragdoll_t *rd ) {
+	int i;
+	for ( i = 0; i < (int)RD_NUM_BONES; i++ ) {
+		CG_RagdollFixBone( rd, rdBones[i][0], rdBones[i][1], qfalse );
+	}
+}
+
+/*
+===============
+CG_RagdollCleanStart
+
+The death animation ignores furniture, so the first pose can already have
+an arm through a post or a chest through a tabletop. Walk the skeleton out
+from the pelvis (which the game keeps clear) and fold back any joint whose
+bone runs into something, with everything beyond it.
+===============
+*/
+static void CG_RagdollCleanStart( ragdoll_t *rd ) {
+	// parent -> child, in order from the pelvis out
+	static const int chain[][2] = {
+		{ J_PELVIS, J_CHEST }, { J_CHEST, J_HEAD },
+		{ J_CHEST, J_LSHOULDER }, { J_LSHOULDER, J_LELBOW }, { J_LELBOW, J_LHAND },
+		{ J_CHEST, J_RSHOULDER }, { J_RSHOULDER, J_RELBOW }, { J_RELBOW, J_RHAND },
+		{ J_PELVIS, J_LHIP }, { J_LHIP, J_LKNEE }, { J_LKNEE, J_LFOOT },
+		{ J_PELVIS, J_RHIP }, { J_RHIP, J_RKNEE }, { J_RKNEE, J_RFOOT }
+	};
+	static const int below[J_NUM][4] = {     // joints that move with each one
+		{ -1 }, { J_HEAD, J_LSHOULDER, J_RSHOULDER, -1 }, { -1 },
+		{ J_LELBOW, J_LHAND, -1 }, { J_LHAND, -1 }, { -1 },
+		{ J_RELBOW, J_RHAND, -1 }, { J_RHAND, -1 }, { -1 },
+		{ J_LKNEE, J_LFOOT, -1 }, { J_LFOOT, -1 }, { -1 },
+		{ J_RKNEE, J_RFOOT, -1 }, { J_RFOOT, -1 }, { -1 }
+	};
+	int i, k, fixes = 0;
+	for ( i = 0; i < (int)( sizeof( chain ) / sizeof( chain[0] ) ); i++ ) {
+		int a = chain[i][0], b = chain[i][1];
+		trace_t tr;
+		vec3_t delta, to;
+		CG_Trace( &tr, rd->p[a], NULL, NULL, rd->p[b], rd->entityNum, RD_MASK );
+		if ( tr.fraction >= 1.0f || tr.startsolid ) {
+			continue;
+		}
+		// just short of what it hit
+		VectorSubtract( rd->p[b], rd->p[a], delta );
+		VectorMA( rd->p[a], tr.fraction * 0.9f, delta, to );
+		VectorSubtract( to, rd->p[b], delta );
+		VectorAdd( rd->p[b], delta, rd->p[b] );
+		VectorAdd( rd->old[b], delta, rd->old[b] );
+		for ( k = 0; k < 4 && below[b][k] >= 0; k++ ) {
+			VectorAdd( rd->p[below[b][k]], delta, rd->p[below[b][k]] );
+			VectorAdd( rd->old[below[b][k]], delta, rd->old[below[b][k]] );
+		}
+		fixes++;
+	}
+	if ( fixes ) {
+		CG_Printf( "ragdoll: body %i started with %i bone(s) in something; folded back\n", rd->entityNum, fixes );
+	}
+}
+
 static void CG_RagdollConstrain( ragdoll_t *rd ) {
 	vec3_t d;
 	int i;
@@ -924,6 +1156,7 @@ static void CG_RagdollConstrain( ragdoll_t *rd ) {
 	if ( rd->rig != RD_RIG_DOG ) {
 		CG_RagdollJointLimits( rd );    // knees/elbows bend one way (a biped's)
 	}
+	CG_RagdollNeckLimit( rd );
 	CG_RagdollSelfCollide( rd );
 }
 
@@ -939,7 +1172,7 @@ static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
 
 		VectorSet( mins, -r, -r, -r );
 		VectorSet( maxs, r, r, r );
-		CG_Trace( &tr, start[i], mins, maxs, rd->p[i], rd->entityNum, MASK_SOLID );
+		CG_Trace( &tr, start[i], mins, maxs, rd->p[i], rd->entityNum, RD_MASK );
 		if ( tr.allsolid ) {
 			// started inside (a step corner): stay put this step, but keep
 			// half the motion so the constraints can work it loose
@@ -999,7 +1232,7 @@ static void CG_RagdollNudge( ragdoll_t *rd, int j, const vec3_t fix ) {
 	trace_t tr;
 	vec3_t to;
 	VectorAdd( rd->p[j], fix, to );
-	CG_Trace( &tr, rd->p[j], NULL, NULL, to, rd->entityNum, MASK_SOLID );
+	CG_Trace( &tr, rd->p[j], NULL, NULL, to, rd->entityNum, RD_MASK );
 	if ( !tr.startsolid ) {
 		VectorCopy( tr.endpos, rd->p[j] );
 	}
@@ -1019,7 +1252,7 @@ static void CG_RagdollCollideSegs( ragdoll_t *rd, vec3_t before[J_NUM] ) {
 		VectorScale( m1, 0.5f, m1 );
 		VectorSet( mins, -r, -r, -r );
 		VectorSet( maxs, r, r, r );
-		CG_Trace( &tr, m0, mins, maxs, m1, rd->entityNum, MASK_SOLID );
+		CG_Trace( &tr, m0, mins, maxs, m1, rd->entityNum, RD_MASK );
 		if ( tr.allsolid || tr.startsolid || tr.fraction >= 1.0f ) {
 			continue;
 		}
@@ -1112,8 +1345,10 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 			VectorSubtract( target, rd->p[i], rel );
 			// legs give out first: knees buckle, the body crumples down
 			// instead of toppling stiff as a plank
-			VectorMA( rd->p[i], ( i == J_LKNEE || i == J_LFOOT || i == J_RKNEE || i == J_RFOOT ) ? s * 0.5f : s,
-					  rel, rd->p[i] );
+			if ( i == J_LKNEE || i == J_LFOOT || i == J_RKNEE || i == J_RFOOT ) {
+				continue;   // the knees give at once
+			}
+			VectorMA( rd->p[i], s, rel, rd->p[i] );
 		}
 		rd->steps++;
 	}
@@ -1134,6 +1369,7 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 	// the middles of the long parts, for a body lying across a ledge
 	// (the lift itself stops at walls; see CG_RagdollNudge)
 	CG_RagdollCollideSegs( rd, orig );
+	CG_RagdollBoneTrace( rd );
 	for ( i = 0; i < J_NUM; i++ ) {
 		moved += Distance( rd->p[i], orig[i] );
 	}
@@ -1325,7 +1561,14 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 			best->shoved += wf;
 			VectorScale( dir, 55 * wf * f, vel );
 			vel[2] += 7 * sqrt( wf ) * ( f > 1 ? f * 0.6f : 1 );
-			CG_RagdollKick( best, hit, vel, 10.0f, f > 1 ? 0.5f : 0.12f );
+			if ( cg.time - best->startTime < 300 ) {
+				// still falling from the killing shot: add to that fall
+				// rather than a jolt of its own
+				VectorScale( vel, 0.6f, vel );
+				CG_RagdollKick( best, hit, vel, 18.0f, 0.3f );
+			} else {
+				CG_RagdollKick( best, hit, vel, 10.0f, f > 1 ? 0.5f : 0.12f );
+			}
 		}
 	}
 	if ( !cg_xbKickHit ) {     // a kick: no blood, no bullet hole
@@ -1357,7 +1600,7 @@ void CG_RagdollExplosion( const vec3_t origin, float radius, float strength ) {
 		if ( !rd->active || Distance( rd->p[J_PELVIS], origin ) > radius + 40 ) {
 			continue;
 		}
-		CG_Trace( &tr, origin, NULL, NULL, rd->p[J_PELVIS], rd->entityNum, MASK_SOLID );
+		CG_Trace( &tr, origin, NULL, NULL, rd->p[J_PELVIS], rd->entityNum, RD_MASK );
 		if ( tr.fraction < 1.0f ) {
 			continue;   // sheltered
 		}
@@ -1434,7 +1677,7 @@ static void CG_RagdollRide( ragdoll_t *rd ) {
 
 	VectorCopy( rd->p[J_PELVIS], down );
 	down[2] -= 24;
-	CG_Trace( &tr, rd->p[J_PELVIS], NULL, NULL, down, rd->entityNum, MASK_SOLID );
+	CG_Trace( &tr, rd->p[J_PELVIS], NULL, NULL, down, rd->entityNum, RD_MASK );
 	if ( tr.fraction < 1.0f && tr.entityNum != ENTITYNUM_WORLD && tr.entityNum < MAX_GENTITIES &&
 		 ( cg_entities[tr.entityNum].currentState.eType == ET_MOVER ||
 		   cg_entities[tr.entityNum].currentState.eType == ET_MOVERSCALED ) ) {
@@ -1628,6 +1871,23 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			}
 		}
 		CG_RagdollPose( rd );
+		// how fast it's moving early in the fall (tuning the death push)
+		{
+			static const int at[3] = { 100, 500, 1000 };
+			static int logged;
+			int k, age = cg.time - rd->startTime;
+			for ( k = 0; k < 3; k++ ) {
+				if ( age >= at[k] && !( rd->logMask & ( 1 << k ) ) ) {
+					rd->logMask |= 1 << k;
+					if ( logged < 120 ) {
+						logged++;
+						CG_Printf( "ragdoll: body %i at %i ms: pelvis %.0f, head %.0f units/s\n", rd->entityNum, at[k],
+								   Distance( rd->p[J_PELVIS], rd->old[J_PELVIS] ) / RD_STEP,
+								   Distance( rd->p[J_HEAD], rd->old[J_HEAD] ) / RD_STEP );
+					}
+				}
+			}
+		}
 	}
 	trap_R_SetRagdoll( rd->slot, &rd->data[0][0] );
 

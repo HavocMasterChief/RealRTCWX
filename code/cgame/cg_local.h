@@ -509,6 +509,9 @@ typedef struct localEntity_s {
 
 	int breakCount;                     // break-up this many times before we can break no more
 	float sizeScale;
+	int xbStuck;                        // RealRTCWX Extreme: stuck to a wall/ceiling until then (-1: was, no more)
+	vec3_t xbStuckNormal;
+	int xbSmearTime;
 
 	char validOldPos[MAX_OLD_POS];
 	vec3_t oldPos[MAX_OLD_POS];
@@ -2383,6 +2386,11 @@ void CG_RagdollSetShooter( int shooter );
 float CG_RagdollShotForce( int shooter, float dist );
 void CG_GoreSpray( const vec3_t point, const vec3_t dir, float force, int entityNum );
 void CG_GoreKnife( const vec3_t point, int entityNum );
+void CG_GoreHeadBurst( const vec3_t point, const vec3_t dir, int entityNum );
+void CG_GoreSplash( const vec3_t point, const vec3_t normal, int count );
+qboolean CG_RagdollHeadless( int entityNum );
+qboolean CG_RagdollGibbed( int entityNum );
+int CG_RagdollBurnFlags( int entityNum );
 int CG_RagdollBullet( const vec3_t start, const vec3_t end );
 // cg_xbskulls.c
 extern int cg_xbSkulls;

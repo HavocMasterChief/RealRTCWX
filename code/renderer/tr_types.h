@@ -119,6 +119,8 @@ typedef enum {
 #define REFLAG_WOUNDS_GREEN 256 // ... in green (green blood option)
 #define REFLAG_WOUNDS_DUST  512 // ... dry (zombies): holes only, no blood
 #define REFLAG_WOUNDS_SOAK  1024 // ... and the blood soaks out through the clothes over time (Extreme)
+#define REFLAG_CHARRED      2048 // RealRTCWX: burnt black (flamethrower kill)
+#define REFLAG_SCORCHED     4096 // RealRTCWX: scorched dark (Tesla kill)
 
 typedef struct {
 	refEntityType_t reType;

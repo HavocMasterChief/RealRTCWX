@@ -470,7 +470,40 @@ static void CG_GorePoolAt( const vec3_t point, float radius, int growTime ) {
 					point[0], point[1], point[2], tr.fraction, tr.startsolid, tr.plane.normal[2] );
 		return;
 	}
+	if ( CG_BloodExtreme() ) {
+		radius *= 1.35f;
+	}
 	CG_GoreSpawnPool( tr.endpos, radius, growTime, tr.entityNum );
+
+	// Extreme: where the pool reaches a step's edge, blood drips over it
+	if ( CG_BloodExtreme() && tr.entityNum == ENTITYNUM_WORLD ) {
+		int k, found = 0;
+		for ( k = 0; k < 8 && found < 2; k++ ) {
+			float a = k * ( M_PI / 4 ) + random() * 0.3f;
+			vec3_t edge, below;
+			trace_t t2;
+			edge[0] = tr.endpos[0] + cos( a ) * radius * 1.05f;
+			edge[1] = tr.endpos[1] + sin( a ) * radius * 1.05f;
+			edge[2] = tr.endpos[2] + 4;
+			VectorCopy( edge, below );
+			below[2] -= 64;
+			CG_Trace( &t2, edge, NULL, NULL, below, -1, MASK_SOLID );
+			if ( t2.startsolid || t2.fraction >= 1.0f ) {
+				continue;
+			}
+			if ( tr.endpos[2] - t2.endpos[2] > 6 ) {
+				// the floor drops away here: drip off the edge, a pool below
+				vec3_t lip;
+				VectorSubtract( edge, tr.endpos, lip );
+				VectorNormalize( lip );
+				VectorMA( tr.endpos, radius * 0.95f, lip, lip );
+				lip[2] = tr.endpos[2] - 1;
+				CG_GoreAddDrip( lip, growTime + 8000 );
+				CG_GoreSpawnPool( t2.endpos, radius * 0.5f, growTime + 4000, t2.entityNum );
+				found++;
+			}
+		}
+	}
 }
 
 /*
@@ -1333,6 +1366,61 @@ void CG_GoreKnife( const vec3_t point, int entityNum ) {
 			goBleeders[entityNum].arteryUntil = cg.time + 3000;
 			goBleeders[entityNum].arteryNext = cg.time + 150;
 		}
+	}
+}
+
+// droplets thrown off something wet hitting a surface (a gib landing)
+void CG_GoreSplash( const vec3_t point, const vec3_t normal, int count ) {
+	int i;
+	if ( !CG_GoreEnabled() || CG_Skull( 1 << 7 ) ) {
+		return;
+	}
+	for ( i = 0; i < count; i++ ) {
+		vec3_t v, p;
+		VectorScale( normal, 0.6f + random() * 0.5f, v );
+		v[0] += crandom() * 0.8f;
+		v[1] += crandom() * 0.8f;
+		v[2] += crandom() * 0.4f + 0.2f;
+		VectorNormalize( v );
+		VectorScale( v, 70 + random() * 110, v );
+		VectorMA( point, 1.5f, normal, p );
+		CG_GoreNewDrop( p, v, 0.7f + random() * 0.8f );
+	}
+}
+
+/*
+===============
+CG_GoreHeadBurst
+
+Extreme: a head blown off (or a body shot apart): a big burst of blood
+along the shot, a cloud, and the stump pumps for several seconds.
+===============
+*/
+void CG_GoreHeadBurst( const vec3_t point, const vec3_t dir, int entityNum ) {
+	qboolean green = ( cg_bloodMode.integer == BLOODMODE_GREEN );
+	int i;
+	if ( !CG_GoreEnabled() || CG_Skull( 1 << 7 ) ) {
+		return;
+	}
+	for ( i = 0; i < 36; i++ ) {
+		vec3_t v;
+		VectorCopy( dir, v );
+		v[0] += crandom() * 0.6f;
+		v[1] += crandom() * 0.6f;
+		v[2] += crandom() * 0.5f + 0.25f;
+		VectorNormalize( v );
+		VectorScale( v, 180 + random() * 280, v );
+		CG_GoreNewDrop( point, v, 1.2f + random() * 1.4f );
+	}
+	{
+		vec3_t vel;
+		VectorScale( dir, 30, vel );
+		CG_SmokePuff( point, vel, 22, 1, 1, 1, 0.7f, 1100, cg.time, 0, 0,
+					  green ? cgs.media.bloodCloudShaderGreen : cgs.media.bloodCloudShader );
+	}
+	CG_GoreScreenSplat( point, 3 );
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES ) {
+		goBodyDrips[entityNum].arteryTime = cg.time;    // the stump pumps (see CG_GoreUpdateBleeders)
 	}
 }
 

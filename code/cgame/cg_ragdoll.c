@@ -190,6 +190,7 @@ typedef struct {
 	qboolean dogTwistLogged;
 	int shoveTime;       // bullet shoves taken since then (capped)
 	float shoved;
+	float corpseDamage;  // force taken since death (Extreme: enough and it comes apart)
 	int rig;             // RD_RIG_*
 	qboolean sleeping;
 	float data[RD_SEGS][12];
@@ -197,6 +198,23 @@ typedef struct {
 
 static ragdoll_t rdBodies[RD_MAX];
 static byte rdDeclined[MAX_GENTITIES];   // dead bodies that keep their death animation
+// Extreme gore, per body (cleared when the entity is alive again)
+static byte rdHeadless[MAX_GENTITIES];   // head blown off
+static byte rdGibbed[MAX_GENTITIES];     // shot to pieces after death
+static byte rdBurn[MAX_GENTITIES];       // 1 charred (fire), 2 scorched (Tesla)
+
+qboolean CG_RagdollHeadless( int entityNum ) {
+	return entityNum >= 0 && entityNum < MAX_GENTITIES && rdHeadless[entityNum];
+}
+qboolean CG_RagdollGibbed( int entityNum ) {
+	return entityNum >= 0 && entityNum < MAX_GENTITIES && rdGibbed[entityNum];
+}
+int CG_RagdollBurnFlags( int entityNum ) {
+	if ( entityNum < 0 || entityNum >= MAX_GENTITIES ) {
+		return 0;
+	}
+	return rdBurn[entityNum] == 1 ? REFLAG_CHARRED : rdBurn[entityNum] == 2 ? REFLAG_SCORCHED : 0;
+}
 static void CG_RagdollInitPairs( ragdoll_t *rd );
 static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t dir );
 static void CG_RagdollLoadSaved( void );
@@ -359,6 +377,9 @@ void CG_RagdollReset( void ) {
 		}
 	}
 	memset( rdBodies, 0, sizeof( rdBodies ) );
+	memset( rdHeadless, 0, sizeof( rdHeadless ) );
+	memset( rdGibbed, 0, sizeof( rdGibbed ) );
+	memset( rdBurn, 0, sizeof( rdBurn ) );
 	memset( rdHits, 0, sizeof( rdHits ) );
 	memset( rdDeclined, 0, sizeof( rdDeclined ) );
 	trap_R_AddWound( -1, NULL, NULL );
@@ -568,7 +589,7 @@ went, bounce, leave small blood dots and fade (blood setting respected).
 */
 void CG_LaunchGib( centity_t *cent, vec3_t origin, vec3_t angles, vec3_t velocity, qhandle_t hModel, float sizeScale, int breakCount );
 
-static void CG_RagdollHeadshotChunks( centity_t *cent, const vec3_t head, const vec3_t dir ) {
+static void CG_RagdollHeadshotChunks( centity_t *cent, const vec3_t head, const vec3_t dir, int count ) {
 	clientInfo_t *ci;
 	int i, n, models[8], numModels = 0;
 
@@ -588,7 +609,7 @@ static void CG_RagdollHeadshotChunks( centity_t *cent, const vec3_t head, const 
 	if ( !numModels ) {
 		return;
 	}
-	n = 6 + ( rand() % 5 );
+	n = count ? count : 6 + ( rand() % 5 );
 	for ( i = 0; i < n; i++ ) {
 		vec3_t vel, ang, org;
 		float sp = 90 + random() * 140;
@@ -602,7 +623,8 @@ static void CG_RagdollHeadshotChunks( centity_t *cent, const vec3_t head, const 
 		vel[1] += crandom() * 70;
 		vel[2] += 40 + random() * 70;
 		VectorSet( ang, random() * 360, random() * 360, random() * 360 );
-		CG_LaunchGib( cent, org, ang, vel, ci->gibModels[models[rand() % numModels]], 0.1f + random() * 0.08f, 0 );
+		CG_LaunchGib( cent, org, ang, vel, ci->gibModels[models[rand() % numModels]],
+					  count ? 0.14f + random() * 0.2f : 0.1f + random() * 0.08f, 0 );
 	}
 }
 
@@ -703,6 +725,15 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->rig = rigFound;
 	rd->shoveTime = 0;
 	rd->shoved = 0;
+	rd->corpseDamage = 0;
+	// Extreme: died burning, or to the Tesla gun
+	if ( CG_BloodExtreme() ) {
+		if ( CG_EntOnFire( cent ) ) {
+			rdBurn[cent->currentState.number] = 1;
+		} else if ( cent->pe.teslaDamagedTime && cent->pe.teslaDamagedTime > cg.time - 800 ) {
+			rdBurn[cent->currentState.number] = 2;
+		}
+	}
 	rd->logMask = 0;
 	{
 		static int logged;
@@ -751,7 +782,16 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 			}
 		}
 		if ( rd->wound == J_HEAD && bestD < 10.0f * 10.0f ) {
-			CG_RagdollHeadshotChunks( cent, rd->p[J_HEAD], hd );
+			// Extreme: a sniper round or a close shotgun blast takes the head off
+			if ( CG_BloodExtreme() && rdHits[rd->entityNum].force >= 3.0f && rd->rig != RD_RIG_DOG &&
+				 CG_RagdollBleeds( cent->currentState.aiChar ) && !CG_Skull( 1 << 7 ) ) {
+				rdHeadless[rd->entityNum] = 1;
+				CG_RagdollHeadshotChunks( cent, rd->p[J_HEAD], hd, 22 );
+				CG_GoreHeadBurst( rd->p[J_HEAD], hd, rd->entityNum );
+				trap_S_StartSound( rd->p[J_HEAD], ENTITYNUM_WORLD, CHAN_AUTO, cgs.media.gibSound );
+			} else {
+				CG_RagdollHeadshotChunks( cent, rd->p[J_HEAD], hd, 0 );
+			}
 		}
 		for ( i = 0; i < J_NUM; i++ ) {
 			float d2 = DistanceSquared( rd->p[i], hp );
@@ -1315,14 +1355,16 @@ static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
 			// floors grip, edges / step risers / slopes let it slide
 			keep = tr.plane.normal[2] > 0.9f ? 0.7f : 0.92f;
 			// a bleeding body sliding along the floor smears blood behind it
-			if ( ( i == J_PELVIS || i == J_CHEST || i == rd->wound ) && tr.plane.normal[2] > 0.6f &&
+			if ( ( i == J_PELVIS || i == J_CHEST || i == rd->wound || ( CG_BloodExtreme() && i == J_HEAD ) ) &&
+				 ( tr.plane.normal[2] > 0.6f || CG_BloodExtreme() ) &&     // Extreme: down walls and stairs too
 				 VectorLength( vt ) > 0.8f && cg.time - rd->startTime < 25000 &&
 				 cg_blood.integer && cg_bloodMode.integer != BLOODMODE_OFF &&
 				 CG_RagdollBleeds( cg_entities[rd->entityNum].currentState.aiChar ) &&
-				 Distance( tr.endpos, rd->lastSmear ) > 7.0f ) {
+				 Distance( tr.endpos, rd->lastSmear ) > ( CG_BloodExtreme() ? 4.0f : 7.0f ) ) {
 				VectorCopy( tr.endpos, rd->lastSmear );
 				CG_ImpactMark( CG_BloodDot(), tr.endpos, tr.plane.normal, random() * 360,
-							   1, 1, 1, 1, qfalse, 5 + random() * 4, qfalse, -1 );
+							   1, 1, 1, 1, qfalse, CG_BloodExtreme() ? 7 + random() * 6 : 5 + random() * 4, qfalse,
+							   CG_BloodExtreme() ? CG_BloodMarkTime() : -1 );
 			}
 			VectorMA( rd->p[i], -keep, vt, rd->old[i] );
 			VectorCopy( rd->p[i], start[i] );   // the second pass starts from here
@@ -1692,6 +1734,21 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 		}
 		if ( wf > 0 ) {
 			best->shoved += wf;
+			best->corpseDamage += wf;
+			// Extreme: a body that keeps taking hits comes apart
+			if ( CG_BloodExtreme() && best->corpseDamage >= 18.0f && best->entityNum < MAX_GENTITIES &&
+				 CG_RagdollBleeds( cg_entities[best->entityNum].currentState.aiChar ) ) {
+				centity_t *bc = &cg_entities[best->entityNum];
+				vec3_t org;
+				VectorCopy( best->p[J_PELVIS], org );
+				trap_S_StartSound( org, ENTITYNUM_WORLD, CHAN_AUTO, cgs.media.gibSound );
+				CG_GibPlayer( bc, org, dir );
+				CG_GoreHeadBurst( best->p[J_CHEST], dir, best->entityNum );
+				rdGibbed[best->entityNum] = 1;
+				trap_R_SetRagdoll( best->slot, NULL );
+				best->active = qfalse;
+				return best->entityNum;
+			}
 			VectorScale( dir, 55 * wf * f, vel );
 			vel[2] += 7 * sqrt( wf ) * ( f > 1 ? f * 0.6f : 1 );
 			if ( cg.time - best->startTime < 300 ) {
@@ -1902,6 +1959,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	} else if ( cent->currentState.number != cg.snap->ps.clientNum && CG_RagdollDryWounds( cent->currentState.aiChar ) ) {
 		body->reFlags |= REFLAG_WOUNDS | REFLAG_WOUNDS_DUST;
 	}
+	body->reFlags |= CG_RagdollBurnFlags( cent->currentState.number );    // Extreme: burnt / scorched
 
 	rd = CG_RagdollFind( cent->currentState.number );
 	if ( !( cent->currentState.eFlags & EF_DEAD ) || !CG_RagdollEligible( cent ) ) {
@@ -1910,6 +1968,11 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			rd->active = qfalse;
 		}
 		rdDeclined[cent->currentState.number] = 0;
+		if ( !( cent->currentState.eFlags & EF_DEAD ) ) {
+			rdHeadless[cent->currentState.number] = 0;
+			rdGibbed[cent->currentState.number] = 0;
+			rdBurn[cent->currentState.number] = 0;
+		}
 		return;
 	}
 	if ( rdDeclined[cent->currentState.number] ) {

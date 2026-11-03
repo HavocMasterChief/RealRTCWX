@@ -407,6 +407,7 @@ void RB_BeginSurface( shader_t *shader, int fogNum ) {
 	if ( tess.woundAny ) {      // RealRTCWX wounds left over from a batch that drew nothing
 		memset( tess.woundTint, 0, sizeof( tess.woundTint ) );
 		tess.woundAny = qfalse;
+		tess.woundChar = 0;
 	}
 	tess.numIndexes = 0;
 	tess.numVertexes = 0;
@@ -798,6 +799,15 @@ ComputeColors
 // lighting already in svars.colors (see R_ApplyWounds in tr_animation.c)
 static void RB_ApplyWoundTint( void ) {
 	int i;
+	if ( tess.woundChar > 0 ) {
+		// burnt: the whole body darkened toward a sooty brown-black
+		float c = tess.woundChar;
+		for ( i = 0; i < tess.numVertexes; i++ ) {
+			tess.svars.colors[i][0] = (byte)( tess.svars.colors[i][0] * ( 1.0f - 0.80f * c ) );
+			tess.svars.colors[i][1] = (byte)( tess.svars.colors[i][1] * ( 1.0f - 0.86f * c ) );
+			tess.svars.colors[i][2] = (byte)( tess.svars.colors[i][2] * ( 1.0f - 0.90f * c ) );
+		}
+	}
 	for ( i = 0; i < tess.numVertexes; i++ ) {
 		int w = tess.woundTint[i];
 		if ( w ) {
@@ -1807,6 +1817,7 @@ void RB_EndSurface( void ) {
 	if ( tess.woundAny ) {
 		memset( tess.woundTint, 0, tess.numVertexes );
 		tess.woundAny = qfalse;
+		tess.woundChar = 0;
 	}
 	tess.numIndexes = 0;
 

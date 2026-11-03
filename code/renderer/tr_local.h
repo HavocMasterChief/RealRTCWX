@@ -1716,6 +1716,7 @@ typedef struct shaderCommands_s
 	byte woundTint[SHADER_MAX_VERTEXES];
 	qboolean woundAny;
 	qboolean woundGreen;
+	float woundChar;        // RealRTCWX: 0..1, how burnt the whole surface is
 
 	// info extracted from current shader
 	int numPasses;

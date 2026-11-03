@@ -285,6 +285,7 @@ void CG_FragmentBounceMark( localEntity_t *le, trace_t *trace ) {
 			CG_ImpactMark( CG_BloodDot(), trace->endpos, trace->plane.normal, random() * 360,
 						   1,1,1,1, qtrue, radius, qfalse, CG_BloodMarkTime() );
 			CG_GoreSurfaceHit( trace->endpos, trace->plane.normal );
+			CG_GoreSplash( trace->endpos, trace->plane.normal, CG_BloodExtreme() ? 6 : 2 );   // droplets off the impact
 			}
 
 			lastBloodMark = cg.time;
@@ -386,6 +387,30 @@ void CG_ReflectVelocity( localEntity_t *le, trace_t *trace ) {
 	vec3_t velocity;
 	float dot;
 	int hitTime;
+
+	// RealRTCWX Extreme: a chunk hitting a wall or ceiling may stick there,
+	// then slide down the wall / drop off the ceiling
+	if ( le->leType == LE_FRAGMENT && le->leMarkType == LEMT_BLOOD && CG_BloodExtreme() && !le->xbStuck &&
+		 le->sizeScale >= 0.5f && trace->plane.normal[2] < 0.3f && !trace->startsolid && random() < 0.35f ) {
+		le->xbStuck = cg.time + 1200 + rand() % 2500;
+		VectorCopy( trace->plane.normal, le->xbStuckNormal );
+		VectorMA( trace->endpos, 0.5f, trace->plane.normal, le->pos.trBase );
+		le->pos.trTime = cg.time;
+		if ( trace->plane.normal[2] < -0.5f ) {
+			le->pos.trType = TR_STATIONARY;     // hangs from the ceiling, then drops (CG_AddFragment)
+			VectorClear( le->pos.trDelta );
+		} else {
+			// creep down the wall
+			vec3_t down = { 0, 0, -1 };
+			float d = DotProduct( down, trace->plane.normal );
+			VectorMA( down, -d, trace->plane.normal, le->pos.trDelta );
+			VectorNormalize( le->pos.trDelta );
+			VectorScale( le->pos.trDelta, 5 + random() * 7, le->pos.trDelta );
+			le->pos.trType = TR_LINEAR;
+		}
+		le->angles.trType = TR_STATIONARY;
+		return;
+	}
 
 	// reflect the velocity on the trace plane
 	hitTime = cg.time - cg.frametime + cg.frametime * trace->fraction;
@@ -512,6 +537,24 @@ void CG_AddFragment( localEntity_t *le ) {
 			re->fadeStartTime = le->endTime - 1000;
 		}
 		re->fadeEndTime = le->endTime;
+	}
+
+	// RealRTCWX Extreme: a chunk stuck to a wall or ceiling: smear as it
+	// slides, and let go after a while
+	if ( le->xbStuck > 0 ) {
+		if ( cg.time >= le->xbStuck ) {
+			vec3_t here;
+			BG_EvaluateTrajectory( &le->pos, cg.time, here );
+			VectorCopy( here, le->pos.trBase );
+			VectorClear( le->pos.trDelta );
+			le->pos.trTime = cg.time;
+			le->pos.trType = TR_GRAVITY;
+			le->xbStuck = -1;
+		} else if ( le->pos.trType == TR_LINEAR && cg.time - le->xbSmearTime > 180 ) {
+			le->xbSmearTime = cg.time;
+			CG_ImpactMark( CG_BloodDot(), le->refEntity.origin, le->xbStuckNormal, random() * 360,
+						   1, 1, 1, 1, qtrue, 4 + random() * 3, qfalse, CG_BloodMarkTime() );
+		}
 	}
 
 	// Ridah, flaming gibs

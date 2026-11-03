@@ -936,6 +936,12 @@ static void RB_SurfaceMesh( md3Surface_t *surface ) {
 	int Bob, Doug;
 	int numVerts;
 
+	// RealRTCWX: a burnt body's head and gear burn with it
+	if ( backEnd.currentEntity->e.reFlags & ( REFLAG_CHARRED | REFLAG_SCORCHED ) ) {
+		tess.woundChar = ( backEnd.currentEntity->e.reFlags & REFLAG_CHARRED ) ? 0.78f : 0.5f;
+		tess.woundAny = qtrue;
+	}
+
 	// RF, check for REFLAG_HANDONLY
 	if ( backEnd.currentEntity->e.reFlags & REFLAG_ONLYHAND ) {
 		if ( !strstr( surface->name, "hand" ) ) {

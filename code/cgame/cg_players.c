@@ -4477,6 +4477,10 @@ void CG_Player( centity_t *cent ) {
 	if ( cent->currentState.eFlags & EF_NODRAW ) {
 		return;
 	}
+	// RealRTCWX Extreme: a corpse shot to pieces is gone (cg_ragdoll.c)
+	if ( ( cent->currentState.eFlags & EF_DEAD ) && CG_RagdollGibbed( cent->currentState.number ) ) {
+		return;
+	}
 
 	// the client number is stored in clientNum.  It can't be derived
 	// from the entity number, because a single client may have
@@ -4873,7 +4877,11 @@ void CG_Player( centity_t *cent ) {
 	}
 
 
-	CG_AddRefEntityWithPowerups( &head, cent->currentState.powerups, ci->team, &cent->currentState, cent->fireRiseDir );
+	// RealRTCWX Extreme: burnt with the body; gone if it was blown off
+	head.reFlags |= CG_RagdollBurnFlags( cent->currentState.number );
+	if ( !( ( cent->currentState.eFlags & EF_DEAD ) && CG_RagdollHeadless( cent->currentState.number ) ) ) {
+		CG_AddRefEntityWithPowerups( &head, cent->currentState.powerups, ci->team, &cent->currentState, cent->fireRiseDir );
+	}
 
 	cent->pe.headRefEnt = head;
 
@@ -4900,6 +4908,7 @@ void CG_Player( centity_t *cent ) {
 
 		acc.hModel = cgs.media.thirdPersonBinocModel;
 		CG_PositionEntityOnTag( &acc, &torso, "tag_weapon", 0, NULL );
+		acc.reFlags |= CG_RagdollBurnFlags( cent->currentState.number );
 		CG_AddRefEntityWithPowerups( &acc, cent->currentState.powerups, ci->team, &cent->currentState, cent->fireRiseDir );
 	}
 
@@ -5203,6 +5212,9 @@ int parts[] = { 34,
 			}
 		case ACC_MOUTH2:            // hat2
 		case ACC_MOUTH3:            // hat3
+			if ( ( cent->currentState.eFlags & EF_DEAD ) && CG_RagdollHeadless( cent->currentState.number ) ) {
+				continue;   // went with the head
+			}
 			CG_PositionEntityOnTag( &acc,   &head,  "tag_mouth", 0, NULL );
 			break;
 

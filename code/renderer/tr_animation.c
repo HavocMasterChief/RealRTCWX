@@ -1521,6 +1521,10 @@ void RB_SurfaceAnim( mdsSurface_t *surface ) {
 
 	// RealRTCWX: bullet wounds recorded on this character
 	tr_perfMdsVerts += render_count;
+	if ( refent->reFlags & ( REFLAG_CHARRED | REFLAG_SCORCHED ) ) {
+		tess.woundChar = ( refent->reFlags & REFLAG_CHARRED ) ? 0.78f : 0.5f;
+		tess.woundAny = qtrue;
+	}
 	if ( refent->reFlags & REFLAG_WOUNDS ) {
 		int t0 = ri.Milliseconds();
 		R_ApplyWounds( refent, surface, baseVertex, render_count );

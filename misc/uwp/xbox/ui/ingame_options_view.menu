@@ -164,6 +164,24 @@
 		forecolor 1 1 1 1
 		visible 0 
     }
+	itemDef {
+		name view
+		group grpOptions
+		type ITEM_TYPE_MULTI
+		text "Max Blood:"
+		cvar "cg_bloodAmount"
+		cvarFloatList { "Low" 0 "Medium" 1 "High" 2 "Unlimited" 3 }
+		rect 82 135 290 12
+		textalign ITEM_ALIGN_RIGHT
+		textfont UI_FONT_BIG
+		textalignx 142
+		textaligny 10
+		textscale .23 
+		style WINDOW_STYLE_FILLED
+		backcolor 1 1 1 .07           
+		forecolor 1 1 1 1
+		visible 0 
+    }
 	
 		itemDef {
 		name view
@@ -175,7 +193,7 @@
 		type ITEM_TYPE_YESNO
 		text "@HUD_STAMINA"
 		cvar "cg_hudstamina"
-		rect 82 135 290 12
+		rect 82 150 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -197,7 +215,7 @@
 		type ITEM_TYPE_YESNO
 		text "@HUD_STAMINA"
 		cvar "cg_hudstamina"
-		rect 82 135 290 12
+		rect 82 150 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -220,7 +238,7 @@
 		type ITEM_TYPE_YESNO
 		text "@HUD_WEAPONICON"
 		cvar "cg_hudweapicon"
-		rect 82 150 290 12
+		rect 82 165 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -242,7 +260,7 @@
 		type ITEM_TYPE_YESNO
 		text "@HUD_WEAPONICON"
 		cvar "cg_hudweapicon"
-		rect 82 150 290 12
+		rect 82 165 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -265,7 +283,7 @@
 		type ITEM_TYPE_YESNO
 		text "@HUD_AMMOCLIP"
 		cvar "cg_hudammoclip"
-		rect 82 165 290 12
+		rect 82 180 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -287,7 +305,7 @@
 		type ITEM_TYPE_YESNO
 		text "@HUD_AMMOCLIP"
 		cvar "cg_hudammoclip"
-		rect 82 165 290 12
+		rect 82 180 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -306,7 +324,7 @@
 		type ITEM_TYPE_YESNO
 		text "@HUD_JOURNAL"
 		cvar "cg_journalstyle"
-		rect 82 180 290 12
+		rect 82 195 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142
@@ -324,7 +342,7 @@
 		type ITEM_TYPE_YESNO
 		text "@HUD_CHECKPOINT"
 		cvar "cg_drawCheckpoint"
-		rect 82 195 290 12
+		rect 82 210 290 12
 		textalign ITEM_ALIGN_RIGHT
 		textfont UI_FONT_BIG
 		textalignx 142

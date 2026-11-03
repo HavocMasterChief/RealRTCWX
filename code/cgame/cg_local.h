@@ -74,7 +74,7 @@ If you have questions concerning this license or the applicable additional terms
 #define MAX_STEP_CHANGE     32
 
 #define MAX_VERTS_ON_POLY   64
-#define MAX_MARK_POLYS      4096    // RealRTCWX: Extreme blood keeps far more decals
+#define MAX_MARK_POLYS      16384   // RealRTCWX: Max Blood "Unlimited" (cg_bloodAmount caps the count)
 
 #define STAT_MINUS          10  // num frame for '-' stats digit
 
@@ -1982,7 +1982,10 @@ extern vmCvar_t cg_ragdoll;
 #define CG_BloodShader( normal, green ) ( ( cg_bloodMode.integer == BLOODMODE_GREEN && ( green ) ) ? ( green ) : ( normal ) )
 // how long blood decals stay; Extreme keeps them around 10x longer
 // Extreme keeps blood decals until the frame-rate governor (cg_gore.c) clears them
-#define CG_BloodMarkTime()  ( CG_BloodExtreme() ? 3600000 : cg_bloodTime.integer * 1000 )
+// how long blood decals stay: Options > Game > Max Blood (cg_bloodAmount)
+#define CG_BloodMarkTime()  ( cg_bloodAmount.integer >= 3 ? 86400000 : cg_bloodAmount.integer == 2 ? 1800000 : \
+							  cg_bloodAmount.integer == 1 ? 300000 : 60000 )
+extern vmCvar_t cg_bloodAmount;
 extern vmCvar_t cg_norender;
 extern vmCvar_t cg_skybox;
 

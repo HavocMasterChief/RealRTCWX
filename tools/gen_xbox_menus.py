@@ -169,9 +169,31 @@ def blood_option(text):
     ind = m.group(1)
     text = drop_items(text, lambda it: field(it, "text") in DROP_TEXT)
     m = pat.search(text)
-    return text[:m.start()] + ('type ITEM_TYPE_MULTI\n' + ind + 'text "Blood:"\n' + ind +
+    text = text[:m.start()] + ('type ITEM_TYPE_MULTI\n' + ind + 'text "Blood:"\n' + ind +
                                'cvar "cg_bloodMode"\n' + ind +
                                'cvarFloatList { "Default" 0 "Green" 1 "Disabled" 2 "Extreme" 3 }') + text[m.end():]
+    return max_blood_option(text)
+
+
+def max_blood_option(text):
+    """'Max blood' right under Blood: how many blood decals stay and for how
+    long (cg_bloodAmount). The rows below move down one."""
+    i = text.index('cvar "cg_bloodMode"')
+    start = text.rindex('itemDef', 0, i)
+    end = text.index('}', text.index('rect', i)) + 1     # (past the cvarFloatList's own braces)
+    item = text[start:end]
+    m = re.search(r'rect\s+([\d.]+)\s+([\d.]+)\s+290\s+12', item)
+    x, y = m.group(1), float(m.group(2))
+    step = 15
+    def shift(mm):
+        if mm.group(1) == x and float(mm.group(2)) > y:
+            return 'rect %s %g 290 12' % (mm.group(1), float(mm.group(2)) + step)
+        return mm.group(0)
+    after = re.sub(r'rect\s+([\d.]+)\s+([\d.]+)\s+290\s+12', shift, text[end:])
+    new = item.replace('text "Blood:"', 'text "Max Blood:"').replace('cvar "cg_bloodMode"', 'cvar "cg_bloodAmount"')
+    new = re.sub(r'cvarFloatList \{[^}]*\}', 'cvarFloatList { "Low" 0 "Medium" 1 "High" 2 "Unlimited" 3 }', new)
+    new = new.replace(m.group(0), 'rect %s %g 290 12' % (x, y + step))
+    return text[:end] + '\n\t' + new + after
 
 
 DISPLAY_DROP = {"r_mode", "cg_fixedaspect", "r_fullscreen", "r_swapinterval", "com_maxfps"}

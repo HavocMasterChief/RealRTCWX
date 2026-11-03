@@ -981,8 +981,10 @@ static void CG_GoreGovernor( void ) {
 		goPools[oldest].active = qfalse;
 		return;
 	}
-	for ( i = 0; i < 8; i++ ) {
-		CG_FreeOldestMark();
+	if ( cg_bloodAmount.integer < 3 ) {     // Max Blood "Unlimited": keep every decal
+		for ( i = 0; i < 8; i++ ) {
+			CG_FreeOldestMark();
+		}
 	}
 }
 

@@ -42,6 +42,7 @@ MARK POLYS
 markPoly_t cg_activeMarkPolys;          // double linked list
 markPoly_t  *cg_freeMarkPolys;          // single linked list
 markPoly_t cg_markPolys[MAX_MARK_POLYS];
+static int cg_numActiveMarks;
 
 /*
 ===================
@@ -59,6 +60,7 @@ void    CG_InitMarkPolys( void ) {
 	cg_activeMarkPolys.nextMark = &cg_activeMarkPolys;
 	cg_activeMarkPolys.prevMark = &cg_activeMarkPolys;
 	cg_freeMarkPolys = cg_markPolys;
+	cg_numActiveMarks = 0;
 	for ( i = 0, trav = cg_markPolys + 1, lasttrav = cg_markPolys ; i < MAX_MARK_POLYS - 1 ; i++, trav++ ) {
 		lasttrav->nextMark = trav;
 		lasttrav = trav;
@@ -77,6 +79,7 @@ void CG_FreeMarkPoly( markPoly_t *le ) {
 	}
 
 	// remove from the doubly linked active list
+	cg_numActiveMarks--;
 	le->prevMark->nextMark = le->nextMark;
 	le->nextMark->prevMark = le->prevMark;
 
@@ -140,6 +143,14 @@ markPoly_t  *CG_AllocMark( int endTime ) {
 	markPoly_t  *le; //, *trav, *lastTrav;
 	int time;
 
+	// RealRTCWX: Max Blood caps how many decals stay (oldest go first)
+	{
+		static const int cap[4] = { 2048, 4096, 8192, MAX_MARK_POLYS };
+		int a = cg_bloodAmount.integer < 0 ? 0 : cg_bloodAmount.integer > 3 ? 3 : cg_bloodAmount.integer;
+		while ( cg_numActiveMarks >= cap[a] && cg_activeMarkPolys.prevMark != &cg_activeMarkPolys ) {
+			CG_FreeMarkPoly( cg_activeMarkPolys.prevMark );
+		}
+	}
 	if ( !cg_freeMarkPolys ) {
 		// no free entities, so free the one at the end of the chain
 		// remove the oldest active entity
@@ -161,6 +172,7 @@ markPoly_t  *CG_AllocMark( int endTime ) {
 	//}
 
 	// link into the active list
+	cg_numActiveMarks++;
 	le->nextMark = cg_activeMarkPolys.nextMark;
 	le->prevMark = &cg_activeMarkPolys;
 	cg_activeMarkPolys.nextMark->prevMark = le;

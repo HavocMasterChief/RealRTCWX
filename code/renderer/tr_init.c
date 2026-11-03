@@ -1615,6 +1615,19 @@ void RE_Shutdown( qboolean destroyWindow ) {
 	if ( tr.registered ) {
 		R_IssuePendingRenderCommands();
 		R_DeleteTextures();
+#ifdef RTCW_UWP
+		// Mesa's D3D12 driver only lets go of a deleted texture once the GPU
+		// work that used it has finished and its batch is recycled. Without
+		// waiting here the last level's textures (~1.8 GB) were still held
+		// while the next level loaded, and the Xbox ran out of memory.
+		qglFlush();
+		qglFinish();
+		qglFinish();
+		{
+			extern void Sys_UWP_LogMemory( const char *where );
+			Sys_UWP_LogMemory( "renderer shut down" );
+		}
+#endif
 	}
 
 	R_DoneFreeType();

@@ -1090,6 +1090,7 @@ void CL_InitCGame( void ) {
 	#ifdef RTCW_UWP
 
 	Sys_UWP_LogMemory( "level loaded" );
+	Com_Printf( "memory (level loaded): hunk %i MB free of %i MB\n", Hunk_MemoryRemaining() >> 20, Cvar_VariableIntegerValue( "com_hunkMegs" ) );
 
 	#endif
 

@@ -76,9 +76,14 @@ static bool SDLCALL IN_UWP_EventWatch( void *userdata, SDL_Event *event ) {
 		Com_Printf( "UWP: suspend requested\n" );
 		Sys_UWP_LogMemory( "suspend requested" );
 		CL_UWP_SuspendSave();
+		// a suspended app can be closed from the Guide without running any
+		// more code: drop the "still running" marker now, so that quit isn't
+		// reported as an abnormal exit on the next start (a crash still is)
+		Sys_RemovePIDFile( FS_GetCurrentGameDir() );
 		Com_Printf( "UWP: ready to suspend\n" );
 	} else if ( event->type == SDL_EVENT_WILL_ENTER_FOREGROUND ) {
 		Com_Printf( "UWP: resuming\n" );   // anything after this in the log happened after resume
+		Sys_InitPIDFile( FS_GetCurrentGameDir() );
 	}
 	return true;
 }

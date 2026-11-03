@@ -1561,6 +1561,7 @@ static int cgXbViewDownTime;
 static qboolean cgXbViewHeldAction;
 
 #define XBVIEW_HOLD_MS 400
+#define FLASHLIGHT_RANGE 900.0f
 
 void CG_XbViewDown_f( void ) {
 	if ( cgXbViewDownTime ) {
@@ -1604,16 +1605,25 @@ void CG_AddFlashlight( void ) {
 		 cg.renderingThirdPerson || cg.cameraMode ) {
 		return;
 	}
-	// where the beam lands: a light there, sized like a cone's spot
-	VectorMA( cg.refdef.vieworg, 1200, cg.refdef.viewaxis[0], end );
+	// Half-Life 2 style: a cone with a bright core and a soft edge that
+	// widens and dims with distance and is gone by about 900 units. A
+	// dynamic light is a sphere, so two sit just off the surface the beam
+	// lands on: a wide dim one (the edge) and a tight bright one (the core).
+	VectorMA( cg.refdef.vieworg, FLASHLIGHT_RANGE, cg.refdef.viewaxis[0], end );
 	CG_Trace( &tr, cg.refdef.vieworg, NULL, NULL, end, cg.snap->ps.clientNum, MASK_SHOT );
-	dist = 1200 * tr.fraction;
-	f = 1.0f - dist / 1400.0f;     // dims with distance
-	VectorMA( tr.endpos, -( 8 + dist * 0.08f ), cg.refdef.viewaxis[0], spot );
-	trap_R_AddLightToScene( spot, 90 + dist * 0.22f, 1.0f * f, 0.95f * f, 0.82f * f, 0 );
-	// and a little spill close to you, so the gun and nearby walls catch it
-	VectorMA( cg.refdef.vieworg, 48, cg.refdef.viewaxis[0], near );
-	trap_R_AddLightToScene( near, 110, 0.35f, 0.33f, 0.29f, 0 );
+	dist = FLASHLIGHT_RANGE * tr.fraction;
+	f = 1.0f - dist / FLASHLIGHT_RANGE;
+	f = f * f * ( 3.0f - 2.0f * f );         // smooth fade toward the end of its reach
+	if ( tr.fraction < 1.0f && f > 0.02f ) {
+		float spread = 0.42f * dist;          // ~23 degree half-angle cone
+		VectorMA( tr.endpos, -( 6 + dist * 0.12f ), cg.refdef.viewaxis[0], spot );
+		trap_R_AddLightToScene( spot, 40 + spread * 1.25f, 0.75f * f, 0.72f * f, 0.62f * f, 0 );
+		VectorMA( tr.endpos, -( 4 + dist * 0.05f ), cg.refdef.viewaxis[0], spot );
+		trap_R_AddLightToScene( spot, 22 + spread * 0.5f, 0.6f * f, 0.58f * f, 0.52f * f, 0 );
+	}
+	// a little light on the gun and whatever is right in front of you
+	VectorMA( cg.refdef.vieworg, 40, cg.refdef.viewaxis[0], near );
+	trap_R_AddLightToScene( near, 70, 0.22f, 0.21f, 0.18f, 0 );
 }
 
 /*

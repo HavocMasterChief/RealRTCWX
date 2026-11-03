@@ -2259,6 +2259,7 @@ void CL_KeyDownEvent( int key, unsigned time )
 		if ( key == K_PAD0_DPAD_UP ) {
 			if ( cl.snap.ps.stats[STAT_HEALTH] > 0 && !cl.cameraMode ) {
 				Cbuf_AddText( "savegame quicksave\n" );   // cgame shows GAME SAVED
+				Cbuf_AddText( "xbviewcombo\n" );          // releasing View: no flashlight
 			} else {
 				Cbuf_AddText( "xbviewcombo \"Can't save now\"\n" );
 			}

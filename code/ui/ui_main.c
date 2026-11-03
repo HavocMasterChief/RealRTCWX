@@ -5241,6 +5241,50 @@ static void UI_XbLoadSaves( void ) {
 	Menu_SetFeederSelection( NULL, FEEDER_SAVEGAMES, 0, NULL );
 }
 
+// In-game Save, Y: a new save named after the map ("escape1_3"), no typing
+static void UI_XbSaveNew( void ) {
+	char map[MAX_QPATH], save[MAX_QPATH];
+	int n, i;
+
+	trap_Cvar_VariableStringBuffer( "mapname", map, sizeof( map ) );
+	if ( !map[0] ) {
+		Q_strncpyz( map, "save", sizeof( map ) );
+	}
+	for ( i = 0; map[i]; i++ ) {    // only characters a save name may have
+		if ( !( ( map[i] >= 'a' && map[i] <= 'z' ) || ( map[i] >= 'A' && map[i] <= 'Z' ) ||
+				( map[i] >= '0' && map[i] <= '9' ) || map[i] == '_' ) ) {
+			map[i] = '_';
+		}
+	}
+	for ( n = 1; n < 1000; n++ ) {
+		Com_sprintf( save, sizeof( save ), "%s_%i", map, n );
+		for ( i = 0; i < uiInfo.savegameCount; i++ ) {
+			if ( uiInfo.savegameList[i].savegameFile && !Q_stricmp( uiInfo.savegameList[i].savegameFile, save ) ) {
+				break;
+			}
+		}
+		if ( i == uiInfo.savegameCount ) {
+			break;      // not taken
+		}
+	}
+	trap_Cmd_ExecuteText( EXEC_APPEND, va( "savegame %s\n", save ) );
+	Menus_CloseAll();
+}
+
+// In-game Save, A (after "Overwrite?"): over the highlighted save
+static void UI_XbSaveOver( void ) {
+	int i;
+	if ( !uiInfo.savegameCount ) {
+		return;
+	}
+	i = UI_SavegameIndexFromName2( ui_savegameName.string );
+	if ( i < 0 || i >= uiInfo.savegameCount || !uiInfo.savegameList[i].savegameFile ) {
+		return;
+	}
+	trap_Cmd_ExecuteText( EXEC_APPEND, va( "savegame %s\n", uiInfo.savegameList[i].savegameFile ) );
+	Menus_CloseAll();
+}
+
 // Campaign > Continue: the newest save
 static void UI_XbContinue( void ) {
 	UI_XbLoadSaves();
@@ -5336,6 +5380,23 @@ static void UI_RunMenuScript( char **args ) {
 	if ( String_Parse( args, &name ) ) {
 		if ( Q_stricmp( name, "xbAchLoad" ) == 0 ) {     // RealRTCWX achievements browser
 			UI_XbAchLoad();
+			return;
+		}
+		if ( Q_stricmp( name, "xbSaveNew" ) == 0 ) {
+			UI_XbSaveNew();
+			return;
+		} else if ( Q_stricmp( name, "xbSaveOverAsk" ) == 0 ) {
+			if ( uiInfo.savegameCount ) {
+				Menus_OpenByName( "ingame_save_over" );
+			}
+			return;
+		} else if ( Q_stricmp( name, "xbSaveOver" ) == 0 ) {
+			UI_XbSaveOver();
+			return;
+		} else if ( Q_stricmp( name, "xbSaveDelAsk" ) == 0 ) {
+			if ( uiInfo.savegameCount ) {
+				Menus_OpenByName( "ingame_save_delete" );
+			}
 			return;
 		}
 		if ( Q_stricmp( name, "xbLoadSaves" ) == 0 ) {
@@ -8024,6 +8085,8 @@ void _UI_Init( qboolean inGameLoad ) {
 UI_KeyEvent
 =================
 */
+static qboolean uiNotebookViewUp;     // View let go since the dossier opened
+
 void _UI_KeyEvent( int key, qboolean down ) {
 
     if ( down && Menu_Count() > 0 ) {
@@ -8051,6 +8114,20 @@ void _UI_KeyEvent( int key, qboolean down ) {
             }
         }
     }
+
+	// Xbox: the dossier closes with B or View (it opened by holding View, so
+	// that press has to be let go first) as well as Start
+	if ( Menu_Count() > 0 ) {
+		menuDef_t *menu = Menu_GetFocused();
+		if ( menu && !Q_stricmp( menu->window.name, "notebook" ) ) {
+			if ( key == K_PAD0_BACK && !down ) {
+				uiNotebookViewUp = qtrue;
+			}
+			if ( down && ( key == K_PAD0_B || ( key == K_PAD0_BACK && uiNotebookViewUp ) ) ) {
+				key = K_ESCAPE;
+			}
+		}
+	}
 
 	// Controller: B backs out one level (ui_padNav)
 	if ( key == K_PAD0_B && down && Menu_Count() > 0 && trap_Cvar_VariableValue( "ui_padNav" ) ) {
@@ -8259,6 +8336,7 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 			return;
 
 		case UIMENU_NOTEBOOK:
+			uiNotebookViewUp = qfalse;
 			trap_Cvar_Set( "cl_paused", "1" );
 			trap_Key_SetCatcher( KEYCATCH_UI );
 			Menus_CloseAll();

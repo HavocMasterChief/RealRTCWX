@@ -34,14 +34,14 @@ This file is part of RealRTCW and is licensed under the GPL v3.
 #define RD_SEGS         11
 #define RD_STEP         ( 1.0f / 60.0f )
 #define RD_ITER         8
-#define RD_GRAVITY      386.0f  // real gravity: 1 unit ~ 1 inch (the game's 800 is for jumping)
-#define RD_AIRDRAG      0.988f  // velocity kept per step
+#define RD_GRAVITY      330.0f  // a bit under real gravity (1 unit ~ 1 inch): falls read better at game scale
+#define RD_AIRDRAG      0.984f  // velocity kept per step
 // "muscle tone": joints are pulled toward the death pose (relative to the
 // pelvis) so limbs don't flop like rope; strong at first, fading to a light
 // stiffness that stays
-#define RD_MUSCLE_START 0.10f
+#define RD_MUSCLE_START 0.20f
 #define RD_MUSCLE_END   0.0f    // fully limp once it fades (arms used to stay held out)
-#define RD_MUSCLE_FADE  1.2f    // seconds
+#define RD_MUSCLE_FADE  1.7f    // seconds (a body sags as it falls rather than going limp at once)
 #define RD_HIT_WINDOW   1200    // ms: a hit this recent shapes the fall
 
 enum {
@@ -53,12 +53,34 @@ enum {
 	J_NUM
 };
 
-static const char *rdBoneNames[J_NUM] = {
-	"Bip01 Pelvis", "Bip01 Spine3", "Bip01 Head",
-	"Bip01 L UpperArm", "Bip01 L Forearm", "Bip01 L Hand",
-	"Bip01 R UpperArm", "Bip01 R Forearm", "Bip01 R Hand",
-	"Bip01 L Thigh", "Bip01 L Calf", "Bip01 L Foot",
-	"Bip01 R Thigh", "Bip01 R Calf", "Bip01 R Foot"
+// skeletons: the Character Studio biped (Bip01; the Priest's is Bip02) and
+// the dog's quadruped rig, whose legs stand in for arms (front) and legs (back)
+#define RD_RIG_HUMAN    0
+#define RD_RIG_HUMAN2   1
+#define RD_RIG_DOG      2
+#define RD_NUM_RIGS     3
+static const char *rdBoneNames[RD_NUM_RIGS][J_NUM] = {
+	{
+		"Bip01 Pelvis", "Bip01 Spine3", "Bip01 Head",
+		"Bip01 L UpperArm", "Bip01 L Forearm", "Bip01 L Hand",
+		"Bip01 R UpperArm", "Bip01 R Forearm", "Bip01 R Hand",
+		"Bip01 L Thigh", "Bip01 L Calf", "Bip01 L Foot",
+		"Bip01 R Thigh", "Bip01 R Calf", "Bip01 R Foot"
+	},
+	{
+		"Bip02 Pelvis", "Bip02 Spine3", "Bip02 Head",
+		"Bip02 L UpperArm", "Bip02 L Forearm", "Bip02 L Hand",
+		"Bip02 R UpperArm", "Bip02 R Forearm", "Bip02 R Hand",
+		"Bip02 L Thigh", "Bip02 L Calf", "Bip02 L Foot",
+		"Bip02 R Thigh", "Bip02 R Calf", "Bip02 R Foot"
+	},
+	{
+		"BipPelvis", "BipSpine4", "BipHead",
+		"BipLFLeg2", "BipLFLeg3", "BipLFLeg5",
+		"BipRFLeg2", "BipRFLeg3", "BipRFLeg5",
+		"BipLBLeg1", "BipLBLeg2", "BipLBLeg4",
+		"BipRBLeg1", "BipRBLeg2", "BipRBLeg4"
+	}
 };
 
 static const float rdRadius[J_NUM] = {
@@ -159,6 +181,7 @@ typedef struct {
 	int awakeSteps;      // steps since it last woke (jittering bodies get put to sleep)
 	float jitter;        // recent movement, smoothed
 	float scale;         // drawn size (Toy Soldiers skull: 0.5)
+	int rig;             // RD_RIG_*
 	qboolean sleeping;
 	float data[RD_SEGS][12];
 } ragdoll_t;
@@ -441,7 +464,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	orientation_t o;
 	refEntity_t pose;
 	vec3_t push, toBody, rest[J_NUM];
-	int i, oldest = -1, slot;
+	int i, oldest = -1, slot, rigFound = 0;
 
 	if ( body->nonNormalizedAxes ) {
 		// a uniformly scaled character (Toy Soldiers) works; stretched ones don't
@@ -455,13 +478,29 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	pose.ragdoll = 0;
 	pose.ragdollStamp = 0;
 
-	// the joints, in model space, for the frozen pose
-	for ( i = 0; i < J_NUM; i++ ) {
-		if ( trap_R_LerpBone( &o, &pose, rdBoneNames[i] ) < 0 ) {
-			CG_RagdollWhyNot( cent, body, va( "no bone '%s'", rdBoneNames[i] ) );
-			return NULL;    // not a Bip01 skeleton (dogs, creatures): no ragdoll
+	// the joints, in model space, for the frozen pose (whichever skeleton
+	// this model has)
+	{
+		int rig, miss = 0;
+		for ( rig = 0; rig < RD_NUM_RIGS; rig++ ) {
+			for ( i = 0; i < J_NUM; i++ ) {
+				if ( trap_R_LerpBone( &o, &pose, rdBoneNames[rig][i] ) < 0 ) {
+					if ( rig == 0 ) {
+						miss = i;
+					}
+					break;
+				}
+				VectorCopy( o.origin, rest[i] );
+			}
+			if ( i == J_NUM ) {
+				break;
+			}
 		}
-		VectorCopy( o.origin, rest[i] );
+		if ( rig == RD_NUM_RIGS ) {
+			CG_RagdollWhyNot( cent, body, va( "no bone '%s'", rdBoneNames[0][miss] ) );
+			return NULL;    // a skeleton we don't know: no ragdoll
+		}
+		rigFound = rig;
 	}
 
 	// take a free body, else one whose corpse hasn't been in view for a
@@ -514,6 +553,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	rd->hModel = body->hModel;
 	rd->pose = pose;
 	rd->scale = body->nonNormalizedAxes ? VectorLength( body->axis[0] ) : 1.0f;
+	rd->rig = rigFound;
 	rd->accum = 0;
 	rd->stillSteps = 0;
 	rd->awakeSteps = 0;
@@ -547,8 +587,10 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		for ( i = 0; i < J_NUM; i++ ) {
 			float d2 = DistanceSquared( rd->p[i], hp );
 			float w = exp( -d2 / ( 2.0f * 14.0f * 14.0f ) );
-			VectorScale( hd, ( 45 + 190 * w ) * CG_XbThrowScale(), push );
-			push[2] += ( 20 + 25 * w ) * CG_XbThrowScale();
+			// a bullet carries little momentum: the hit part jerks, the body
+			// mostly crumples where it stood
+			VectorScale( hd, ( 18 + 95 * w ) * CG_XbThrowScale(), push );
+			push[2] += ( 6 + 10 * w ) * CG_XbThrowScale();
 			VectorAdd( push, cent->currentState.pos.trDelta, push );
 			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
 		}
@@ -574,8 +616,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 				k = 0.1f;
 				break;
 			}
-			VectorScale( toBody, ( 70 + random() * 50 ) * k, push );
-			push[2] = 25 * k;
+			VectorScale( toBody, ( 35 + random() * 25 ) * k, push );
+			push[2] = 10 * k;
 			VectorAdd( push, cent->currentState.pos.trDelta, push );
 			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
 		}
@@ -794,7 +836,9 @@ static void CG_RagdollConstrain( ragdoll_t *rd ) {
 		VectorMA( a, diff, d, a );
 		VectorMA( b, -diff, d, b );
 	}
-	CG_RagdollJointLimits( rd );
+	if ( rd->rig != RD_RIG_DOG ) {
+		CG_RagdollJointLimits( rd );    // knees/elbows bend one way (a biped's)
+	}
 	CG_RagdollSelfCollide( rd );
 }
 
@@ -838,18 +882,68 @@ static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
 				CG_ImpactMark( CG_BloodDot(), tr.endpos, tr.plane.normal, random() * 360,
 							   1, 1, 1, 1, qfalse, 5 + random() * 4, qfalse, -1 );
 			}
-			// a heavy part landing hard: thud
-			if ( ( i == J_PELVIS || i == J_CHEST || i == J_HEAD ) && -dn > 3.0f &&
-				 cg.time - rd->lastThud > 250 ) {
-				int vol = (int)( ( -dn - 3.0f ) * 40.0f + 60.0f );
-				rd->lastThud = cg.time;
-				trap_S_StartSoundVControl( tr.endpos, ENTITYNUM_WORLD, CHAN_AUTO, cgs.media.landSound,
-										   vol > 255 ? 255 : vol );
-			}
 			VectorMA( rd->p[i], -keep, vt, rd->old[i] );
 			VectorCopy( rd->p[i], start[i] );   // the second pass starts from here
 		} else {
 			VectorCopy( rd->p[i], start[i] );
+		}
+	}
+}
+
+/*
+===============
+CG_RagdollCollideSegs
+
+Joints are balls, so a body lying across a ledge used to hang from its
+pelvis and chest with the torso passing through the edge between them. The
+middle of each long part (torso, thighs, shins, upper arms) is traced as
+well; where it hits, the whole part is held up there, so it pivots on the
+edge and slides off it.
+===============
+*/
+static const struct { int a, b; float r; } rdMidSegs[] = {
+	{ J_PELVIS, J_CHEST, 4.5f },
+	{ J_LHIP, J_LKNEE, 3.0f }, { J_RHIP, J_RKNEE, 3.0f },
+	{ J_LKNEE, J_LFOOT, 2.5f }, { J_RKNEE, J_RFOOT, 2.5f },
+	{ J_LSHOULDER, J_LELBOW, 2.5f }, { J_RSHOULDER, J_RELBOW, 2.5f }
+};
+#define RD_NUM_MIDSEGS ( sizeof( rdMidSegs ) / sizeof( rdMidSegs[0] ) )
+
+static void CG_RagdollCollideSegs( ragdoll_t *rd, vec3_t before[J_NUM] ) {
+	int i;
+	for ( i = 0; i < (int)RD_NUM_MIDSEGS; i++ ) {
+		int a = rdMidSegs[i].a, b = rdMidSegs[i].b;
+		vec3_t m0, m1, mins, maxs, fix, vel, vt;
+		float r = rdMidSegs[i].r * rd->scale, dn;
+		trace_t tr;
+
+		VectorAdd( before[a], before[b], m0 );
+		VectorScale( m0, 0.5f, m0 );
+		VectorAdd( rd->p[a], rd->p[b], m1 );
+		VectorScale( m1, 0.5f, m1 );
+		VectorSet( mins, -r, -r, -r );
+		VectorSet( maxs, r, r, r );
+		CG_Trace( &tr, m0, mins, maxs, m1, rd->entityNum, MASK_SOLID );
+		if ( tr.allsolid || tr.fraction >= 1.0f ) {
+			continue;
+		}
+		// lift the part out along the surface normal only (it can still
+		// slide along it and tip over the edge)
+		VectorSubtract( m1, tr.endpos, fix );
+		dn = DotProduct( fix, tr.plane.normal );
+		if ( dn >= 0 ) {
+			continue;
+		}
+		VectorScale( tr.plane.normal, -dn + 0.05f, fix );
+		VectorAdd( rd->p[a], fix, rd->p[a] );
+		VectorAdd( rd->p[b], fix, rd->p[b] );
+		// and lose the motion into the surface, with a little friction
+		VectorSubtract( m1, m0, vel );
+		dn = DotProduct( vel, tr.plane.normal );
+		if ( dn < 0 ) {
+			VectorMA( vel, -dn, tr.plane.normal, vt );
+			VectorMA( rd->p[a], -0.85f, vt, rd->old[a] );
+			VectorMA( rd->p[b], -0.85f, vt, rd->old[b] );
 		}
 	}
 }
@@ -921,6 +1015,14 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 		CG_RagdollConstrain( rd );
 	}
 	CG_RagdollCollide( rd, start );
+	// the middles of the long parts (ledges), then the joints once more so
+	// the lift can't push one into a wall
+	{
+		vec3_t lifted[J_NUM];
+		memcpy( lifted, rd->p, sizeof( lifted ) );
+		CG_RagdollCollideSegs( rd, orig );
+		CG_RagdollCollide( rd, lifted );
+	}
 	for ( i = 0; i < J_NUM; i++ ) {
 		moved += Distance( rd->p[i], orig[i] );
 	}
@@ -1098,8 +1200,8 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 	{
 		vec3_t vel;
 		float f = CG_XbThrowScale();      // Ragdoll Launcher / Boot Camp skulls
-		VectorScale( dir, 230 * f, vel );
-		vel[2] += 25 * ( f > 1 ? f * 0.6f : 1 );
+		VectorScale( dir, 120 * f, vel );
+		vel[2] += 12 * ( f > 1 ? f * 0.6f : 1 );
 		CG_RagdollKick( best, hit, vel, 10.0f, f > 1 ? 0.5f : 0.12f );
 	}
 	if ( !cg_xbKickHit ) {     // a kick: no blood, no bullet hole

@@ -759,6 +759,22 @@ G_AnimScriptSound
 void G_AnimScriptSound( int soundIndex, vec3_t org, int client ) {
 	gentity_t *e;
 	e = &g_entities[client];
+	// RealRTCWX: a dead character's death animation thumps when the body
+	// hits the floor; the body ragdolls instead now, so drop that sound
+	if ( client > 0 && e->client && ( e->health <= 0 || e->client->ps.pm_type == PM_DEAD ) &&
+		 e->aiCharacter != AICHAR_LOPER && e->aiCharacter != AICHAR_LOPER_SPECIAL &&
+		 e->aiCharacter != AICHAR_HELGA && e->aiCharacter != AICHAR_HEINRICH &&
+		 e->aiCharacter != AICHAR_PROTOSOLDIER && e->aiCharacter != AICHAR_SUPERSOLDIER &&
+		 e->aiCharacter != AICHAR_SUPERSOLDIER_LAB ) {   // (those don't ragdoll)
+		static int logged;
+		if ( logged < 6 ) {
+			char name[MAX_QPATH];
+			logged++;
+			trap_GetConfigstring( CS_SOUNDS + soundIndex, name, sizeof( name ) );
+			G_Printf( "ragdoll: skipped death animation sound '%s'\n", name );
+		}
+		return;
+	}
 	G_AddEvent( e, EV_GENERAL_SOUND, soundIndex );
 	AICast_RecordScriptSound( client );
 }

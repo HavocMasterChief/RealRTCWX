@@ -588,6 +588,12 @@ void Con_DrawNotify( void ) {
 	int skip;
 	int currentColor;
 
+#ifdef RTCW_UWP
+	// Xbox: no console to open, so these lines were only log noise on screen
+	// (warnings, frame timing); they still go to rtcwconsole.log
+	return;
+#endif
+
 	currentColor = 7;
 	re.SetColor( g_color_table[currentColor] );
 

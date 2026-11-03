@@ -183,6 +183,69 @@ to the apropriate place.
 A raw string should NEVER be passed as fmt, because of "%f" type crashers.
 =============
 */
+/*
+=============
+Com_PrintFlood
+
+qtrue if this line should be skipped: lines that only differ in their numbers
+count as the same, and each kind gets 8 a second. The skipped ones are
+counted in a note when that kind shows up again later.
+=============
+*/
+#define PRINTFLOOD_SLOTS    16
+#define PRINTFLOOD_LIMIT    8
+static qboolean Com_PrintFlood( const char *msg ) {
+	static struct { unsigned hash; int start, count, skipped; } slot[PRINTFLOOD_SLOTS];
+	static qboolean inNote;
+	unsigned hash = 5381;
+	const char *p;
+	int i, now, oldest = 0, skipped;
+
+	if ( inNote || !msg[0] || msg[0] == '\n' ) {
+		return qfalse;
+	}
+	for ( p = msg; *p; p++ ) {
+		if ( *p >= '0' && *p <= '9' ) {
+			continue;
+		}
+		hash = hash * 33 + (unsigned char)*p;
+	}
+	now = Sys_Milliseconds();
+	for ( i = 0; i < PRINTFLOOD_SLOTS; i++ ) {
+		if ( slot[i].hash == hash && slot[i].start ) {
+			break;
+		}
+		if ( slot[i].start < slot[oldest].start ) {
+			oldest = i;
+		}
+	}
+	if ( i == PRINTFLOOD_SLOTS ) {
+		i = oldest;
+		slot[i].hash = hash;
+		slot[i].start = now ? now : 1;
+		slot[i].count = 1;
+		slot[i].skipped = 0;
+		return qfalse;
+	}
+	if ( now - slot[i].start >= 1000 ) {
+		skipped = slot[i].skipped;
+		slot[i].start = now ? now : 1;
+		slot[i].count = 1;
+		slot[i].skipped = 0;
+		if ( skipped ) {
+			inNote = qtrue;
+			Com_Printf( "(%i more like the next line skipped)\n", skipped );
+			inNote = qfalse;
+		}
+		return qfalse;
+	}
+	if ( ++slot[i].count > PRINTFLOOD_LIMIT ) {
+		slot[i].skipped++;
+		return qtrue;
+	}
+	return qfalse;
+}
+
 void QDECL Com_Printf( const char *fmt, ... ) {
 	va_list argptr;
 	char msg[MAXPRINTMSG];
@@ -193,6 +256,13 @@ void QDECL Com_Printf( const char *fmt, ... ) {
 	va_start( argptr,fmt );
 	Q_vsnprintf( msg, sizeof (msg), fmt, argptr );
 	va_end( argptr );
+
+	// RealRTCWX: a line repeating every frame (the same warning with a
+	// different number, say) is shown 8 times a second at most; the log is
+	// flushed after every line, so a flood of them was slowing the game down
+	if ( !rd_buffer && Com_PrintFlood( msg ) ) {
+		return;
+	}
 
 	if ( rd_buffer ) {
 		if ( ( strlen( msg ) + strlen( rd_buffer ) ) > ( rd_buffersize - 1 ) ) {

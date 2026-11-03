@@ -1131,7 +1131,7 @@ void R_AddBodyHoles( void ) {
 		bodyHole_t *h = &tr_bodyHoles[i];
 		polyVert_t v[4];
 		vec3_t up, right, c;
-		float a = h->variant * 2.1f, sz = 1.7f + 0.25f * h->variant;
+		float a = h->variant * 2.1f, sz = 2.6f + 0.4f * h->variant;
 		vec3_t t1, t2;
 
 		PerpendicularVector( t1, h->normal );
@@ -1258,14 +1258,26 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 			lp[k] = DotProduct( d, refent->axis[k] );
 			ld[k] = DotProduct( p->dir, refent->axis[k] );
 		}
+		VectorNormalize( ld );
 		for ( j = 0; j < count; j++ ) {
-			float dist;
+			float dist, t, perp;
 			if ( DotProduct( tess.normal[baseVertex + j], ld ) > 0.2f ) {
 				continue;   // faces away from the shot
 			}
 			VectorSubtract( tess.xyz[baseVertex + j], lp, d );
 			dist = VectorLengthSquared( d );
-			if ( dist < p->bestDist && dist < 12.0f * 12.0f ) {
+			// the skin the bullet's path goes through: the hit point is where
+			// the server's hit box was struck, which on a live character can
+			// be well off the model. Nearest to the shooter along the path
+			// wins; otherwise the vertex nearest the hit point.
+			t = DotProduct( d, ld );
+			perp = dist - t * t;
+			if ( perp < 3.5f * 3.5f && t > -48.0f && t < 48.0f ) {
+				dist = t - 1000.0f;
+			} else if ( dist >= 12.0f * 12.0f ) {
+				continue;
+			}
+			if ( dist < p->bestDist ) {
 				p->bestDist = dist;
 				p->bestSurf = surface;
 				p->bestVert = j;
@@ -2161,13 +2173,47 @@ void RE_SetRagdoll( int slot, const float *data ) {
 	rd_valid[slot] = qtrue;
 }
 
+// the dog's quadruped rig ("BipLFLeg2" = left front leg, 2nd bone): front
+// legs use the arm parts, back legs the leg parts (see cg_ragdoll.c)
+static int R_RagdollSegForDog( const char *n ) {
+	if ( !strncmp( n, "BipPelvis", 9 ) || !strncmp( n, "BipTail", 7 ) ||
+		 !strcmp( n, "BipSpine1" ) || !strcmp( n, "BipSpine2" ) ) {
+		return 0;
+	}
+	if ( !strncmp( n, "BipSpine", 8 ) || strstr( n, "Should" ) ) {
+		return 1;
+	}
+	if ( !strncmp( n, "BipNeck", 7 ) || !strncmp( n, "BipHead", 7 ) || !strncmp( n, "BipJaw", 6 ) ||
+		 !strncmp( n, "BipTongue", 9 ) || strstr( n, "Ear" ) || strstr( n, "Eye" ) ) {
+		return 2;
+	}
+	if ( strlen( n ) >= 9 && !strncmp( n + 4, "FLeg", 4 ) ) {   // BipLFLegN / BipRFLegN
+		qboolean left = ( n[3] == 'L' );
+		int k = atoi( n + 8 );
+		if ( k <= 1 ) {
+			return 1;       // shoulder blade: with the chest
+		}
+		return k == 2 ? ( left ? 3 : 5 ) : ( left ? 4 : 6 );
+	}
+	if ( strlen( n ) >= 9 && !strncmp( n + 4, "BLeg", 4 ) ) {
+		qboolean left = ( n[3] == 'L' );
+		int k = atoi( n + 8 );
+		return k <= 1 ? ( left ? 7 : 9 ) : ( left ? 8 : 10 );
+	}
+	return -1;
+}
+
 // body part for a bone name; -1 = same as its parent (tags, fingers)
 static int R_RagdollSegForName( const char *n ) {
 	qboolean left = ( strstr( n, " L " ) != NULL );
-	if ( strncmp( n, "Bip01", 5 ) ) {
+	if ( !strncmp( n, "Bip", 3 ) && n[3] != '0' ) {
+		return R_RagdollSegForDog( n );
+	}
+	// Bip01 / Bip02 (the Priest)
+	if ( strncmp( n, "Bip0", 4 ) ) {
 		return -1;
 	}
-	if ( strstr( n, "Pelvis" ) || !strcmp( n, "Bip01 Spine" ) ) {
+	if ( strstr( n, "Pelvis" ) || !strcmp( n + 5, " Spine" ) ) {
 		return 0;
 	}
 	if ( strstr( n, "Spine" ) || strstr( n, "Clavicle" ) ) {

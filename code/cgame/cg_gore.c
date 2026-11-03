@@ -88,6 +88,7 @@ typedef struct {
 	int entityNum;          // ceiling it's on (moving objects like the tram)
 	vec3_t entOrigin;
 	int life;               // ms it keeps dripping
+	int body;               // 1 + the body whose wound it follows (0: none)
 } goreDrip_t;
 
 #define GORE_RUN_MAX_POINTS     96
@@ -621,6 +622,12 @@ void CG_GoreSurfaceHit( const vec3_t point, const vec3_t normal ) {
 			if ( tr.fraction >= 1.0f || !CG_GoreVisible( &tr ) ) {
 				return;     // no real ceiling there (sky, clip)
 			}
+			// a high ceiling: the drops would seem to come out of nowhere
+			VectorMA( point, 160.0f, normal, b );   // (the normal points down)
+			CG_Trace( &tr, a, NULL, NULL, b, -1, MASK_SOLID );
+			if ( tr.fraction >= 1.0f ) {
+				return;
+			}
 		}
 		// don't stack drip points on top of each other
 		for ( i = 0; i < GORE_MAX_DRIPS; i++ ) {
@@ -726,7 +733,7 @@ static void CG_GoreDrawRun( goreRun_t *r, qhandle_t shader ) {
 }
 
 // a free drip point (a wound hanging over a drop)
-void CG_GoreAddDrip( const vec3_t origin, int life ) {
+static goreDrip_t *CG_GoreNewDrip( const vec3_t origin, int life ) {
 	goreDrip_t *d;
 	GORE_ALLOC( goDrips, GORE_MAX_DRIPS, d );
 	memset( d, 0, sizeof( *d ) );
@@ -737,6 +744,17 @@ void CG_GoreAddDrip( const vec3_t origin, int life ) {
 	VectorCopy( origin, d->origin );
 	d->origin[2] -= 3;
 	d->entityNum = ENTITYNUM_WORLD;
+	return d;
+}
+
+void CG_GoreAddDrip( const vec3_t origin, int life ) {
+	CG_GoreNewDrip( origin, life );
+}
+
+// a drip from a body's wound: it moves with the body and stops once the
+// wound is no longer hanging over a drop (or the body is gone)
+static void CG_GoreAddBodyDrip( int bodyNum, const vec3_t origin, int life ) {
+	CG_GoreNewDrip( origin, life )->body = bodyNum + 1;
 }
 
 static void CG_GoreUpdateDrip( goreDrip_t *d ) {
@@ -746,6 +764,25 @@ static void CG_GoreUpdateDrip( goreDrip_t *d ) {
 	if ( age > ( d->life ? d->life : 30000 ) ) {
 		d->active = qfalse;
 		return;
+	}
+	if ( d->body && cg.time >= d->nextDrip ) {
+		int bodyNum = d->body - 1;
+		vec3_t w, below;
+		trace_t tr;
+		if ( !CG_RagdollWound( bodyNum, w ) || !( cg_entities[bodyNum].currentState.eFlags & EF_DEAD ) ) {
+			d->active = qfalse;     // gone, or not that body any more
+			return;
+		}
+		// still over a drop?
+		VectorCopy( w, below );
+		below[2] -= 256;
+		CG_Trace( &tr, w, NULL, NULL, below, bodyNum, MASK_SOLID );
+		if ( tr.fraction * 256 < 12 || tr.fraction >= 1.0f ) {
+			d->active = qfalse;
+			return;
+		}
+		VectorCopy( w, d->origin );
+		d->origin[2] -= 3;
 	}
 	if ( cg.time >= d->nextDrip ) {
 		// one falling drop that leaves a small splat where it lands
@@ -824,7 +861,7 @@ static void CG_GoreCheckBodies( void ) {
 				below[2] -= 256;
 				CG_Trace( &tr, wound, NULL, NULL, below, num, MASK_SOLID );
 				if ( tr.fraction * 256 > 16 && tr.fraction < 1.0f ) {
-					CG_GoreAddDrip( wound, 45000 );
+					CG_GoreAddBodyDrip( num, wound, 45000 );
 					CG_GoreLog( "body %i: wound hangs %.0f above the floor, dripping\n", num, tr.fraction * 256 );
 					VectorCopy( tr.endpos, wound );
 					wound[2] += 4;

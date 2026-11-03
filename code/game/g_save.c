@@ -563,7 +563,9 @@ void G_Save_Decode( byte *in, int insize, byte *out, int outsize ) {
 
 //=========================================================
 
-byte clientBuf[ 2 * sizeof( gentity_t ) ];
+// RealRTCWX: was 2 * sizeof( gentity_t ), smaller than a gclient_t (3.5 KB) itself,
+// so a full inventory (training hands out every weapon) overran it
+byte clientBuf[ 2 * sizeof( gclient_t ) + 64 ];
 
 /*
 ===============
@@ -626,8 +628,8 @@ void ReadClient( fileHandle_t f, gclient_t *client, int size ) {
 	} else {
 		// read the encoded chunk
 		trap_FS_Read( &decodedSize, sizeof( int ), f );
-		if ( decodedSize > sizeof( clientBuf ) ) {
-			G_Error( "G_LoadGame: encoded chunk is greater than buffer" );
+		if ( decodedSize < 0 || decodedSize > sizeof( clientBuf ) ) {
+			G_Error( "G_LoadGame: encoded chunk is greater than buffer (clientBuf %i > %i)", decodedSize, (int)sizeof( clientBuf ) );
 		}
 		trap_FS_Read( clientBuf, decodedSize, f ); \
 		// decode it
@@ -810,8 +812,8 @@ void ReadEntity( fileHandle_t f, gentity_t *ent, int size ) {
 	} else {
 		// read the encoded chunk
 		trap_FS_Read( &decodedSize, sizeof( int ), f );
-		if ( decodedSize > sizeof( entityBuf ) ) {
-			G_Error( "G_LoadGame: encoded chunk is greater than buffer" );
+		if ( decodedSize < 0 || decodedSize > sizeof( entityBuf ) ) {
+			G_Error( "G_LoadGame: encoded chunk is greater than buffer (entityBuf %i > %i)", decodedSize, (int)sizeof( entityBuf ) );
 		}
 		trap_FS_Read( entityBuf, decodedSize, f );
 		// decode it
@@ -973,8 +975,8 @@ void ReadCastState( fileHandle_t f, cast_state_t *cs, int size ) {
 	} else {
 		// read the encoded chunk
 		trap_FS_Read( &decodedSize, sizeof( int ), f );
-		if ( decodedSize > sizeof( castStateBuf ) ) {
-			G_Error( "G_LoadGame: encoded chunk is greater than buffer" );
+		if ( decodedSize < 0 || decodedSize > sizeof( castStateBuf ) ) {
+			G_Error( "G_LoadGame: encoded chunk is greater than buffer (castStateBuf %i > %i)", decodedSize, (int)sizeof( castStateBuf ) );
 		}
 		trap_FS_Read( castStateBuf, decodedSize, f ); \
 		// decode it

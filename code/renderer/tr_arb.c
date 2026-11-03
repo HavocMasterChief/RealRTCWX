@@ -270,6 +270,7 @@ void R_XbNewsreel( void ) {
 	static int state;           // 0 not tried, 1 ready, -1 failed
 	static image_t *screenImg;
 	static int doneFrame = -1;
+	static int gen;
 	float tw, th, contrast, bright;
 
 	if ( !r_xbSkulls || !( r_xbSkulls->integer & ( 1 << 12 ) ) ) {
@@ -280,6 +281,13 @@ void R_XbNewsreel( void ) {
 	}
 	doneFrame = tr.frameCount;
 
+	// the image (and maybe the GL context) die with the renderer
+	if ( gen != tr_xbRendererGen ) {
+		gen = tr_xbRendererGen;
+		state = 0;
+		prog = 0;
+		screenImg = NULL;
+	}
 	if ( state == 0 ) {
 		byte *data;
 		state = -1;

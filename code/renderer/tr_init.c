@@ -1458,11 +1458,16 @@ void R_Register( void ) {
 R_Init
 ===============
 */
+// RealRTCWX: bumped on every renderer start; code that keeps shader or image
+// handles in statics re-registers when it changes (they die with the renderer)
+int tr_xbRendererGen;
+
 void R_Init( void ) {
 	int err;
 	int i;
 	byte *ptr;
 
+	tr_xbRendererGen++;
 	ri.Printf( PRINT_ALL, "----- R_Init -----\n" );
 
 	// clear all our internal state

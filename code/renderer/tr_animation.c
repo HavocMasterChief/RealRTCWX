@@ -1114,10 +1114,13 @@ static int tr_numBodyHoles;
 
 void R_AddBodyHoles( void ) {
 	static qhandle_t sh[3][3];
+	static int shGen;
 	static const char *kinds[3] = { "", "#green", "_dust" };
 	int i, k;
 
-	if ( !sh[0][0] ) {
+	// the handles die with the renderer (a map load restarts it)
+	if ( shGen != tr_xbRendererGen ) {
+		shGen = tr_xbRendererGen;
 		for ( i = 0; i < 3; i++ ) {
 			for ( k = 0; k < 3; k++ ) {
 				sh[k][i] = RE_RegisterShader( va( "gore/bodyhole%i%s", i + 1, kinds[k] ) );

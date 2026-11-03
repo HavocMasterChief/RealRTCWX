@@ -1186,6 +1186,8 @@ static struct {
 static struct {
 	int next;
 	vec3_t last;
+	int squirtStart, squirtUntil, squirtNext;   // Extreme: the wound pumps for a few seconds after death
+	qboolean seenAlive;     // (a body that was already dead when the level loaded doesn't)
 } goBodyDrips[MAX_GENTITIES];
 
 static void CG_GoreDropsReset( void ) {
@@ -1418,6 +1420,8 @@ static void CG_GoreUpdateBleeders( void ) {
 			continue;
 		}
 		if ( !( es->eFlags & EF_DEAD ) ) {
+			goBodyDrips[num].seenAlive = qtrue;
+			goBodyDrips[num].squirtStart = goBodyDrips[num].squirtUntil = 0;
 			if ( num < MAX_CLIENTS && goBleeders[num].until > cg.time && cg.time >= goBleeders[num].next ) {
 				goBleeders[num].next = cg.time + 180 + rand() % 220;
 				VectorAdd( cg_entities[num].lerpOrigin, goBleeders[num].ofs, w );
@@ -1428,6 +1432,45 @@ static void CG_GoreUpdateBleeders( void ) {
 		}
 		if ( num < MAX_CLIENTS ) {
 			goBleeders[num].until = 0;
+		}
+		// Extreme: sometimes the wound keeps pumping for a few seconds after
+		// death, in pulses that weaken as the heart stops
+		if ( !goBodyDrips[num].squirtStart ) {
+			goBodyDrips[num].squirtStart = cg.time;
+			if ( goBodyDrips[num].seenAlive && CG_BloodExtreme() && CG_GoreBleeds( es ) && random() < 0.4f ) {
+				goBodyDrips[num].squirtUntil = cg.time + 2500 + rand() % 3000;
+				goBodyDrips[num].squirtNext = cg.time + 250;
+			}
+		}
+		if ( goBodyDrips[num].squirtUntil > cg.time && cg.time >= goBodyDrips[num].squirtNext ) {
+			vec3_t out, pel;
+			float life = (float)( goBodyDrips[num].squirtUntil - cg.time ) /
+						 (float)( goBodyDrips[num].squirtUntil - goBodyDrips[num].squirtStart );
+			int k, cnt = 2 + (int)( 4 * life );
+			goBodyDrips[num].squirtNext = cg.time + 300 + (int)( 250 * ( 1.0f - life ) );   // the pulse slows
+			if ( !CG_RagdollWound( num, w ) ) {
+				VectorCopy( cg_entities[num].lerpOrigin, w );
+				w[2] += 8;
+			}
+			// out of the body at the wound (away from its middle), a bit upward
+			if ( CG_RagdollPelvis( num, pel ) ) {
+				VectorSubtract( w, pel, out );
+			} else {
+				VectorSubtract( w, cg_entities[num].lerpOrigin, out );
+			}
+			out[2] += 4;
+			if ( VectorNormalize( out ) < 0.01f ) {
+				VectorSet( out, 0, 0, 1 );
+			}
+			for ( k = 0; k < cnt; k++ ) {
+				VectorCopy( out, v );
+				v[0] += crandom() * 0.25f;
+				v[1] += crandom() * 0.25f;
+				v[2] += 0.3f + crandom() * 0.2f;
+				VectorNormalize( v );
+				VectorScale( v, ( 90 + random() * 90 ) * ( 0.4f + 0.6f * life ), v );
+				CG_GoreNewDrop( w, v, 0.9f + random() * 0.8f );
+			}
 		}
 		// a ragdoll still moving: drops from its wound
 		if ( cg.time >= goBodyDrips[num].next && CG_RagdollWound( num, w ) && CG_GoreBleeds( es ) ) {

@@ -227,9 +227,18 @@ void P_WorldEffects( gentity_t *ent ) {
 				ent->s.onFireEnd = 0;
 			}
 		}
-		else if (ent->s.onFireEnd > level.time + 4000)
+		else
 		{
-			ent->s.onFireEnd = level.time + 4000;
+			// RealRTCWX: a body burns on for a while (it rolls and thrashes
+			// on the client meanwhile, see CG_RagdollBurnThrash), screaming
+			if (ent->s.onFireEnd > level.time + 7000)
+			{
+				ent->s.onFireEnd = level.time + 7000;
+			}
+			if (ent->r.svFlags & SVF_CASTAI)
+			{
+				AIChar_BurnScream(ent);
+			}
 		}
 	}
 }

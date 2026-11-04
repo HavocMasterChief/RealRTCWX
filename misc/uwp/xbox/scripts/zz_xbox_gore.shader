@@ -253,3 +253,36 @@ gore/bodyhole3_dust
 		rgbGen vertex
 	}
 }
+
+// Flames on a burning character or body (cgame draws the model again with
+// these). The original definitions' stage came out empty on Xbox ("Shader
+// entityOnFire1 has a stage with no image"), so burning bodies showed no
+// fire; these are the same, read first.
+entityOnFire1
+{
+	allowCompress
+	deformVertexes wave 45 sin 0 10 0 -.6
+	cull none
+	{
+		animmapcomp 20 sprites/clnfire_lg/spr000.tga sprites/clnfire_lg/spr001.tga sprites/clnfire_lg/spr002.tga sprites/clnfire_lg/spr003.tga sprites/clnfire_lg/spr004.tga sprites/clnfire_lg/spr005.tga sprites/clnfire_lg/spr006.tga sprites/clnfire_lg/spr007.tga sprites/clnfire_lg/spr008.tga sprites/clnfire_lg/spr009.tga sprites/clnfire_lg/spr010.tga sprites/clnfire_lg/spr011.tga sprites/clnfire_lg/spr012.tga sprites/clnfire_lg/spr013.tga sprites/clnfire_lg/spr014.tga sprites/clnfire_lg/spr015.tga
+		animmapnocomp 20 sprites/clnfire/spr000.tga sprites/clnfire/spr001.tga sprites/clnfire/spr002.tga sprites/clnfire/spr003.tga sprites/clnfire/spr004.tga sprites/clnfire/spr005.tga sprites/clnfire/spr006.tga sprites/clnfire/spr007.tga sprites/clnfire/spr008.tga sprites/clnfire/spr009.tga sprites/clnfire/spr010.tga sprites/clnfire/spr011.tga sprites/clnfire/spr012.tga sprites/clnfire/spr013.tga sprites/clnfire/spr014.tga sprites/clnfire/spr015.tga
+		blendFunc GL_SRC_ALPHA GL_ONE
+		alphaGen normalzfade 1.0 -0.7 0.5
+	}
+}
+
+entityOnFire2
+{
+	allowCompress
+	{
+		animmapcomp 20 sprites/clnfire_lg/spr000.tga sprites/clnfire_lg/spr001.tga sprites/clnfire_lg/spr002.tga sprites/clnfire_lg/spr003.tga sprites/clnfire_lg/spr004.tga sprites/clnfire_lg/spr005.tga sprites/clnfire_lg/spr006.tga sprites/clnfire_lg/spr007.tga sprites/clnfire_lg/spr008.tga sprites/clnfire_lg/spr009.tga sprites/clnfire_lg/spr010.tga sprites/clnfire_lg/spr011.tga sprites/clnfire_lg/spr012.tga sprites/clnfire_lg/spr013.tga sprites/clnfire_lg/spr014.tga sprites/clnfire_lg/spr015.tga
+		animmapnocomp 20 sprites/clnfire/spr000.tga sprites/clnfire/spr001.tga sprites/clnfire/spr002.tga sprites/clnfire/spr003.tga sprites/clnfire/spr004.tga sprites/clnfire/spr005.tga sprites/clnfire/spr006.tga sprites/clnfire/spr007.tga sprites/clnfire/spr008.tga sprites/clnfire/spr009.tga sprites/clnfire/spr010.tga sprites/clnfire/spr011.tga sprites/clnfire/spr012.tga sprites/clnfire/spr013.tga sprites/clnfire/spr014.tga sprites/clnfire/spr015.tga
+		blendFunc GL_SRC_ALPHA GL_ONE
+		alphaGen normalzfade 1.0 -0.7 1.3
+	}
+	{
+		map sprites/inferno_blue.tga
+		blendFunc GL_SRC_ALPHA GL_ONE
+		alphaGen normalzfade 1.0 -2.0 0.6
+	}
+}

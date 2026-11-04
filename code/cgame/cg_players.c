@@ -4271,6 +4271,8 @@ void CG_AddRefEntityWithPowerups( refEntity_t *ent, int powerups, int team, enti
 			VectorSet( ent->fireRiseDir, 0, 0, 1 );
 		}
 
+		// (the flames themselves aren't wounded or charred)
+		ent->reFlags &= ~( REFLAG_WOUNDS | REFLAG_WOUNDS_GREEN | REFLAG_WOUNDS_DUST | REFLAG_WOUNDS_SOAK | REFLAG_CHARRED | REFLAG_SCORCHED );
 		ent->customShader = cgs.media.onFireShader;
 		trap_R_AddRefEntityToScene( ent );
 
@@ -4879,6 +4881,7 @@ void CG_Player( centity_t *cent ) {
 
 	// RealRTCWX Extreme: burnt with the body; gone if it was blown off
 	head.reFlags |= CG_RagdollBurnFlags( cent->currentState.number );
+	head.charLevel = CG_RagdollCharLevel( cent->currentState.number );
 	if ( !( ( cent->currentState.eFlags & EF_DEAD ) && CG_RagdollHeadless( cent->currentState.number ) ) ) {
 		CG_AddRefEntityWithPowerups( &head, cent->currentState.powerups, ci->team, &cent->currentState, cent->fireRiseDir );
 	}
@@ -4909,6 +4912,7 @@ void CG_Player( centity_t *cent ) {
 		acc.hModel = cgs.media.thirdPersonBinocModel;
 		CG_PositionEntityOnTag( &acc, &torso, "tag_weapon", 0, NULL );
 		acc.reFlags |= CG_RagdollBurnFlags( cent->currentState.number );
+		acc.charLevel = CG_RagdollCharLevel( cent->currentState.number );
 		CG_AddRefEntityWithPowerups( &acc, cent->currentState.powerups, ci->team, &cent->currentState, cent->fireRiseDir );
 	}
 

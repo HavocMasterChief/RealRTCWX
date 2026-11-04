@@ -197,6 +197,12 @@ typedef struct {
 	qboolean haveRef;
 	int rig;             // RD_RIG_*
 	qboolean sleeping;
+	// burning: thrashing and rolling while the flames last (CG_RagdollBurn)
+	qboolean burning;
+	int burnLastSeen;       // last frame it was on fire
+	float rollSign;
+	int rollFlip, nextScorch;
+	float phase[4];         // L leg, R leg, arms, head
 	float data[RD_SEGS][12];
 } ragdoll_t;
 
@@ -206,6 +212,7 @@ static byte rdDeclined[MAX_GENTITIES];   // dead bodies that keep their death an
 static byte rdHeadless[MAX_GENTITIES];   // head blown off
 static byte rdGibbed[MAX_GENTITIES];     // shot to pieces after death
 static byte rdBurn[MAX_GENTITIES];       // 1 charred (fire), 2 scorched (Tesla)
+static int rdBurnStart[MAX_GENTITIES];   // when it caught fire (charring builds up from here)
 
 qboolean CG_RagdollHeadless( int entityNum ) {
 	return entityNum >= 0 && entityNum < MAX_GENTITIES && rdHeadless[entityNum];
@@ -218,6 +225,15 @@ int CG_RagdollBurnFlags( int entityNum ) {
 		return 0;
 	}
 	return rdBurn[entityNum] == 1 ? REFLAG_CHARRED : rdBurn[entityNum] == 2 ? REFLAG_SCORCHED : 0;
+}
+// how burnt (0..1): fire chars a body over about 6 s, not at once
+float CG_RagdollCharLevel( int entityNum ) {
+	float k;
+	if ( entityNum < 0 || entityNum >= MAX_GENTITIES || rdBurn[entityNum] != 1 || !rdBurnStart[entityNum] ) {
+		return 0;   // (0: the flags' full default)
+	}
+	k = 0.12f + ( cg.time - rdBurnStart[entityNum] ) / 6000.0f;
+	return k > 1 ? 1 : k < 0.12f ? 0.12f : k;
 }
 static void CG_RagdollInitPairs( ragdoll_t *rd );
 static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t dir );
@@ -442,6 +458,7 @@ void CG_RagdollReset( void ) {
 	memset( rdHeadless, 0, sizeof( rdHeadless ) );
 	memset( rdGibbed, 0, sizeof( rdGibbed ) );
 	memset( rdBurn, 0, sizeof( rdBurn ) );
+	memset( rdBurnStart, 0, sizeof( rdBurnStart ) );
 	memset( rdHits, 0, sizeof( rdHits ) );
 	memset( rdDeclined, 0, sizeof( rdDeclined ) );
 	trap_R_AddWound( -1, NULL, NULL );
@@ -795,6 +812,8 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	if ( CG_BloodExtreme() ) {
 		if ( CG_EntOnFire( cent ) ) {
 			rdBurn[cent->currentState.number] = 1;
+			rdBurnStart[cent->currentState.number] = cent->currentState.onFireStart > 0 && cent->currentState.onFireStart <= cg.time ?
+													 cent->currentState.onFireStart : cg.time;
 		} else if ( cent->pe.teslaDamagedTime && cent->pe.teslaDamagedTime > cg.time - 800 ) {
 			rdBurn[cent->currentState.number] = 2;
 		}
@@ -1551,6 +1570,114 @@ CG_RagdollStep
 One fixed physics step.
 ===============
 */
+/*
+===============
+CG_RagdollBurnThrash
+
+A body dying on fire doesn't just drop: while the flames last it rolls
+back and forth on the ground, the knees pull up and kick, the arms claw at
+the face and the head tosses, all fading to twitches as the fire dies down
+(the server keeps it burning and screaming meanwhile; see g_active.c).
+Driven joints are steered toward a target velocity, so it can't blow up.
+===============
+*/
+#define RD_BURN_FADE 2500   // ms: the thrashing fades out over the fire's last part
+static void CG_RagdollSteer( ragdoll_t *rd, int j, const vec3_t vt, float gain ) {
+	vec3_t v;
+	VectorSubtract( rd->p[j], rd->old[j], v );
+	VectorScale( v, 1.0f / RD_STEP, v );
+	v[0] += ( vt[0] - v[0] ) * gain;
+	v[1] += ( vt[1] - v[1] ) * gain;
+	v[2] += ( vt[2] - v[2] ) * gain;
+	VectorMA( rd->p[j], -RD_STEP, v, rd->old[j] );
+}
+
+static void CG_RagdollBurnThrash( ragdoll_t *rd ) {
+	centity_t *cent = &cg_entities[rd->entityNum];
+	vec3_t axis, side, c, vt, r, up = { 0, 0, 1 };
+	float k, w, left;
+	int i, age;
+	static const int torso[] = { J_PELVIS, J_CHEST, J_HEAD, J_LSHOULDER, J_RSHOULDER, J_LHIP, J_RHIP };
+
+	if ( !rd->burning ) {
+		return;
+	}
+	left = (float)( cent->currentState.onFireEnd - cg.time );
+	k = left / RD_BURN_FADE;
+	if ( k > 1 ) {
+		k = 1;
+	}
+	age = cg.time - rd->startTime;
+	if ( age < 250 ) {
+		k *= age / 250.0f;      // the fall first
+	}
+	if ( k <= 0.02f ) {
+		return;
+	}
+	VectorSubtract( rd->p[J_CHEST], rd->p[J_PELVIS], axis );
+	if ( VectorNormalize( axis ) < 1 ) {
+		return;
+	}
+	CrossProduct( axis, up, side );
+	if ( VectorNormalize( side ) < 0.1f ) {
+		VectorSet( side, 1, 0, 0 );
+	}
+	VectorAdd( rd->p[J_CHEST], rd->p[J_PELVIS], c );
+	VectorScale( c, 0.5f, c );
+
+	// roll one way, then back the other
+	if ( cg.time >= rd->rollFlip || rd->rollFlip - cg.time > 2000 ) {
+		rd->rollSign = rd->rollSign > 0 ? -1.0f : 1.0f;
+		rd->rollFlip = cg.time + 650 + rand() % 550;
+	}
+	w = rd->rollSign * 5.5f * k;
+	for ( i = 0; i < (int)( sizeof( torso ) / sizeof( torso[0] ) ); i++ ) {
+		int j = torso[i];
+		VectorSubtract( rd->p[j], c, r );
+		VectorMA( r, -DotProduct( r, axis ), axis, r );     // off the long axis
+		CrossProduct( axis, r, vt );
+		VectorScale( vt, w, vt );
+		VectorMA( vt, rd->rollSign * 55.0f * k, side, vt );    // and across the floor
+		vt[2] -= 20.0f;     // (stays down)
+		CG_RagdollSteer( rd, j, vt, 0.12f );
+	}
+	// legs: knees up to the chest and kicking out, out of step
+	for ( i = 0; i < 2; i++ ) {
+		int knee = i ? J_RKNEE : J_LKNEE, foot = i ? J_RFOOT : J_LFOOT;
+		float s;
+		rd->phase[i] += RD_STEP * ( 8.0f + 3.0f * i );
+		s = sin( rd->phase[i] );
+		VectorScale( axis, 110.0f * k * s, vt );
+		VectorMA( vt, 40.0f * k * cos( rd->phase[i] * 1.3f ), side, vt );
+		CG_RagdollSteer( rd, knee, vt, 0.16f );
+		VectorScale( vt, 1.3f, vt );
+		CG_RagdollSteer( rd, foot, vt, 0.16f );
+	}
+	// arms: hands to the face, clawing
+	rd->phase[2] += RD_STEP * 9.0f;
+	for ( i = 0; i < 2; i++ ) {
+		int hand = i ? J_RHAND : J_LHAND, elbow = i ? J_RELBOW : J_LELBOW;
+		VectorSubtract( rd->p[J_HEAD], rd->p[hand], vt );
+		VectorNormalize( vt );
+		VectorScale( vt, 140.0f * k * ( 0.35f + 0.65f * fabs( sin( rd->phase[2] + i * 1.7f ) ) ), vt );
+		vt[0] += crandom() * 90.0f * k;
+		vt[1] += crandom() * 90.0f * k;
+		vt[2] += crandom() * 60.0f * k;
+		CG_RagdollSteer( rd, hand, vt, 0.18f );
+		VectorScale( vt, 0.6f, vt );
+		CG_RagdollSteer( rd, elbow, vt, 0.12f );
+	}
+	// head tossing side to side
+	rd->phase[3] += RD_STEP * 7.0f;
+	VectorScale( side, 70.0f * k * sin( rd->phase[3] ), vt );
+	CG_RagdollSteer( rd, J_HEAD, vt, 0.15f );
+
+	// keep it awake while it burns
+	rd->stillSteps = 0;
+	rd->awakeSteps = 0;
+	rd->jitter = 2.0f;
+}
+
 static void CG_RagdollStep( ragdoll_t *rd ) {
 	vec3_t start[J_NUM], orig[J_NUM], v;
 	float moved = 0;
@@ -1565,6 +1692,7 @@ static void CG_RagdollStep( ragdoll_t *rd ) {
 		VectorAdd( rd->p[i], v, rd->p[i] );
 		rd->p[i][2] -= RD_GRAVITY * CG_XbGravityScale() * RD_STEP * RD_STEP;     // Moon Gravity skull
 	}
+	CG_RagdollBurnThrash( rd );
 
 	// muscle tone: pull each joint toward where the death pose puts it,
 	// relative to the pelvis as it is now
@@ -2111,6 +2239,64 @@ void CG_RagdollPerfFrame( void ) {
 	}
 }
 
+/*
+Every frame for each body: is it burning (catching fire after death too),
+the light of the flames, scorch marks where it rolls, smoke once it's out.
+*/
+static void CG_RagdollBurnFrame( ragdoll_t *rd, centity_t *cent ) {
+	qboolean onFire = CG_EntOnFire( cent ) && ( rd->rig == RD_RIG_HUMAN || rd->rig == RD_RIG_HUMAN2 ) &&
+					  CG_RagdollBleeds( cent->currentState.aiChar ) && cg_ragdoll.integer;
+	int n = rd->entityNum;
+	if ( onFire ) {
+		if ( !rd->burning ) {
+			rd->burning = qtrue;
+			rd->rollSign = ( rand() & 1 ) ? 1.0f : -1.0f;
+			rd->rollFlip = cg.time + 400 + rand() % 400;
+			rd->phase[0] = random() * 6.28f;
+			rd->phase[1] = random() * 6.28f;
+			CG_Printf( "ragdoll: body %i burning (%i ms of fire left)\n", n, cent->currentState.onFireEnd - cg.time );
+		}
+		if ( CG_BloodExtreme() && rdBurn[n] != 1 ) {
+			rdBurn[n] = 1;      // set alight after death
+			rdBurnStart[n] = cg.time;
+		}
+		rd->burnLastSeen = cg.time;
+		if ( rd->sleeping ) {
+			CG_RagdollWake( rd );
+		}
+		{
+			float k = ( cent->currentState.onFireEnd - cg.time ) / (float)RD_BURN_FADE;
+			k = k > 1 ? 1 : k;
+			trap_R_AddLightToScene( rd->p[J_CHEST], ( 140 + ( rand() & 63 ) ) * k + 40, 1.0f, 0.55f, 0.15f, 0 );
+		}
+		// the floor it rolls over gets scorched
+		if ( cg.time >= rd->nextScorch || rd->nextScorch - cg.time > 1000 ) {
+			trace_t tr;
+			vec3_t end;
+			rd->nextScorch = cg.time + 220;
+			VectorCopy( rd->p[J_CHEST], end );
+			end[2] -= 24;
+			CG_Trace( &tr, rd->p[J_CHEST], NULL, NULL, end, n, MASK_SOLID );
+			if ( tr.fraction < 1.0f && tr.plane.normal[2] > 0.5f && cgs.media.burnMarkShader ) {
+				CG_ImpactMark( cgs.media.burnMarkShader, tr.endpos, tr.plane.normal, random() * 360,
+							   1, 1, 1, 0.6f, qtrue, 10 + random() * 6, qfalse, 30000 );
+			}
+		}
+	} else if ( rd->burning ) {
+		rd->burning = qfalse;
+	}
+	// smoking for a few seconds after the flames go out
+	if ( !onFire && rd->burnLastSeen && cg.time - rd->burnLastSeen < 5000 && cg.time >= rd->nextScorch ) {
+		vec3_t vel = { 0, 0, 30 };
+		float a = 1.0f - ( cg.time - rd->burnLastSeen ) / 5000.0f;
+		rd->nextScorch = cg.time + 120;
+		vel[0] = crandom() * 6;
+		vel[1] = crandom() * 6;
+		CG_SmokePuff( rd->p[J_CHEST], vel, 14 + random() * 8, 0.25f, 0.25f, 0.25f, 0.5f * a, 1800, cg.time, 0, 0,
+					  cgs.media.smokePuffShader );
+	}
+}
+
 void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	ragdoll_t *rd;
 	float dt;
@@ -2128,6 +2314,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 		body->reFlags |= REFLAG_WOUNDS | REFLAG_WOUNDS_DUST;
 	}
 	body->reFlags |= CG_RagdollBurnFlags( cent->currentState.number );    // Extreme: burnt / scorched
+	body->charLevel = CG_RagdollCharLevel( cent->currentState.number );
 
 	rd = CG_RagdollFind( cent->currentState.number );
 	if ( !( cent->currentState.eFlags & EF_DEAD ) || !CG_RagdollEligible( cent ) ) {
@@ -2140,6 +2327,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			rdHeadless[cent->currentState.number] = 0;
 			rdGibbed[cent->currentState.number] = 0;
 			rdBurn[cent->currentState.number] = 0;
+			rdBurnStart[cent->currentState.number] = 0;
 		}
 		return;
 	}
@@ -2196,6 +2384,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	}
 	rd->lastSeen = cg.time;
 	rdPerfBodies++;
+	CG_RagdollBurnFrame( rd, cent );
 
 	CG_RagdollRide( rd );
 	CG_RagdollPlayerContact( rd );

@@ -946,6 +946,7 @@ void G_DamageExt( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, ve
 qboolean G_RadiusDamage( vec3_t origin, gentity_t *attacker, float damage, float radius, gentity_t *ignore, int mod );
 qboolean G_RadiusDamage2( vec3_t origin, gentity_t *inflictor, gentity_t *attacker, float damage, float radius, gentity_t *ignore, int mod, RadiusScope scope );
 qboolean G_GibbingMOD( int mod );
+void AIChar_BurnScream( gentity_t *ent );
 int G_CorpseContents( gentity_t *self );
 void body_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, int meansOfDeath );
 void TossClientWeapons( gentity_t *self );

@@ -2397,6 +2397,7 @@ void CG_GoreSplash( const vec3_t point, const vec3_t normal, int count );
 qboolean CG_RagdollHeadless( int entityNum );
 qboolean CG_RagdollGibbed( int entityNum );
 int CG_RagdollBurnFlags( int entityNum );
+float CG_RagdollCharLevel( int entityNum );
 void CG_RagdollAddLimbs( void );
 int CG_RagdollBullet( const vec3_t start, const vec3_t end );
 // cg_xbskulls.c

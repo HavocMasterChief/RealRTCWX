@@ -1925,7 +1925,7 @@ void ClientDamage( gentity_t *clent, int entnum, int enemynum, int id ) {
 				}
 				if ( ent->health <= 0 || !( ent->r.svFlags & SVF_CASTAI ) ) {
 					if ( ent->r.svFlags & SVF_CASTAI ) {
-						ent->s.onFireEnd = level.time + 6000;
+						ent->s.onFireEnd = level.time + 7000;   // RealRTCWX: (was 6 s)
 					} else {
 						ent->s.onFireEnd = level.time + FIRE_FLASH_TIME;
 					}

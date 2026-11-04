@@ -907,6 +907,44 @@ void AIChar_Death(gentity_t *ent, gentity_t *attacker, int damage, int mod)
 }
 
 /*
+============
+AIChar_BurnScream
+
+RealRTCWX: a character dying on fire keeps screaming while it burns (the
+flame death scream plays at death; this adds more, alternating with pain
+cries, until the fire is nearly out). Called every frame for a burning body.
+============
+*/
+void AIChar_BurnScream( gentity_t *ent ) {
+	static int next[MAX_GENTITIES];
+	int n = ent->s.number;
+	const char *snd;
+
+	if ( n < 0 || n >= MAX_GENTITIES || ent->aiCharacter <= 0 || ent->aiCharacter >= NUM_CHARACTERS ) {
+		return;
+	}
+	if ( ent->s.onFireEnd - level.time < 1800 ) {
+		return;     // dying down: quiet now
+	}
+	if ( !next[n] || next[n] < level.time - 3000 || next[n] - level.time > 5000 ) {
+		next[n] = level.time + 1400 + rand() % 500;     // a new burn: the death scream is playing
+		return;
+	}
+	if ( level.time < next[n] ) {
+		return;
+	}
+	next[n] = level.time + 1300 + rand() % 900;
+	snd = ( rand() & 1 ) ? aiDefaults[ent->aiCharacter].soundScripts[FLAMEDEATHSOUNDSCRIPT] :
+		  aiDefaults[ent->aiCharacter].soundScripts[PAINSOUNDSCRIPT];
+	if ( !snd || !snd[0] ) {
+		snd = aiDefaults[ent->aiCharacter].soundScripts[FLAMEDEATHSOUNDSCRIPT];
+	}
+	if ( snd && snd[0] ) {
+		G_AddEvent( ent, EV_GENERAL_SOUND, G_SoundIndex( (char *)snd ) );
+	}
+}
+
+/*
 =============
 AIChar_GetPainLocation
 =============

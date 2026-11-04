@@ -121,6 +121,7 @@ typedef enum {
 #define REFLAG_WOUNDS_SOAK  1024 // ... and the blood soaks out through the clothes over time (Extreme)
 #define REFLAG_CHARRED      2048 // RealRTCWX: burnt black (flamethrower kill)
 #define REFLAG_SCORCHED     4096 // RealRTCWX: scorched dark (Tesla kill)
+#define R_CHAR_AMOUNT( e )  ( ( ( e )->reFlags & REFLAG_CHARRED ? 0.78f : 0.5f ) * ( ( e )->charLevel > 0 && ( e )->charLevel < 1 ? ( e )->charLevel : 1.0f ) )
 
 // RealRTCWX: severed limbs draw under their own entity numbers (so they get
 // their own wound list, apart from the body's): REF_LIMB_ENTITY0 + limb
@@ -183,6 +184,10 @@ typedef struct {
 	// that changes whenever the pose does (keeps the bone cache honest)
 	int ragdoll;
 	int ragdollStamp;
+
+	// RealRTCWX: how burnt (0..1) with REFLAG_CHARRED / REFLAG_SCORCHED;
+	// 0 means fully (the flags' own default)
+	float charLevel;
 
 } refEntity_t;
 

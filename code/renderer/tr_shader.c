@@ -533,8 +533,60 @@ static void ParseTexMod( char *_text, shaderStage_t *stage ) {
 ParseStage
 ===================
 */
+/*
+animMap <frequency> <image1> .... <imageN> (the rest of the line)
+*/
+static qboolean ParseAnimMap( shaderStage_t *stage, char **text ) {
+	char *token;
+	int	totalImages = 0;
+
+	token = COM_ParseExt( text, qfalse );
+	if ( !token[0] ) {
+		ri.Printf( PRINT_WARNING, "WARNING: missing parameter for 'animMap' keyword in shader '%s'\n", shader.name );
+		return qfalse;
+	}
+	stage->bundle[0].imageAnimationSpeed = atof( token );
+
+	// parse up to MAX_IMAGE_ANIMATIONS animations
+	while ( 1 ) {
+		int num;
+
+		token = COM_ParseExt( text, qfalse );
+		if ( !token[0] ) {
+			break;
+		}
+		num = stage->bundle[0].numImageAnimations;
+		if ( num < MAX_IMAGE_ANIMATIONS ) {
+			imgFlags_t flags = IMGFLAG_NONE;
+
+			if (!shader.noMipMaps)
+				flags |= IMGFLAG_MIPMAP;
+
+			if (!shader.noPicMip)
+				flags |= IMGFLAG_PICMIP;
+
+			stage->bundle[0].image[num] = R_FindImageFileExt( token, IMGTYPE_COLORALPHA, flags, shader.characterMip );
+			if ( !stage->bundle[0].image[num] ) {
+				// RealRTCWX: skip the missing frame rather than lose the shader
+				ri.Printf( PRINT_WARNING, "WARNING: R_FindImageFileExt could not find '%s' in shader '%s'\n", token, shader.name );
+				totalImages++;
+				continue;
+			}
+			stage->bundle[0].numImageAnimations++;
+		}
+		totalImages++;
+	}
+
+	if ( totalImages > MAX_IMAGE_ANIMATIONS ) {
+		ri.Printf( PRINT_WARNING, "WARNING: ignoring excess images for 'animMap' (found %d, max is %d) in shader '%s'\n",
+				totalImages, MAX_IMAGE_ANIMATIONS, shader.name );
+	}
+	return qtrue;
+}
+
 static qboolean ParseStage( shaderStage_t *stage, char **text ) {
 	char *token;
+	char *skippedAnim = NULL;   // RealRTCWX: an animmapcomp/animmapnocomp line passed over
 	int depthMaskBits = GLS_DEPTHMASK_TRUE, blendSrcBits = 0, blendDstBits = 0, atestBits = 0, depthFuncBits = 0;
 	qboolean depthMaskExplicit = qfalse;
 
@@ -549,6 +601,18 @@ static qboolean ParseStage( shaderStage_t *stage, char **text ) {
 		}
 
 		if ( token[0] == '}' ) {
+			// RealRTCWX: the comp/nocomp pair both passed over (the two
+			// tests don't agree when compression is on but the cvar isn't,
+			// e.g. entityOnFire1/2 - the flames on burning bodies): use the
+			// alternative rather than leave the stage without an image
+			if ( !stage->bundle[0].image[0] && skippedAnim ) {
+				char *p = skippedAnim;
+				ri.Printf( PRINT_ALL, "shader '%s': no image from animmapcomp/animmapnocomp (compression %i, r_ext_compressed_textures %i) - using the other one\n",
+						   shader.name, glConfig.textureCompression, r_ext_compressed_textures->integer );
+				if ( !ParseAnimMap( stage, &p ) ) {
+					return qfalse;
+				}
+			}
 			break;
 		}
 		//
@@ -585,16 +649,22 @@ static qboolean ParseStage( shaderStage_t *stage, char **text ) {
 			if ( glConfig.textureCompression && r_ext_compressed_textures->integer ) {
 				token = "animmap";   // use this map
 			} else {
+				if ( !skippedAnim ) {
+					skippedAnim = *text;
+				}
 				while ( token[0] )
-					COM_ParseExt( text, qfalse );   // ignore the map
+					token = COM_ParseExt( text, qfalse );   // ignore the map
 				continue;
 			}
 		} else if ( !Q_stricmp( token, "animmapnocomp" ) )    { // only use this texture if compression is not available or disabled
 			if ( !glConfig.textureCompression ) {
 				token = "animmap";   // use this map
 			} else {
+				if ( !skippedAnim ) {
+					skippedAnim = *text;
+				}
 				while ( token[0] )
-					COM_ParseExt( text, qfalse );   // ignore the map
+					token = COM_ParseExt( text, qfalse );   // ignore the map
 				continue;
 			}
 		}
@@ -707,46 +777,8 @@ static qboolean ParseStage( shaderStage_t *stage, char **text ) {
 		// animMap <frequency> <image1> .... <imageN>
 		//
 		else if ( !Q_stricmp( token, "animMap" ) ) {
-			int	totalImages = 0;
-
-			token = COM_ParseExt( text, qfalse );
-			if ( !token[0] ) {
-				ri.Printf( PRINT_WARNING, "WARNING: missing parameter for 'animMap' keyword in shader '%s'\n", shader.name );
+			if ( !ParseAnimMap( stage, text ) ) {
 				return qfalse;
-			}
-			stage->bundle[0].imageAnimationSpeed = atof( token );
-
-			// parse up to MAX_IMAGE_ANIMATIONS animations
-			while ( 1 ) {
-				int num;
-
-				token = COM_ParseExt( text, qfalse );
-				if ( !token[0] ) {
-					break;
-				}
-				num = stage->bundle[0].numImageAnimations;
-				if ( num < MAX_IMAGE_ANIMATIONS ) {
-					imgFlags_t flags = IMGFLAG_NONE;
-
-					if (!shader.noMipMaps)
-						flags |= IMGFLAG_MIPMAP;
-
-					if (!shader.noPicMip)
-						flags |= IMGFLAG_PICMIP;
-
-					stage->bundle[0].image[num] = R_FindImageFileExt( token, IMGTYPE_COLORALPHA, flags, shader.characterMip );
-					if ( !stage->bundle[0].image[num] ) {
-						ri.Printf( PRINT_WARNING, "WARNING: R_FindImageFileExt could not find '%s' in shader '%s'\n", token, shader.name );
-						return qfalse;
-					}
-					stage->bundle[0].numImageAnimations++;
-				}
-				totalImages++;
-			}
-
-			if ( totalImages > MAX_IMAGE_ANIMATIONS ) {
-				ri.Printf( PRINT_WARNING, "WARNING: ignoring excess images for 'animMap' (found %d, max is %d) in shader '%s'\n",
-						totalImages, MAX_IMAGE_ANIMATIONS, shader.name );
 			}
 		} else if ( !Q_stricmp( token, "videoMap" ) )    {
 			token = COM_ParseExt( text, qfalse );

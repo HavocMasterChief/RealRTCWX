@@ -1799,21 +1799,29 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 	// build the render lists
 	if ( !cg.hyperspace ) {
+		int pt = trap_Milliseconds(), pn;
+#define CG_PERF_LAP( k ) ( pn = trap_Milliseconds(), cg_perfMs[k] += pn - pt, pt = pn )
 		CG_AddPacketEntities();         // adter calcViewValues, so predicted player state is correct
+		CG_PERF_LAP( CGPERF_ENTS );
 		CG_AddMarks();
+		CG_PERF_LAP( CGPERF_MARKS );
 		CG_AddGore();
 		CG_XbSkullsAddToScene();
 		CG_RagdollAddLimbs();       // Extreme: severed arms and legs
+		CG_PERF_LAP( CGPERF_GORE );
 
 		DEBUGTIME
 
 		// Rafael particles
 		CG_AddParticles();
 		// done.
+		CG_PERF_LAP( CGPERF_PARTICLES );
 
 		DEBUGTIME
 
 		CG_AddLocalEntities();
+		CG_PERF_LAP( CGPERF_LOCALENTS );
+#undef CG_PERF_LAP
 		CG_AddFlashlight();
 		CG_RagdollCheckSave();
 		CG_RagdollPerfFrame();

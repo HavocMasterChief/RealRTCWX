@@ -122,6 +122,11 @@ typedef enum {
 #define REFLAG_CHARRED      2048 // RealRTCWX: burnt black (flamethrower kill)
 #define REFLAG_SCORCHED     4096 // RealRTCWX: scorched dark (Tesla kill)
 
+// RealRTCWX: severed limbs draw under their own entity numbers (so they get
+// their own wound list, apart from the body's): REF_LIMB_ENTITY0 + limb
+#define REF_LIMB_ENTITY0    992
+#define REF_LIMB_ENTITIES   16
+
 typedef struct {
 	refEntityType_t reType;
 	int renderfx;

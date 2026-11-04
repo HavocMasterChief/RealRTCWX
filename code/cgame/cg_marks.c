@@ -43,6 +43,9 @@ markPoly_t cg_activeMarkPolys;          // double linked list
 markPoly_t  *cg_freeMarkPolys;          // single linked list
 markPoly_t cg_markPolys[MAX_MARK_POLYS];
 static int cg_numActiveMarks;
+int CG_MarksActive( void ) {
+	return cg_numActiveMarks;
+}
 
 /*
 ===================

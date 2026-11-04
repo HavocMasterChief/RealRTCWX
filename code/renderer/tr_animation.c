@@ -1082,7 +1082,7 @@ frame (tess.woundTint, applied in ComputeColors), so the wound stays on the
 skin however the body moves.
 ===============================================================================
 */
-#define WOUND_MAX_ENTS      128
+#define WOUND_MAX_ENTS      ( 128 + REF_LIMB_ENTITIES )   // characters, then severed limbs
 #define WOUND_MAX           24
 #define WOUND_VERTS         40
 #define WOUND_PENDING       6
@@ -1190,6 +1190,53 @@ typedef struct {
 
 static rdEntWounds_t rd_wounds[WOUND_MAX_ENTS];
 
+// a character's entity number, or a severed limb's (REF_LIMB_ENTITY0 + n),
+// to its wound list; NULL for anything else
+static rdEntWounds_t *R_WoundsFor( int entityNum ) {
+	rdEntWounds_t *ew;
+	if ( entityNum >= 0 && entityNum < 128 ) {
+		ew = &rd_wounds[entityNum];
+	} else if ( entityNum >= REF_LIMB_ENTITY0 && entityNum < REF_LIMB_ENTITY0 + REF_LIMB_ENTITIES ) {
+		ew = &rd_wounds[128 + entityNum - REF_LIMB_ENTITY0];
+	} else {
+		return NULL;
+	}
+	// never trust the counts blindly: a bad pair would walk off the arrays
+	if ( ew->numWounds < 0 || ew->numWounds > WOUND_MAX || ew->numPending < 0 || ew->numPending > WOUND_PENDING ) {
+		memset( ew, 0, sizeof( *ew ) );
+	}
+	return ew;
+}
+
+/*
+A slot for a new wound. When the list is full a real wound (a bullet hole,
+a stump) takes the oldest stain first, then the oldest wound; a stain only
+ever replaces another stain. NULL: no room.
+*/
+static rdWound_t *R_WoundSlot( rdEntWounds_t *ew, qboolean splash ) {
+	int i, oldest = -1;
+	if ( ew->numWounds < WOUND_MAX ) {
+		return &ew->wound[ew->numWounds++];
+	}
+	for ( i = 0; i < WOUND_MAX; i++ ) {
+		if ( ew->wound[i].splash && ( oldest < 0 || ew->wound[i].born < ew->wound[oldest].born ) ) {
+			oldest = i;
+		}
+	}
+	if ( oldest < 0 && !splash ) {
+		for ( i = 0; i < WOUND_MAX; i++ ) {
+			if ( oldest < 0 || ew->wound[i].born < ew->wound[oldest].born ) {
+				oldest = i;
+			}
+		}
+	}
+	return oldest < 0 ? NULL : &ew->wound[oldest];
+}
+
+/*
+entityNum < 0: forget every wound (a new level, a load).
+pos NULL: forget this one entity's wounds (a limb slot being reused).
+*/
 void RE_AddWound( int entityNum, const vec3_t pos, const vec3_t dir ) {
 	rdEntWounds_t *ew;
 	rdWoundPending_t *p;
@@ -1197,11 +1244,15 @@ void RE_AddWound( int entityNum, const vec3_t pos, const vec3_t dir ) {
 		memset( rd_wounds, 0, sizeof( rd_wounds ) );
 		return;
 	}
-	if ( entityNum >= WOUND_MAX_ENTS ) {
+	ew = R_WoundsFor( entityNum );
+	if ( !ew ) {
 		return;
 	}
-	ew = &rd_wounds[entityNum];
-	if ( ew->numWounds >= WOUND_MAX || ew->numPending >= WOUND_PENDING ) {
+	if ( !pos || !dir ) {
+		memset( ew, 0, sizeof( *ew ) );
+		return;
+	}
+	if ( ew->numPending >= WOUND_PENDING ) {
 		return;
 	}
 	p = &ew->pending[ew->numPending++];
@@ -1220,10 +1271,10 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 	rdEntWounds_t *ew;
 	int i, j, k;
 
-	if ( refent->entityNum < 0 || refent->entityNum >= WOUND_MAX_ENTS ) {
+	ew = R_WoundsFor( refent->entityNum );
+	if ( !ew ) {
 		return;
 	}
-	ew = &rd_wounds[refent->entityNum];
 
 	// look for pending hits on this surface
 	for ( i = 0; i < ew->numPending; i++ ) {
@@ -1232,13 +1283,23 @@ static void R_ApplyWounds( const refEntity_t *refent, const mdsSurface_t *surfac
 
 		if ( p->frame && p->frame != tr.frameCount && p->bestSurf == surface ) {
 			// searched every surface last frame: this one had the closest
-			// vertex - remember it and its neighbours
-			rdWound_t *w = &ew->wound[ew->numWounds++];
-			float *c = tess.xyz[baseVertex + p->bestVert];
+			// vertex - remember it and its neighbours (unless this draw
+			// has fewer vertices than the one it was found in)
+			rdWound_t *w = NULL;
+			float *c;
+			if ( p->bestVert >= 0 && p->bestVert < count ) {
+				w = R_WoundSlot( ew, p->splash );
+			}
+			if ( !w ) {
+				ew->pending[i] = ew->pending[--ew->numPending];
+				i--;
+				continue;
+			}
+			c = tess.xyz[baseVertex + p->bestVert];
 			w->surf = surface;
 			w->num = 0;
 			w->anchor = (short)p->bestVert;
-			w->variant = (byte)( ( ew->numWounds * 7 + refent->entityNum ) % 3 );
+			w->variant = (byte)( ( ( w - ew->wound ) * 7 + refent->entityNum ) % 3 );
 			w->splash = p->splash;
 			w->born = backEnd.refdef.time;
 			// every vertex within the soak radius, nearest kept when there are too many

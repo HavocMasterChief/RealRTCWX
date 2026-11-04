@@ -930,14 +930,19 @@ static void CG_GoreCheckBodies( void ) {
 ===============
 CG_GoreGovernor
 
-Keeps everything until the frame rate drops 10 below com_maxfps for about a
-second, then removes the oldest effects (and blood decals) a few at a time
-until it recovers.
+Keeps everything until the frame rate drops under 40 (and 10 below what
+the scene normally runs at) for two seconds, then removes the oldest effects
+(and blood decals) a few at a time until it recovers. If trimming doesn't
+bring the frame rate back, the blood isn't what's slow: it stands down for
+30 s instead of wiping everything. The droplet budget grows back as soon as
+the frame rate is fine again.
 ===============
 */
+static int goDropPriority;      // a cut or a head burst: may use the whole droplet pool
+
 static void CG_GoreGovernor( void ) {
-	static float avgMs = 0, baseline = 0;
-	static int lowSince = 0, lastTrim = 0, lastDecay = 0;
+	static float avgMs = 0, baseline = 0, fpsAtFirstTrim = 0;
+	static int lowSince = 0, lastTrim = 0, lastDecay = 0, lastGrow = 0, trims = 0, standDownUntil = 0;
 	float target, fps, limit;
 	int i, oldest;
 
@@ -973,9 +978,24 @@ static void CG_GoreGovernor( void ) {
 		baseline = target;
 	}
 	limit = baseline - 10.0f;
+	if ( limit > 40.0f ) {
+		limit = 40.0f;      // 40+ is fine on this machine: leave the blood alone
+	}
 
 	if ( fps >= limit ) {
 		lowSince = 0;
+		trims = 0;
+		// running fine: the droplet budget grows back
+		if ( goDropLimit < GORE_MAX_DROPS && ( cg.time - lastGrow > 500 || lastGrow > cg.time ) ) {
+			lastGrow = cg.time;
+			goDropLimit += 16;
+			if ( goDropLimit > GORE_MAX_DROPS ) {
+				goDropLimit = GORE_MAX_DROPS;
+			}
+		}
+		return;
+	}
+	if ( standDownUntil > cg.time && standDownUntil - cg.time <= 30000 ) {
 		return;
 	}
 	if ( !lowSince || lowSince > cg.time ) {
@@ -987,6 +1007,20 @@ static void CG_GoreGovernor( void ) {
 		return;
 	}
 	lastTrim = cg.time;
+	if ( !trims ) {
+		fpsAtFirstTrim = fps;
+	}
+	if ( ++trims > 15 ) {
+		if ( fps < fpsAtFirstTrim + 3.0f ) {
+			CG_GoreLog( "governor: fps %.1f after %i trims (was %.1f) - the blood isn't the cause, standing down for 30 s\n",
+						fps, trims - 1, fpsAtFirstTrim );
+			standDownUntil = cg.time + 30000;
+			trims = 0;
+			return;
+		}
+		trims = 1;
+		fpsAtFirstTrim = fps;
+	}
 	CG_GoreLog( "governor: fps %.1f below %.1f (baseline %.1f) - trimming\n", fps, limit, baseline );
 
 	// fewer blood droplets first, then drips, runs, pools, decals
@@ -1229,6 +1263,14 @@ static int goDropMarksThisFrame, goDropMarkFrame;
 
 
 
+int CG_GoreDropsActive( void ) {
+	int i, n = 0;
+	for ( i = 0; i < GORE_MAX_DROPS; i++ ) {
+		n += goDrops[i].active;
+	}
+	return n;
+}
+
 static void CG_GoreDropsReset( void ) {
 	memset( goDrops, 0, sizeof( goDrops ) );
 	memset( goBleeders, 0, sizeof( goBleeders ) );
@@ -1242,7 +1284,7 @@ static void CG_GoreNewDrop( const vec3_t pos, const vec3_t vel, float size ) {
 	for ( i = 0; i < GORE_MAX_DROPS; i++ ) {
 		n += goDrops[i].active;
 	}
-	if ( n >= goDropLimit ) {
+	if ( n >= ( goDropPriority ? GORE_MAX_DROPS : goDropLimit ) ) {
 		return;
 	}
 	GORE_ALLOC( goDrops, GORE_MAX_DROPS, d );
@@ -1402,6 +1444,7 @@ void CG_GoreHeadBurst( const vec3_t point, const vec3_t dir, int entityNum ) {
 	if ( !CG_GoreEnabled() || CG_Skull( 1 << 7 ) ) {
 		return;
 	}
+	goDropPriority = 1;     // the big moments always get their blood
 	for ( i = 0; i < 36; i++ ) {
 		vec3_t v;
 		VectorCopy( dir, v );
@@ -1412,6 +1455,7 @@ void CG_GoreHeadBurst( const vec3_t point, const vec3_t dir, int entityNum ) {
 		VectorScale( v, 180 + random() * 280, v );
 		CG_GoreNewDrop( point, v, 1.2f + random() * 1.4f );
 	}
+	goDropPriority = 0;
 	{
 		vec3_t vel;
 		VectorScale( dir, 30, vel );

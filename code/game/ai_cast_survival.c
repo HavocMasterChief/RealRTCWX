@@ -505,6 +505,16 @@ void AICast_Die_Survival( gentity_t *self, gentity_t *inflictor, gentity_t *atta
 	// process the event
 	if ( self->client->ps.pm_type == PM_DEAD ) {
 		// already dead
+		// RealRTCWX: only explosions and heavy guns take a body apart; other
+		// hits on a corpse just move the ragdoll (zombies still always gib)
+		if ( self->health < GIB_HEALTH && !G_GibbingMOD( meansOfDeath ) &&
+			 self->aiCharacter != AICHAR_ZOMBIE && self->aiCharacter != AICHAR_ZOMBIE_SURV &&
+			 self->aiCharacter != AICHAR_ZOMBIE_GHOST && self->aiCharacter != AICHAR_ZOMBIE_FLAME ) {
+			self->health += damage;
+			if ( self->health < GIB_HEALTH ) {
+				self->health = GIB_HEALTH;      // (not below: no gib)
+			}
+		}
 		if ( self->health < GIB_HEALTH ) {
 			if ( self->aiCharacter == AICHAR_ZOMBIE || self->aiCharacter == AICHAR_ZOMBIE_SURV || self->aiCharacter == AICHAR_ZOMBIE_GHOST || self->aiCharacter == AICHAR_ZOMBIE_FLAME ) {
 				// RF, changed this so Zombies always gib now
@@ -553,7 +563,7 @@ void AICast_Die_Survival( gentity_t *self, gentity_t *inflictor, gentity_t *atta
 		self->client->ps.weapon = WP_NONE;
 
 		self->s.powerups = 0;
-		self->r.contents = CONTENTS_CORPSE;
+		self->r.contents = G_CorpseContents( self );
 
 		self->s.angles[0] = 0;
 		self->s.angles[1] = self->client->ps.viewangles[1];

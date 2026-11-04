@@ -302,6 +302,33 @@ float CG_RagdollShotForce( int shooter, float dist ) {
 	return CG_RagdollWeaponForce( shooter, dist );
 }
 
+// Extreme: only these take a corpse apart (machine guns, the Venom,
+// shotguns - explosions too, see CG_RagdollExplosion)
+static qboolean CG_RagdollHeavyShooter( int shooter ) {
+	int w;
+	if ( shooter < 0 || shooter >= MAX_GENTITIES ) {
+		return qfalse;
+	}
+	if ( shooter == cg.snap->ps.clientNum ) {
+		if ( cg.snap->ps.persistant[PERS_HWEAPON_USE] ) {
+			return qtrue;       // a mounted MG42
+		}
+		w = cg.snap->ps.weapon;
+	} else {
+		if ( cg_entities[shooter].currentState.eFlags & EF_MG42_ACTIVE ) {
+			return qtrue;
+		}
+		w = cg_entities[shooter].currentState.weapon;
+	}
+	switch ( w ) {
+	case WP_BROWNING: case WP_MG42M: case WP_DUMMY_MG42: case WP_VENOM:
+	case WP_M97: case WP_AUTO5: case WP_M30:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
 static float CG_RagdollWeaponForce( int shooter, float dist ) {
 	int w;
 	float f, near, far, minF;
@@ -1745,6 +1772,30 @@ static void CG_RagdollKick( ragdoll_t *rd, const vec3_t point, const vec3_t vel,
 }
 
 /*
+A corpse that has taken enough (corpseDamage: heavy fire, blasts) bursts
+into gibs (any blood setting but off, as the original game's corpse gibs). qtrue if it did (the ragdoll is gone).
+*/
+static qboolean CG_RagdollGibCorpse( ragdoll_t *rd, const vec3_t dir ) {
+	centity_t *bc;
+	vec3_t org, gd;
+	if ( !CG_GoreEnabled_Ragdoll() || CG_Skull( 1 << 7 ) || rd->corpseDamage < 18.0f || rd->entityNum >= MAX_GENTITIES || rd->rig == RD_RIG_DOG ||
+		 !CG_RagdollBleeds( cg_entities[rd->entityNum].currentState.aiChar ) ) {
+		return qfalse;
+	}
+	bc = &cg_entities[rd->entityNum];
+	VectorCopy( rd->p[J_PELVIS], org );
+	VectorCopy( dir, gd );
+	trap_S_StartSound( org, ENTITYNUM_WORLD, CHAN_AUTO, cgs.media.gibSound );
+	CG_GibPlayer( bc, org, gd );
+	CG_GoreHeadBurst( rd->p[J_CHEST], dir, rd->entityNum );
+	rdGibbed[rd->entityNum] = 1;
+	trap_R_SetRagdoll( rd->slot, NULL );
+	rd->active = qfalse;
+	CG_Printf( "ragdoll: body %i gibbed (corpse damage %.1f)\n", rd->entityNum, rd->corpseDamage );
+	return qtrue;
+}
+
+/*
 ===============
 CG_RagdollBullet
 
@@ -1809,20 +1860,12 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 				CG_RagdollSever( best, rdCaps[bestCap].a, dir );
 			}
 			best->shoved += wf;
-			best->corpseDamage += wf;
-			// Extreme: a body that keeps taking hits comes apart
-			if ( CG_BloodExtreme() && best->corpseDamage >= 18.0f && best->entityNum < MAX_GENTITIES &&
-				 CG_RagdollBleeds( cg_entities[best->entityNum].currentState.aiChar ) ) {
-				centity_t *bc = &cg_entities[best->entityNum];
-				vec3_t org;
-				VectorCopy( best->p[J_PELVIS], org );
-				trap_S_StartSound( org, ENTITYNUM_WORLD, CHAN_AUTO, cgs.media.gibSound );
-				CG_GibPlayer( bc, org, dir );
-				CG_GoreHeadBurst( best->p[J_CHEST], dir, best->entityNum );
-				rdGibbed[best->entityNum] = 1;
-				trap_R_SetRagdoll( best->slot, NULL );
-				best->active = qfalse;
-				return best->entityNum;
+			// a body that keeps taking heavy fire comes apart
+			if ( CG_RagdollHeavyShooter( rdShooter ) ) {
+				best->corpseDamage += wf;
+				if ( CG_RagdollGibCorpse( best, dir ) ) {
+					return best->entityNum;
+				}
 			}
 			VectorScale( dir, 55 * wf * f, vel );
 			vel[2] += 7 * sqrt( wf ) * ( f > 1 ? f * 0.6f : 1 );
@@ -1891,6 +1934,20 @@ void CG_RagdollExplosion( const vec3_t origin, float radius, float strength ) {
 			VectorMA( rd->old[j], -RD_STEP * f, away, rd->old[j] );
 		}
 		// Extreme: right next to it, limbs come off
+		// a blast right on it takes the body apart; further out it
+		// adds up with heavy fire
+		{
+			float d = Distance( rd->p[J_PELVIS], origin );
+			vec3_t up;
+			VectorSubtract( rd->p[J_PELVIS], origin, up );
+			VectorNormalize( up );
+			if ( d < radius ) {
+				rd->corpseDamage += 24.0f * ( 1.0f - d / radius ) * ( 1.0f - d / radius ) + ( d < 48 ? 18.0f : 0 );
+			}
+			if ( CG_RagdollGibCorpse( rd, up ) ) {
+				continue;
+			}
+		}
 		// (the limbs nearest the blast: one within 110 units, two within 60)
 		if ( Distance( rd->p[J_PELVIS], origin ) < 110 ) {
 			static const int roots[4] = { J_LSHOULDER, J_RSHOULDER, J_LHIP, J_RHIP };

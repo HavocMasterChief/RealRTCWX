@@ -88,21 +88,84 @@ static bool SDLCALL IN_UWP_EventWatch( void *userdata, SDL_Event *event ) {
 	return true;
 }
 
+/*
+The game times every rumble itself and stops it when it's due, on the pad
+that was rumbled, rather than trusting the controller's own timer (which
+on Xbox could miss, leaving a pad buzzing through a whole cutscene). No
+rumble at all during cutscenes, menus and loading.
+*/
+static SDL_Gamepad *in_rumblePad;
+static SDL_Joystick *in_rumbleStick;
+static int in_rumbleUntil, in_trigUntil;   // Sys_Milliseconds; 0: not rumbling
+
+static qboolean IN_RumbleBlocked( void ) {
+	return cl.cameraMode || ( Key_GetCatcher() & ( KEYCATCH_UI | KEYCATCH_CONSOLE ) ) || clc.state != CA_ACTIVE;
+}
+
+static void IN_RumbleStopMotors( qboolean body, qboolean trig ) {
+	if ( in_rumblePad ) {
+		if ( body ) {
+			SDL_RumbleGamepad( in_rumblePad, 0, 0, 0 );
+		}
+		if ( trig ) {
+			SDL_RumbleGamepadTriggers( in_rumblePad, 0, 0, 0 );
+		}
+	} else if ( in_rumbleStick && body ) {
+		SDL_RumbleJoystick( in_rumbleStick, 0, 0, 0 );
+	}
+	if ( body ) {
+		in_rumbleUntil = 0;
+	}
+	if ( trig ) {
+		in_trigUntil = 0;
+	}
+}
+
+// every frame: stop what's due, and everything in a cutscene / menu / load
+static void IN_RumbleWatch( void ) {
+	int now = Sys_Milliseconds();
+	qboolean all;
+	if ( !in_rumbleUntil && !in_trigUntil ) {
+		return;
+	}
+	// (the pad was unplugged or another one took over: SDL may have closed it)
+	all = IN_RumbleBlocked() || ( in_rumblePad && in_rumblePad != gamepad ) || ( in_rumbleStick && in_rumbleStick != stick );
+	if ( ( in_rumblePad && in_rumblePad != gamepad ) || ( in_rumbleStick && in_rumbleStick != stick ) ) {
+		in_rumblePad = NULL;
+		in_rumbleStick = NULL;
+		in_rumbleUntil = in_trigUntil = 0;
+		return;
+	}
+	IN_RumbleStopMotors( in_rumbleUntil && ( all || now - in_rumbleUntil >= 0 ),
+						 in_trigUntil && ( all || now - in_trigUntil >= 0 ) );
+}
+
 // body motors for 'ms'; trigger motors (left, right) for their own time
 void IN_RumbleEx( float low, float high, int ms, float leftTrig, float rightTrig, int trigMs ) {
 	Uint16 l = (Uint16)( low * 65535.0f ), h = (Uint16)( high * 65535.0f );
+	int now = Sys_Milliseconds();
 	if ( ms < 0 ) ms = 0;
 	if ( trigMs < 0 ) trigMs = 0;
+	if ( ( low > 0 || high > 0 || leftTrig > 0 || rightTrig > 0 ) && IN_RumbleBlocked() ) {
+		return;
+	}
 	if ( gamepad ) {
+		in_rumblePad = gamepad;
+		in_rumbleStick = NULL;
 		if ( low > 0 || high > 0 || ms == 0 ) {
 			SDL_RumbleGamepad( gamepad, l, h, (Uint32)ms );
+			in_rumbleUntil = ( ms > 0 && ( low > 0 || high > 0 ) ) ? ( now + ms ) | 1 : 0;
 		}
 		if ( leftTrig > 0 || rightTrig > 0 || trigMs == 0 ) {
 			SDL_RumbleGamepadTriggers( gamepad, (Uint16)( leftTrig * 65535.0f ), (Uint16)( rightTrig * 65535.0f ),
 									   (Uint32)trigMs );
+			in_trigUntil = ( trigMs > 0 && ( leftTrig > 0 || rightTrig > 0 ) ) ? ( now + trigMs ) | 1 : 0;
 		}
 	} else if ( stick ) {
+		in_rumbleStick = stick;
+		in_rumblePad = NULL;
 		SDL_RumbleJoystick( stick, l, h, (Uint32)ms );
+		in_rumbleUntil = ( ms > 0 && ( low > 0 || high > 0 ) ) ? ( now + ms ) | 1 : 0;
 	}
 }
 
@@ -1430,6 +1493,9 @@ void IN_Frame( void )
 	qboolean loading;
 
 	IN_JoyMove( );
+#ifdef RTCW_UWP
+	IN_RumbleWatch();
+#endif
 
 	// If not DISCONNECTED (main menu) or ACTIVE (in game), we're loading
 	loading = ( clc.state != CA_DISCONNECTED && clc.state != CA_ACTIVE );

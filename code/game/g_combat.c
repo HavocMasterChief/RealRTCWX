@@ -225,6 +225,47 @@ void GibEntity( gentity_t *self, int killer ) {
 }
 
 /*
+RealRTCWX: what may still take a dead body apart - explosions, mounted and
+heavy machine guns, the Venom and shotguns. Anything lighter only moves the
+ragdoll (cgame) and no longer counts toward a gib.
+*/
+/*
+RealRTCWX: what a dead AI's box is made of. With ragdolls on, the body the
+player sees is simulated on the client and soon isn't where this box is:
+shots stopping on (and bleeding from) the box looked like blood out of thin
+air. Those bodies get no solid box; cgame traces every shot against the
+ragdoll itself (CG_RagdollBullet). Characters that don't ragdoll, and
+zombies (shot again to keep them down), keep the old corpse box.
+*/
+int G_CorpseContents( gentity_t *self ) {
+	switch ( self->aiCharacter ) {
+	case AICHAR_LOPER: case AICHAR_LOPER_SPECIAL: case AICHAR_HELGA: case AICHAR_HEINRICH:
+	case AICHAR_PROTOSOLDIER: case AICHAR_SUPERSOLDIER: case AICHAR_SUPERSOLDIER_LAB:
+	case AICHAR_ZOMBIE: case AICHAR_ZOMBIE_SURV: case AICHAR_ZOMBIE_GHOST: case AICHAR_ZOMBIE_FLAME:
+	case AICHAR_WARZOMBIE:
+		return CONTENTS_CORPSE;
+	default:
+		break;
+	}
+	return trap_Cvar_VariableIntegerValue( "cg_ragdoll" ) ? 0 : CONTENTS_CORPSE;
+}
+
+qboolean G_GibbingMOD( int mod ) {
+	switch ( mod ) {
+	case MOD_GRENADE: case MOD_GRENADE_SPLASH: case MOD_ROCKET: case MOD_ROCKET_SPLASH:
+	case MOD_PANZERFAUST: case MOD_ROCKET_LAUNCHER: case MOD_GRENADE_LAUNCHER: case MOD_GRENADE_PINEAPPLE:
+	case MOD_M7: case MOD_MORTAR: case MOD_MORTAR_SPLASH: case MOD_DYNAMITE: case MOD_DYNAMITE_SPLASH:
+	case MOD_AIRSTRIKE: case MOD_ARTY: case MOD_EXPLOSIVE: case MOD_LT_ARTILLERY: case MOD_LT_AIRSTRIKE:
+	case MOD_CRUSH: case MOD_TELEFRAG:
+	case MOD_MACHINEGUN: case MOD_MG42M: case MOD_BROWNING: case MOD_VENOM: case MOD_VENOM_FULL:
+	case MOD_SHOTGUN: case MOD_M97: case MOD_AUTO5: case MOD_M30:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+/*
 ==================
 body_die
 ==================

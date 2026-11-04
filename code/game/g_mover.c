@@ -119,8 +119,10 @@ gentity_t   *G_TestEntityPosition( gentity_t *ent ) {
 	int mask;
 
 	if ( ent->clipmask ) {
-		if ( ent->r.contents == CONTENTS_CORPSE ) {
-			// corpse aren't important
+		if ( ent->r.contents == CONTENTS_CORPSE ||
+			 ( ent->client && !ent->r.contents && ( ent->health <= 0 || ent->client->ps.pm_type == PM_DEAD ) ) ) {
+			// corpse aren't important (RealRTCWX: a ragdolled body has no
+			// box at all - see G_CorpseContents - but is still a corpse)
 			//G_Damage( ent, NULL, NULL, NULL, NULL, 99999, 0, MOD_CRUSH );
 			return NULL;
 		} else {

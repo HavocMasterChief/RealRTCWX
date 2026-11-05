@@ -240,7 +240,6 @@ zombies (shot again to keep them down), keep the old corpse box.
 int G_CorpseContents( gentity_t *self ) {
 	switch ( self->aiCharacter ) {
 	case AICHAR_LOPER: case AICHAR_LOPER_SPECIAL: case AICHAR_HELGA: case AICHAR_HEINRICH:
-	case AICHAR_PROTOSOLDIER: case AICHAR_SUPERSOLDIER: case AICHAR_SUPERSOLDIER_LAB:
 	case AICHAR_ZOMBIE: case AICHAR_ZOMBIE_SURV: case AICHAR_ZOMBIE_GHOST: case AICHAR_ZOMBIE_FLAME:
 	case AICHAR_WARZOMBIE:
 		return CONTENTS_CORPSE;

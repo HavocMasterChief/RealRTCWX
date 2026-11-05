@@ -31,8 +31,10 @@ If you have questions concerning this license or the applicable additional terms
 #ifdef RTCW_UWP
 #ifdef USE_LOCAL_HEADERS
 #	include "SDL3/SDL_video.h"
+#	include "SDL3/SDL_timer.h"
 #else
 #	include <SDL3/SDL_video.h>
+#	include <SDL3/SDL_timer.h>
 #endif
 #endif
 
@@ -1095,7 +1097,16 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	RB_ShadowFinish();
 
 	// add light flares on lights that aren't obscured
+#ifdef RTCW_UWP
+	{
+		extern Uint64 tr_perfFlareTicks;
+		Uint64 t0 = SDL_GetPerformanceCounter();
+		RB_RenderFlares();
+		tr_perfFlareTicks += SDL_GetPerformanceCounter() - t0;
+	}
+#else
 	RB_RenderFlares();
+#endif
 }
 
 

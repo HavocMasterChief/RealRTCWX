@@ -738,7 +738,15 @@ static void ProjectDlightTexture_scalar( void ) {
 }
 
 
+Uint64 tr_perfDlightTicks, tr_perfFlareTicks;     // RealRTCWX: CPU time in dynamic-light passes / flares (perf(lights))
+
 static void ProjectDlightTexture( void ) {
+#ifdef RTCW_UWP
+	Uint64 t0 = SDL_GetPerformanceCounter();
+	ProjectDlightTexture_scalar();
+	tr_perfDlightTicks += SDL_GetPerformanceCounter() - t0;
+	return;
+#endif
 #if idppc_altivec
 	if (com_altivec->integer) {
 		// must be in a separate translation unit or G3 systems will crash.

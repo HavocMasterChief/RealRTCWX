@@ -425,6 +425,88 @@ static qboolean R_FlareDepthAsync( flare_t *f, float *depth ) {
 }
 #endif
 
+#ifdef RTCW_UWP
+/*
+Flare visibility by occlusion query (the main path on Xbox): a point at the
+flare, pulled toward the eye by the same 24 units the depth test allowed,
+drawn with depth testing and no color; the query says whether any of it got
+through. Nothing is read back from the frame: results are collected two
+frames later, when the GPU is done with them. -1: no queries (fall back).
+*/
+#define FLARE_QRING 3
+static GLuint flareQ[FLARE_QRING][MAX_FLARES];
+static int flareQInit, flareQCur, flareQFrame = -1;
+static int flareQGen[FLARE_QRING][MAX_FLARES];      // which flare each query was for
+static int flareQVis[MAX_FLARES], flareQVisGen[MAX_FLARES];
+static void ( APIENTRY *qglGenQueriesX )( GLsizei, GLuint * );
+static void ( APIENTRY *qglBeginQueryX )( GLenum, GLuint );
+static void ( APIENTRY *qglEndQueryX )( GLenum );
+static void ( APIENTRY *qglGetQueryObjectuivX )( GLuint, GLenum, GLuint * );
+
+static int R_FlareQuery( flare_t *f ) {
+	int slot = f - r_flareStructs, old;
+	vec3_t p, toEye;
+	float d;
+
+	if ( !flareQInit ) {
+		qglGenQueriesX = ( void ( APIENTRY * )( GLsizei, GLuint * ) )SDL_GL_GetProcAddress( "glGenQueries" );
+		qglBeginQueryX = ( void ( APIENTRY * )( GLenum, GLuint ) )SDL_GL_GetProcAddress( "glBeginQuery" );
+		qglEndQueryX = ( void ( APIENTRY * )( GLenum ) )SDL_GL_GetProcAddress( "glEndQuery" );
+		qglGetQueryObjectuivX = ( void ( APIENTRY * )( GLuint, GLenum, GLuint * ) )SDL_GL_GetProcAddress( "glGetQueryObjectuiv" );
+		flareQInit = ( qglGenQueriesX && qglBeginQueryX && qglEndQueryX && qglGetQueryObjectuivX ) ? 1 : -1;
+		if ( flareQInit > 0 ) {
+			int k;
+			for ( k = 0; k < FLARE_QRING; k++ ) {
+				qglGenQueriesX( MAX_FLARES, flareQ[k] );
+			}
+		}
+		ri.Printf( PRINT_ALL, "flares: visibility by %s\n", flareQInit > 0 ? "occlusion queries" : "depth reads" );
+	}
+	if ( flareQInit < 0 || slot < 0 || slot >= MAX_FLARES ) {
+		return -1;
+	}
+	if ( backEnd.viewParms.frameCount != flareQFrame ) {
+		flareQFrame = backEnd.viewParms.frameCount;
+		flareQCur = ( flareQCur + 1 ) % FLARE_QRING;
+	}
+	if ( !flareGen[slot] ) {
+		flareGen[slot] = 1;
+	}
+	// collect this flare's query from two frames ago (if the GPU has it)
+	old = ( flareQCur + 1 ) % FLARE_QRING;
+	if ( flareQGen[old][slot] ) {
+		GLuint avail = 0, samples = 0;
+		qglGetQueryObjectuivX( flareQ[old][slot], 0x8867 /* GL_QUERY_RESULT_AVAILABLE */, &avail );
+		if ( avail ) {
+			qglGetQueryObjectuivX( flareQ[old][slot], 0x8866 /* GL_QUERY_RESULT */, &samples );
+			flareQVis[slot] = samples > 0;
+			flareQVisGen[slot] = flareQGen[old][slot];
+		}
+		flareQGen[old][slot] = 0;
+	}
+	// this frame's query
+	if ( !flareQGen[flareQCur][slot] ) {
+		VectorSubtract( backEnd.viewParms.or.origin, f->origin, toEye );
+		d = VectorNormalize( toEye );
+		VectorMA( f->origin, d > 30 ? 24 : d * 0.5f, toEye, p );
+		qglLoadMatrixf( backEnd.viewParms.world.modelMatrix );
+		GL_State( 0 );      // depth test on, no depth write, no blend
+		qglColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
+		qglBeginQueryX( 0x8914 /* GL_SAMPLES_PASSED */, flareQ[flareQCur][slot] );
+		qglBegin( GL_POINTS );
+		qglVertex3fv( p );
+		qglEnd();
+		qglEndQueryX( 0x8914 );
+		qglColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+		flareQGen[flareQCur][slot] = flareGen[slot];
+	}
+	if ( flareQVisGen[slot] == flareGen[slot] ) {
+		return flareQVis[slot];
+	}
+	return f->visible ? 1 : 1;     // no answer yet: let it fade in
+}
+#endif
+
 void RB_TestFlare( flare_t *f ) {
 #ifndef USE_OPENGLES
 	float			depth;
@@ -439,6 +521,15 @@ void RB_TestFlare( flare_t *f ) {
 	// don't bother with another sync
 	glState.finishCalled = qfalse;
 
+#ifdef RTCW_UWP
+	{
+		int qv = R_FlareQuery( f );
+		if ( qv >= 0 ) {
+			visible = ( qboolean )( ( f->flags & 1 ) && qv );
+			goto flareFade;
+		}
+	}
+#endif
 	// read back the z buffer contents
 #ifdef USE_OPENGLES
 	screenZ = 0;
@@ -464,6 +555,9 @@ void RB_TestFlare( flare_t *f ) {
 
 	if ( -f->eyeZ - -screenZ  > 24 )
 		visible = qfalse;
+#ifdef RTCW_UWP
+flareFade:
+#endif
 
 	if ( visible ) {
 		if ( !f->visible ) {

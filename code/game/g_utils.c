@@ -775,9 +775,7 @@ void G_AnimScriptSound( int soundIndex, vec3_t org, int client ) {
 	// hits the floor; the body ragdolls instead now, so drop that sound
 	if ( client > 0 && e->client && ( e->health <= 0 || e->client->ps.pm_type == PM_DEAD ) &&
 		 e->aiCharacter != AICHAR_LOPER && e->aiCharacter != AICHAR_LOPER_SPECIAL &&
-		 e->aiCharacter != AICHAR_HELGA && e->aiCharacter != AICHAR_HEINRICH &&
-		 e->aiCharacter != AICHAR_PROTOSOLDIER && e->aiCharacter != AICHAR_SUPERSOLDIER &&
-		 e->aiCharacter != AICHAR_SUPERSOLDIER_LAB &&    // (those don't ragdoll)
+		 e->aiCharacter != AICHAR_HELGA && e->aiCharacter != AICHAR_HEINRICH &&     // (those don't ragdoll)
 		 !G_AnimSoundIsFlame( soundIndex ) ) {            // (the burning scream still plays)
 		static int logged;
 		if ( logged < 6 ) {

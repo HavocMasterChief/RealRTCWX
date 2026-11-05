@@ -543,6 +543,18 @@ static void CG_RagdollAddWound( int entityNum, const vec3_t point, const vec3_t 
 	trap_R_AddWound( entityNum, point, dir );
 }
 
+// armoured characters: heavy, so shots shove them about half as far
+static float CG_RagdollMassScale( int aiChar ) {
+	switch ( aiChar ) {
+	case AICHAR_PROTOSOLDIER:
+	case AICHAR_SUPERSOLDIER:
+	case AICHAR_SUPERSOLDIER_LAB:
+		return 0.45f;
+	default:
+		return 1.0f;
+	}
+}
+
 static qboolean CG_RagdollEligible( centity_t *cent ) {
 	if ( !cg_ragdoll.integer || cent->currentState.number == cg.snap->ps.clientNum ) {
 		return qfalse;
@@ -552,10 +564,7 @@ static qboolean CG_RagdollEligible( centity_t *cent ) {
 	case AICHAR_LOPER_SPECIAL:
 	case AICHAR_HELGA:
 	case AICHAR_HEINRICH:
-	case AICHAR_PROTOSOLDIER:
-	case AICHAR_SUPERSOLDIER:
-	case AICHAR_SUPERSOLDIER_LAB:
-		return qfalse;  // special deaths (bosses, lopers, armoured soldiers)
+		return qfalse;  // special deaths (bosses, lopers)
 	default:
 		return qtrue;
 	}
@@ -858,6 +867,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		} else if ( wf > 5.0f ) {
 			wf = 5.0f;
 		}
+		wf *= CG_RagdollMassScale( cg_entities[rd->entityNum].currentState.aiChar );
 		for ( i = 0; i < J_NUM; i++ ) {
 			float dd = DistanceSquared( rd->p[i], hp );
 			if ( dd < bestD ) {
@@ -1972,7 +1982,7 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 	{
 		vec3_t vel;
 		float f = CG_XbThrowScale();      // Ragdoll Launcher / Boot Camp skulls
-		float wf = CG_RagdollWeaponForce( rdShooter, len );
+		float wf = CG_RagdollWeaponForce( rdShooter, len ) * CG_RagdollMassScale( cg_entities[best->entityNum].currentState.aiChar );
 		// a body takes only so much shoving in a short time, so automatic
 		// fire jostles it rather than pushing it along the floor
 		if ( cg.time - best->shoveTime > 250 ) {

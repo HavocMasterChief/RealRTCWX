@@ -50,10 +50,10 @@ extern int tr_perfMdsVerts, tr_perfWoundVerts, tr_perfWoundMs;
 int tr_perfBackMs, tr_perfSwapMs;      // last frame's back end (and its swap), see RE_EndFrame / RB_SwapBuffers
 float tr_perfGpuMs;                    // GPU time of a recent frame (timer query, RB_SwapBuffers)
 extern int tr_perfDraws;
-extern Uint64 tr_perfDrawTicks;
+extern Uint64 tr_perfDrawTicks, tr_perfDlightTicks, tr_perfFlareTicks;
 static void R_UWP_PerfWatch( void ) {
 	static float gpu;
-	static Uint64 drawTicks;
+	static Uint64 drawTicks, dlTicks, flTicks;
 	static int draws;
 	static int start, frames, front, back, swap, shaders, surfs, verts, tris, dlv, flares, mds, wv, wms, ents, dls, maxms, last;
 	int now = ri.Milliseconds(), ms;
@@ -69,6 +69,9 @@ static void R_UWP_PerfWatch( void ) {
 	gpu += tr_perfGpuMs;
 	draws += tr_perfDraws;
 	drawTicks += tr_perfDrawTicks;
+	dlTicks += tr_perfDlightTicks;
+	flTicks += tr_perfFlareTicks;
+	tr_perfDlightTicks = tr_perfFlareTicks = 0;
 	tr_perfDraws = 0;
 	tr_perfDrawTicks = 0;
 	swap += tr_perfSwapMs;
@@ -105,7 +108,9 @@ static void R_UWP_PerfWatch( void ) {
 			if ( tr.refdef.num_dlights || backEnd.pc.c_flareTests ) {
 				char line[512];
 				int k;
-				Com_sprintf( line, sizeof( line ), "perf(lights): %i flare tests |", backEnd.pc.c_flareTests );
+				double f = 1000.0 / (double)SDL_GetPerformanceFrequency() / frames;
+				Com_sprintf( line, sizeof( line ), "perf(lights): %i flare tests | CPU a frame: flares %.1f ms, dynamic-light passes %.1f ms |",
+							 backEnd.pc.c_flareTests, (float)( flTicks * f ), (float)( dlTicks * f ) );
 				for ( k = 0; k < tr.refdef.num_dlights && k < 6; k++ ) {
 					const dlight_t *dl = &tr.refdef.dlights[k];
 					Q_strcat( line, sizeof( line ), va( " r%.0f (%.0f %.0f %.0f) rgb %.1f %.1f %.1f%s;", dl->radius,
@@ -119,6 +124,7 @@ static void R_UWP_PerfWatch( void ) {
 		gpu = 0;
 		draws = 0;
 		drawTicks = 0;
+		dlTicks = flTicks = 0;
 		frames = front = back = swap = shaders = surfs = verts = tris = dlv = flares = mds = wv = wms = ents = dls = maxms = 0;
 	}
 }

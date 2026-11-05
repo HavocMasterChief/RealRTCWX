@@ -375,12 +375,14 @@ def load_screen(name, background, ingame):
     d += button(f"{name}_del_yes", "Delete", 330, 236, 120, 24,
                 f"uiScript DelSavegame ; uiScript xbLoadSaves ; close {name}_delete", scale=".24")
     out += menu(f"{name}_delete", d, on_esc=f"close {name}_delete", fullscreen=0)
+
     return out
 
 
 def save_screen(name, background):
-    """In-game Save: the same list as Load. Y makes a new save (named after
-    the map, no typing), A overwrites the highlighted one after a check."""
+    """In-game Save: the same list as Load. Y makes a new save (named on an
+    on-screen keyboard, the mission and time to start with), A overwrites
+    the highlighted one after a check."""
     close = f"close {name}"
     back = f"{close} ; open ingame"
     body = background
@@ -436,7 +438,7 @@ def save_screen(name, background):
 		name padY
 		visible 0
 		decoration
-		action {{ uiScript xbSaveNew }}
+		action {{ uiScript xbSaveNameOpen }}
 	}}
 	itemDef {{
 		name padA
@@ -468,6 +470,21 @@ def save_screen(name, background):
     d += button(f"{name}_del_yes", "Delete", 330, 236, 120, 24,
                 f"uiScript DelSavegame ; uiScript xbLoadSaves ; close {name}_delete", scale=".24")
     out += menu(f"{name}_delete", d, on_esc=f"close {name}_delete", fullscreen=0)
+
+    # naming a new save: the keyboard is an ownerdraw (ui_main.c, UI_XbKb_*)
+    k = panel(60, 96, 520, 282, "Name your save")
+    k += '''
+	itemDef {
+		name padGrid
+		ownerdraw UI_XBOX_KEYBOARD
+		rect 80 128 480 240
+		forecolor 1 1 1 1
+		visible 1
+		decoration
+	}
+'''
+    k += hints("A  Type     B  Delete     X  Space     Y  Shift     START  Save     VIEW  Cancel")
+    out += menu(f"{name}_name", k, on_esc=f"close {name}_name", fullscreen=0)
     return out
 
 

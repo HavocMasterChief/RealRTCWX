@@ -156,7 +156,7 @@ itemDef
 		name padY
 		visible 0
 		decoration
-		action { uiScript xbSaveNew }
+		action { uiScript xbSaveNameOpen }
 	}
 	itemDef {
 		name padA
@@ -395,6 +395,77 @@ menuDef {
 		mouseEnter { setitemcolor ingame_save_del_yes backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor ingame_save_del_yes backcolor 1 1 1 .07 }
 		action { uiScript DelSavegame ; uiScript xbLoadSaves ; close ingame_save_delete }
+	}
+
+}
+
+menuDef {
+	name "ingame_save_name"
+	visible 0
+	fullscreen 0
+	rect 0 0 640 480
+	focusColor .9 .9 .9 1
+	style WINDOW_STYLE_FILLED
+	forecolor 0 0 0 0
+	backcolor 0 0 0 0
+	onOpen {  }
+	onEsc { close ingame_save_name }
+
+	itemDef {
+		rect 60 96 520 282
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .5
+		backcolor 0 0 0 .8
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		text "Name your save"
+		textfont UI_FONT_NORMAL
+		textscale .25
+		textalign ITEM_ALIGN_CENTER
+		textalignx 254
+		textaligny 14
+		rect 66 101 508 20
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .5
+		backcolor .3 0.5 0.2 .25
+		forecolor 1 1 1 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name padGrid
+		ownerdraw UI_XBOX_KEYBOARD
+		rect 80 128 480 240
+		forecolor 1 1 1 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		rect 0 445 640 20
+		style WINDOW_STYLE_FILLED
+		backcolor 0 0 0 .6
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		text "A  Type     B  Delete     X  Space     Y  Shift     START  Save     VIEW  Cancel"
+		textfont UI_FONT_BIG
+		textscale .22
+		textalign ITEM_ALIGN_CENTER
+		textalignx 320
+		textaligny 11
+		rect 0 448 640 14
+		forecolor 1 1 1 .9
+		visible 1
+		decoration
 	}
 
 }

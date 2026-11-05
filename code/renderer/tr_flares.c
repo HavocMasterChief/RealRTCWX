@@ -29,6 +29,13 @@ If you have questions concerning this license or the applicable additional terms
 // tr_flares.c
 
 #include "tr_local.h"
+#ifdef RTCW_UWP
+#ifdef USE_LOCAL_HEADERS
+#	include "SDL3/SDL_video.h"
+#else
+#	include <SDL3/SDL_video.h>
+#endif
+#endif
 
 /*
 =============================================================================
@@ -95,6 +102,9 @@ typedef struct flare_s {
 #define     MAX_FLARES      256
 
 flare_t r_flareStructs[MAX_FLARES];
+#ifdef RTCW_UWP
+static int flareGen[MAX_FLARES];    // bumped each time a struct takes a new flare (R_FlareDepthAsync)
+#endif
 flare_t     *r_activeFlares, *r_inactiveFlares;
 
 int flareCoeff;
@@ -210,6 +220,9 @@ void RB_AddFlare( void *surface, int fogNum, vec3_t point, vec3_t color, float s
 		f->inPortal = backEnd.viewParms.isPortal;
 		f->addedFrame = -1;
 		f->id = id;
+#ifdef RTCW_UWP
+		flareGen[f - r_flareStructs]++;     // (another flare now: forget its old depth)
+#endif
 	}
 
 	f->flags = flags;
@@ -341,6 +354,77 @@ FLARE BACK END
 RB_TestFlare
 ==================
 */
+#ifdef RTCW_UWP
+/*
+Flare depth through pixel-pack buffers, a ring of three: this frame's
+reads go into one, and the one written two frames ago (done on the GPU by
+now) is read back. Each flare struct has a generation so a reused one
+never gets another's depth. qfalse: no buffers (fall back to a direct read).
+*/
+#define FLARE_PBOS 3
+static GLuint flarePbo[FLARE_PBOS];
+static int flarePboInit, flarePboCur, flarePboFrame = -1;
+static int flarePboGen[FLARE_PBOS][MAX_FLARES];     // which generation each slot holds
+static float flareDepth[MAX_FLARES];                 // last depth that came back
+static int flareDepthGen[MAX_FLARES];
+static void ( APIENTRY *qglGetBufferSubDataX )( GLenum, GLintptr, GLsizeiptr, void * );
+static void ( APIENTRY *qglGenBuffersX )( GLsizei, GLuint * );
+static void ( APIENTRY *qglBindBufferX )( GLenum, GLuint );
+static void ( APIENTRY *qglBufferDataX )( GLenum, GLsizeiptr, const void *, GLenum );
+
+static qboolean R_FlareDepthAsync( flare_t *f, float *depth ) {
+	int slot = f - r_flareStructs, k;
+	if ( !flarePboInit ) {
+		qglGetBufferSubDataX = ( void ( APIENTRY * )( GLenum, GLintptr, GLsizeiptr, void * ) )SDL_GL_GetProcAddress( "glGetBufferSubData" );
+		qglGenBuffersX = ( void ( APIENTRY * )( GLsizei, GLuint * ) )SDL_GL_GetProcAddress( "glGenBuffers" );
+		qglBindBufferX = ( void ( APIENTRY * )( GLenum, GLuint ) )SDL_GL_GetProcAddress( "glBindBuffer" );
+		qglBufferDataX = ( void ( APIENTRY * )( GLenum, GLsizeiptr, const void *, GLenum ) )SDL_GL_GetProcAddress( "glBufferData" );
+		flarePboInit = ( qglGetBufferSubDataX && qglGenBuffersX && qglBindBufferX && qglBufferDataX ) ? 1 : -1;
+		if ( flarePboInit > 0 ) {
+			qglGenBuffersX( FLARE_PBOS, flarePbo );
+			for ( k = 0; k < FLARE_PBOS; k++ ) {
+				qglBindBufferX( GL_PIXEL_PACK_BUFFER, flarePbo[k] );
+				qglBufferDataX( GL_PIXEL_PACK_BUFFER, MAX_FLARES * sizeof( float ), NULL, GL_STREAM_READ );
+			}
+			qglBindBufferX( GL_PIXEL_PACK_BUFFER, 0 );
+		}
+		ri.Printf( PRINT_ALL, "flares: depth tests %s\n", flarePboInit > 0 ? "asynchronous" : "direct (no pixel buffers)" );
+	}
+	if ( flarePboInit < 0 || slot < 0 || slot >= MAX_FLARES ) {
+		return qfalse;
+	}
+	// a new frame: move on in the ring and collect the oldest buffer's depths
+	if ( backEnd.viewParms.frameCount != flarePboFrame ) {
+		static float got[MAX_FLARES];
+		int old;
+		flarePboFrame = backEnd.viewParms.frameCount;
+		flarePboCur = ( flarePboCur + 1 ) % FLARE_PBOS;
+		old = ( flarePboCur + 1 ) % FLARE_PBOS;     // written two frames ago
+		qglBindBufferX( GL_PIXEL_PACK_BUFFER, flarePbo[old] );
+		qglGetBufferSubDataX( GL_PIXEL_PACK_BUFFER, 0, MAX_FLARES * sizeof( float ), got );
+		qglBindBufferX( GL_PIXEL_PACK_BUFFER, 0 );
+		for ( k = 0; k < MAX_FLARES; k++ ) {
+			if ( flarePboGen[old][k] ) {
+				flareDepth[k] = got[k];
+				flareDepthGen[k] = flarePboGen[old][k];
+				flarePboGen[old][k] = 0;
+			}
+		}
+	}
+	if ( !flareGen[slot] ) {
+		flareGen[slot] = 1;
+	}
+	// this frame's read, for later
+	qglBindBufferX( GL_PIXEL_PACK_BUFFER, flarePbo[flarePboCur] );
+	qglReadPixels( f->windowX, f->windowY, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, (void *)( (intptr_t)slot * sizeof( float ) ) );
+	qglBindBufferX( GL_PIXEL_PACK_BUFFER, 0 );
+	flarePboGen[flarePboCur][slot] = flareGen[slot];
+	// what came back for this flare (none yet: as if nothing's in front)
+	*depth = flareDepthGen[slot] == flareGen[slot] ? flareDepth[slot] : 1.0f;
+	return qtrue;
+}
+#endif
+
 void RB_TestFlare( flare_t *f ) {
 #ifndef USE_OPENGLES
 	float			depth;
@@ -359,6 +443,15 @@ void RB_TestFlare( flare_t *f ) {
 #ifdef USE_OPENGLES
 	screenZ = 0;
 #else
+#ifdef RTCW_UWP
+	// RealRTCWX: a read straight back stalls the whole frame (CPU waits
+	// for the GPU, the GPU then sits idle) - on Xbox each flare, corona and
+	// dynamic light cost several ms that way. Read it into a buffer instead
+	// and use what came back a couple of frames ago.
+	if ( !tr.msaaFbo && R_FlareDepthAsync( f, &depth ) ) {
+		glState.finishCalled = qfalse;
+	} else
+#endif
 	if ( !FBO_ReadDepthPixel( f->windowX, f->windowY, &depth ) ) {
 		qglReadPixels( f->windowX, f->windowY, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth );
 	}

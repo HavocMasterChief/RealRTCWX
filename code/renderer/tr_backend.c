@@ -1671,9 +1671,19 @@ const void  *RB_SwapBuffers( const void *data ) {
 #endif
 
 
+#ifdef RTCW_UWP
+	// RealRTCWX: no glFinish before every swap. It made the CPU wait for
+	// the GPU to finish the whole frame, then the GPU wait for the CPU to
+	// build the next: neither ever worked while the other did. The swap
+	// paces frames by itself. (r_finish 1 still forces it.)
+	if ( r_finish->integer && !glState.finishCalled ) {
+		qglFinish();
+	}
+#else
 	if ( !glState.finishCalled ) {
 		qglFinish();
 	}
+#endif
 
 	GLimp_LogComment( "***************** RB_SwapBuffers *****************\n\n\n" );
 

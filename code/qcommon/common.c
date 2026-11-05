@@ -131,6 +131,7 @@ int time_backend;           // renderer backend time
 #ifdef RTCW_UWP
 static int com_uwpServerMs, com_uwpClientMs;
 int com_uwpCgameMs;     // cgame's frame, incl. the scene it hands the renderer (cl_cgame.c)
+int com_uwpLastServerMs, com_uwpLastClientMs, com_uwpLastCgameMs, com_uwpLastEventsMs;  // the last frame alone (hitch lines)
 #endif
 
 int com_frameTime;
@@ -203,6 +204,9 @@ static qboolean Com_PrintFlood( const char *msg ) {
 
 	if ( inNote || !msg[0] || msg[0] == '\n' ) {
 		return qfalse;
+	}
+	if ( !strncmp( msg, "  bone ", 7 ) ) {
+		return qfalse;  // RealRTCWX: a skeleton listing is never flood (ragdoll diagnostics)
 	}
 	for ( p = msg; *p; p++ ) {
 		if ( *p >= '0' && *p <= '9' ) {
@@ -2945,7 +2949,8 @@ void Com_Frame( void ) {
 	{
 		int t0 = Sys_Milliseconds();
 		SV_Frame( msec );
-		com_uwpServerMs += Sys_Milliseconds() - t0;
+		com_uwpLastServerMs = Sys_Milliseconds() - t0;
+		com_uwpServerMs += com_uwpLastServerMs;
 	}
 #else
 	SV_Frame( msec );
@@ -2993,6 +2998,7 @@ void Com_Frame( void ) {
 		static int start, frames;
 		CL_Frame( msec );
 		now = Sys_Milliseconds();
+		com_uwpLastClientMs = now - t0;
 		com_uwpClientMs += now - t0;
 		// RealRTCWX: under 45 FPS over 2 s: log the server (AI, game) and
 		// client (cgame, UI, renderer) shares of the frame

@@ -101,6 +101,19 @@ static void R_UWP_PerfWatch( void ) {
 					   shaders / frames, surfs / frames, verts / frames / 1000, tris / frames / 1000,
 					   ents / frames, dls / frames, dlv / frames, flares / frames,
 					   mds / frames / 1000, wv / frames / 1000, (float)wms / frames );
+			// the dynamic lights (and flare tests) of the last frame: which ones cost
+			if ( tr.refdef.num_dlights || backEnd.pc.c_flareTests ) {
+				char line[512];
+				int k;
+				Com_sprintf( line, sizeof( line ), "perf(lights): %i flare tests |", backEnd.pc.c_flareTests );
+				for ( k = 0; k < tr.refdef.num_dlights && k < 6; k++ ) {
+					const dlight_t *dl = &tr.refdef.dlights[k];
+					Q_strcat( line, sizeof( line ), va( " r%.0f (%.0f %.0f %.0f) rgb %.1f %.1f %.1f%s;", dl->radius,
+							  dl->origin[0], dl->origin[1], dl->origin[2], dl->color[0], dl->color[1], dl->color[2],
+							  dl->overdraw ? va( " x%i", dl->overdraw + 1 ) : "" ) );
+				}
+				ri.Printf( PRINT_ALL, "%s\n", line );
+			}
 		}
 		start = now;
 		gpu = 0;

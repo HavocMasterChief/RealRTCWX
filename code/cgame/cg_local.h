@@ -397,6 +397,8 @@ typedef struct markPoly_s {
 	polyVert_t verts[MAX_VERTS_ON_POLY];
 
 	int duration;           // Ridah
+	vec3_t center;          // RealRTCWX: bounding sphere, to skip marks out of view
+	float radius;
 } markPoly_t;
 
 //----(SA)	moved in from cg_view.c
@@ -2376,6 +2378,7 @@ void CG_RagdollPerfFrame( void );
 enum { CGPERF_ENTS, CGPERF_MARKS, CGPERF_GORE, CGPERF_PARTICLES, CGPERF_LOCALENTS, CGPERF_NUM };
 extern int cg_perfMs[CGPERF_NUM];
 int CG_MarksActive( void );
+extern int cg_marksDrawn;
 int CG_GoreDropsActive( void );
 int CG_RagdollLimbsActive( void );
 void CG_AchInit( void );

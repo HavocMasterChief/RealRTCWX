@@ -3231,6 +3231,9 @@ static void UI_XbAch_Draw( rectDef_t *rect, vec4_t color ) {
 	}
 }
 
+static void UI_XbKb_Draw( rectDef_t *rect );
+static qboolean UI_XbKb_HandleKey( int key );
+
 static void UI_OwnerDraw( float x, float y, float w, float h, float text_x, float text_y, int ownerDraw, int ownerDrawFlags, int align, float special, int font, float scale, vec4_t color, qhandle_t shader, int textStyle ) {
 	rectDef_t rect;
 
@@ -3242,6 +3245,9 @@ static void UI_OwnerDraw( float x, float y, float w, float h, float text_x, floa
 	switch ( ownerDraw ) {
 	case UI_XBOX_ACHIEVEMENTS:
 		UI_XbAch_Draw( &rect, color );
+		break;
+	case UI_XBOX_KEYBOARD:
+		UI_XbKb_Draw( &rect );
 		break;
 	case UI_HANDICAP:
 		UI_DrawHandicap( &rect, font, scale, color, textStyle );
@@ -3896,6 +3902,8 @@ static qboolean UI_OwnerDrawHandleKey( int ownerDraw, int flags, float *special,
 	switch ( ownerDraw ) {
 	case UI_XBOX_ACHIEVEMENTS:
 		return UI_XbAch_HandleKey( key );
+	case UI_XBOX_KEYBOARD:
+		return UI_XbKb_HandleKey( key );
 	case UI_HANDICAP:
 		return UI_Handicap_HandleKey( flags, special, key );
 		break;
@@ -4197,6 +4205,7 @@ static void UI_DelSavegame( void ) {
 	i = UI_SavegameIndexFromName2( ui_savegameName.string );
 
 	ret = trap_FS_Delete( va( "save/%s.svg", uiInfo.savegameList[i].savegameFile ) );
+	trap_FS_Delete( va( "save/%s.nam", uiInfo.savegameList[i].savegameFile ) );     // RealRTCWX: its name
 
 	if ( ret ) {
 		Com_Printf( "Deleted savegame: %s.svg\n", uiInfo.savegameList[i].savegameName );
@@ -5221,6 +5230,25 @@ static void UI_XbLoadSaves( void ) {
 		if ( f ) {
 			trap_FS_FCloseFile( f );
 		}
+		// a name the player gave it (save/<file>.nam, see UI_XbKbSave)
+		f = 0;
+		{
+			char nm[64];
+			int len = trap_FS_FOpenFile( va( "save/%s.nam", sg->savegameFile ), &f, FS_READ );
+			if ( len > (int)sizeof( nm ) - 1 ) {
+				len = sizeof( nm ) - 1;
+			}
+			if ( len > 0 ) {
+				trap_FS_Read( nm, len, f );
+				nm[len] = 0;
+				if ( nm[0] ) {
+					sg->savegameName = String_Alloc( nm );
+				}
+			}
+		}
+		if ( f ) {
+			trap_FS_FCloseFile( f );
+		}
 		if ( !Q_stricmp( sg->savegameFile, "quicksave" ) ) {
 			sg->savegameName = "Quick Save";
 		} else if ( !Q_stricmp( sg->savegameFile, "lastcheckpoint" ) ) {
@@ -5241,23 +5269,24 @@ static void UI_XbLoadSaves( void ) {
 	Menu_SetFeederSelection( NULL, FEEDER_SAVEGAMES, 0, NULL );
 }
 
-// In-game Save, Y: a new save named after the map ("escape1_3"), no typing
-static void UI_XbSaveNew( void ) {
-	char map[MAX_QPATH], save[MAX_QPATH];
+// a file name for a new save, from the map ("escape1_3"): the name the
+// player sees is kept apart from it (save/<file>.nam), so it can be anything
+static void UI_XbNewSaveFile( char *save, int size ) {
+	char map[MAX_QPATH];
 	int n, i;
 
 	trap_Cvar_VariableStringBuffer( "mapname", map, sizeof( map ) );
 	if ( !map[0] ) {
 		Q_strncpyz( map, "save", sizeof( map ) );
 	}
-	for ( i = 0; map[i]; i++ ) {    // only characters a save name may have
+	for ( i = 0; map[i]; i++ ) {    // only characters a save file may have
 		if ( !( ( map[i] >= 'a' && map[i] <= 'z' ) || ( map[i] >= 'A' && map[i] <= 'Z' ) ||
 				( map[i] >= '0' && map[i] <= '9' ) || map[i] == '_' ) ) {
 			map[i] = '_';
 		}
 	}
 	for ( n = 1; n < 1000; n++ ) {
-		Com_sprintf( save, sizeof( save ), "%s_%i", map, n );
+		Com_sprintf( save, size, "%s_%i", map, n );
 		for ( i = 0; i < uiInfo.savegameCount; i++ ) {
 			if ( uiInfo.savegameList[i].savegameFile && !Q_stricmp( uiInfo.savegameList[i].savegameFile, save ) ) {
 				break;
@@ -5267,8 +5296,234 @@ static void UI_XbSaveNew( void ) {
 			break;      // not taken
 		}
 	}
+}
+
+// (kept for the old "xbSaveNew" script: a new save with no name typed)
+static void UI_XbSaveNew( void ) {
+	char save[MAX_QPATH];
+	UI_XbNewSaveFile( save, sizeof( save ) );
 	trap_Cmd_ExecuteText( EXEC_APPEND, va( "savegame %s\n", save ) );
 	Menus_CloseAll();
+}
+
+/*
+===============================================================================
+RealRTCWX: on-screen keyboard (naming a save)
+
+The Xbox's own keyboard doesn't come up for this kind of app, so the save
+screen's New Save opens this: a letter grid driven by the pad (ownerdraw
+UI_XBOX_KEYBOARD, an item named padGrid gets the keys). The name starts as
+the mission and the time; A types, B deletes (or cancels when empty),
+X space, Y shift, Start (or the SAVE key) saves, View cancels.
+===============================================================================
+*/
+#define XBKB_COLS   10
+#define XBKB_ROWS   5
+#define XBKB_MAXLEN 28
+
+static const char *xbKbRows[2][4] = {
+	{ "1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm,.'" },
+	{ "!?#&()+=:/", "QWERTYUIOP", "ASDFGHJKL_", "ZXCVBNM<>@" }
+};
+// the bottom row: SHIFT (2 keys wide), SPACE (4), DEL (2), SAVE (2)
+static const struct { const char *label; int col0, cols; } xbKbSpecial[4] = {
+	{ "SHIFT", 0, 2 }, { "SPACE", 2, 4 }, { "DEL", 6, 2 }, { "SAVE", 8, 2 }
+};
+static char xbKbName[XBKB_MAXLEN + 1];
+static int xbKbRow, xbKbCol, xbKbShift, xbKbBlink;
+
+static void UI_XbKbOpen( void ) {
+	char map[MAX_QPATH];
+	qtime_t q;
+	static const char *mon[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+	const char *mission;
+
+	trap_Cvar_VariableStringBuffer( "mapname", map, sizeof( map ) );
+	mission = UI_XbMissionName( map );
+	trap_RealTime( &q );
+	Com_sprintf( xbKbName, sizeof( xbKbName ), "%s %s %i %i:%02i%s", mission && mission[0] ? mission : "Save",
+				 mon[q.tm_mon % 12], q.tm_mday, ( q.tm_hour + 11 ) % 12 + 1, q.tm_min, q.tm_hour < 12 ? "am" : "pm" );
+	xbKbName[XBKB_MAXLEN] = 0;
+	xbKbRow = 4;
+	xbKbCol = 8;    // on SAVE: Start or A takes the suggestion as it is
+	xbKbShift = 0;
+	Menus_OpenByName( "ingame_save_name" );
+}
+
+static void UI_XbKbType( char c ) {
+	int len = strlen( xbKbName );
+	if ( len < XBKB_MAXLEN && c >= ' ' && c != '"' && c != '\\' && c != ';' && c != '%' ) {
+		xbKbName[len] = c;
+		xbKbName[len + 1] = 0;
+	}
+}
+
+static void UI_XbKbSave( void ) {
+	char save[MAX_QPATH], name[XBKB_MAXLEN + 8];
+	fileHandle_t f;
+	int i, n;
+
+	// trim, and keep names apart (the list finds saves by name)
+	Q_strncpyz( name, xbKbName, sizeof( name ) );
+	for ( i = strlen( name ) - 1; i >= 0 && name[i] == ' '; i-- ) {
+		name[i] = 0;
+	}
+	if ( !name[0] ) {
+		Q_strncpyz( name, "Save", sizeof( name ) );
+	}
+	for ( n = 2; n < 100; n++ ) {
+		for ( i = 0; i < uiInfo.savegameCount; i++ ) {
+			if ( uiInfo.savegameList[i].savegameName && !Q_stricmp( uiInfo.savegameList[i].savegameName, name ) ) {
+				break;
+			}
+		}
+		if ( i == uiInfo.savegameCount ) {
+			break;
+		}
+		Com_sprintf( name, sizeof( name ), "%s (%i)", xbKbName, n );
+	}
+	UI_XbNewSaveFile( save, sizeof( save ) );
+	if ( trap_FS_FOpenFile( va( "save/%s.nam", save ), &f, FS_WRITE ) >= 0 && f ) {
+		trap_FS_Write( name, strlen( name ), f );
+		trap_FS_FCloseFile( f );
+	}
+	trap_Cmd_ExecuteText( EXEC_APPEND, va( "savegame %s\n", save ) );
+	Menus_CloseAll();
+}
+
+static qboolean UI_XbKb_HandleKey( int key ) {
+	int len = strlen( xbKbName );
+	switch ( key ) {
+	case K_PAD0_DPAD_LEFT: case K_LEFTARROW: case K_PAD0_LEFTSTICK_LEFT:
+		if ( xbKbRow == XBKB_ROWS - 1 ) {
+			int k;
+			for ( k = 3; k >= 0; k-- ) {
+				if ( xbKbCol >= xbKbSpecial[k].col0 && xbKbCol < xbKbSpecial[k].col0 + xbKbSpecial[k].cols ) {
+					break;
+				}
+			}
+			k = ( k + 3 ) % 4;
+			xbKbCol = xbKbSpecial[k].col0;
+		} else {
+			xbKbCol = ( xbKbCol + XBKB_COLS - 1 ) % XBKB_COLS;
+		}
+		return qtrue;
+	case K_PAD0_DPAD_RIGHT: case K_RIGHTARROW: case K_PAD0_LEFTSTICK_RIGHT:
+		if ( xbKbRow == XBKB_ROWS - 1 ) {
+			int k;
+			for ( k = 0; k < 4; k++ ) {
+				if ( xbKbCol >= xbKbSpecial[k].col0 && xbKbCol < xbKbSpecial[k].col0 + xbKbSpecial[k].cols ) {
+					break;
+				}
+			}
+			k = ( k + 1 ) % 4;
+			xbKbCol = xbKbSpecial[k].col0;
+		} else {
+			xbKbCol = ( xbKbCol + 1 ) % XBKB_COLS;
+		}
+		return qtrue;
+	case K_PAD0_DPAD_UP: case K_UPARROW: case K_PAD0_LEFTSTICK_UP:
+		xbKbRow = ( xbKbRow + XBKB_ROWS - 1 ) % XBKB_ROWS;
+		return qtrue;
+	case K_PAD0_DPAD_DOWN: case K_DOWNARROW: case K_PAD0_LEFTSTICK_DOWN:
+		xbKbRow = ( xbKbRow + 1 ) % XBKB_ROWS;
+		return qtrue;
+	case K_PAD0_A: case K_ENTER: case K_KP_ENTER:
+		if ( xbKbRow < XBKB_ROWS - 1 ) {
+			UI_XbKbType( xbKbRows[xbKbShift][xbKbRow][xbKbCol] );
+		} else if ( xbKbCol < 2 ) {
+			xbKbShift = !xbKbShift;
+		} else if ( xbKbCol < 6 ) {
+			UI_XbKbType( ' ' );
+		} else if ( xbKbCol < 8 ) {
+			if ( len ) {
+				xbKbName[len - 1] = 0;
+			}
+		} else {
+			UI_XbKbSave();
+		}
+		return qtrue;
+	case K_PAD0_B: case K_BACKSPACE:
+		if ( len ) {
+			xbKbName[len - 1] = 0;
+		} else {
+			Menus_CloseByName( "ingame_save_name" );    // nothing left to delete: back out
+		}
+		return qtrue;
+	case K_PAD0_X:
+		UI_XbKbType( ' ' );
+		return qtrue;
+	case K_PAD0_Y:
+		xbKbShift = !xbKbShift;
+		return qtrue;
+	case K_PAD0_START:
+		UI_XbKbSave();
+		return qtrue;
+	case K_PAD0_BACK:
+		Menus_CloseByName( "ingame_save_name" );
+		return qtrue;
+	case K_PAD0_LEFTSHOULDER:
+		if ( len ) {
+			xbKbName[len - 1] = 0;
+		}
+		return qtrue;
+	case K_PAD0_RIGHTSHOULDER:
+		UI_XbKbType( ' ' );
+		return qtrue;
+	default:
+		// a real keyboard types too
+		if ( key >= ' ' && key < 127 ) {
+			UI_XbKbType( (char)key );
+			return qtrue;
+		}
+		return qfalse;
+	}
+}
+
+static void UI_XbKb_Draw( rectDef_t *rect ) {
+	static const vec4_t brass = { 0.79f, 0.63f, 0.26f, 1 }, dark = { 0.05f, 0.04f, 0.03f, 0.9f },
+						keyBg = { 0.12f, 0.11f, 0.09f, 0.95f }, keySel = { 0.45f, 0.36f, 0.15f, 1 };
+	vec4_t c;
+	float kw = rect->w / XBKB_COLS, kh = 30, x, y, y0;
+	int r, col, k;
+
+	// the name so far, with a blinking cursor
+	UI_FillRect( rect->x, rect->y, rect->w, 34, dark );
+	UI_DrawRect( rect->x, rect->y, rect->w, 34, brass );
+	Vector4Set( c, 0.96f, 0.92f, 0.82f, 1 );
+	xbKbBlink = ( uiInfo.uiDC.realTime / 400 ) & 1;
+	Text_Paint( rect->x + 10, rect->y + 24, UI_FONT_BIG, 0.3f, c, va( "%s%s", xbKbName, xbKbBlink ? "_" : " " ), 0, 0, ITEM_TEXTSTYLE_SHADOWED );
+
+	y0 = rect->y + 46;
+	for ( r = 0; r < XBKB_ROWS - 1; r++ ) {
+		for ( col = 0; col < XBKB_COLS; col++ ) {
+			char ch[2];
+			qboolean sel = ( r == xbKbRow && col == xbKbCol );
+			x = rect->x + col * kw;
+			y = y0 + r * ( kh + 4 );
+			UI_FillRect( x + 2, y, kw - 4, kh, sel ? keySel : keyBg );
+			UI_DrawRect( x + 2, y, kw - 4, kh, sel ? brass : dark );
+			ch[0] = xbKbRows[xbKbShift][r][col];
+			ch[1] = 0;
+			Vector4Set( c, 0.94f, 0.89f, 0.78f, 1 );
+			Text_Paint( x + kw / 2 - 5, y + 21, UI_FONT_BIG, 0.3f, c, ch, 0, 0, ITEM_TEXTSTYLE_NORMAL );
+		}
+	}
+	y = y0 + ( XBKB_ROWS - 1 ) * ( kh + 4 );
+	for ( k = 0; k < 4; k++ ) {
+		qboolean sel = ( xbKbRow == XBKB_ROWS - 1 && xbKbCol >= xbKbSpecial[k].col0 &&
+						 xbKbCol < xbKbSpecial[k].col0 + xbKbSpecial[k].cols );
+		const char *lab = xbKbSpecial[k].label;
+		x = rect->x + xbKbSpecial[k].col0 * kw;
+		UI_FillRect( x + 2, y, kw * xbKbSpecial[k].cols - 4, kh, sel ? keySel : keyBg );
+		UI_DrawRect( x + 2, y, kw * xbKbSpecial[k].cols - 4, kh, sel ? brass : dark );
+		if ( k == 0 && xbKbShift ) {
+			lab = "shift";
+		}
+		Vector4Set( c, 0.94f, 0.89f, 0.78f, 1 );
+		Text_Paint( x + kw * xbKbSpecial[k].cols / 2 - Text_Width( lab, UI_FONT_BIG, 0.24f, 0 ) / 2, y + 20, UI_FONT_BIG, 0.24f, c, lab, 0, 0,
+					ITEM_TEXTSTYLE_NORMAL );
+	}
 }
 
 // In-game Save, A (after "Overwrite?"): over the highlighted save
@@ -5384,6 +5639,9 @@ static void UI_RunMenuScript( char **args ) {
 		}
 		if ( Q_stricmp( name, "xbSaveNew" ) == 0 ) {
 			UI_XbSaveNew();
+			return;
+		} else if ( Q_stricmp( name, "xbSaveNameOpen" ) == 0 ) {
+			UI_XbKbOpen();      // New Save: name it first
 			return;
 		} else if ( Q_stricmp( name, "xbSaveOverAsk" ) == 0 ) {
 			if ( uiInfo.savegameCount ) {

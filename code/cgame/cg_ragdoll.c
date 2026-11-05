@@ -2227,11 +2227,11 @@ void CG_RagdollPerfFrame( void ) {
 		float avg = (float)( now - start ) / frames;
 		if ( avg > 22.0f ) {
 			CG_Printf( "perf(cgame): %.0f FPS | bodies drawn %.1f, moving %.1f, %.1f sim steps, ragdoll %.1f ms a frame | "
-					   "entities %.1f marks %.1f gore %.1f particles %.1f local %.1f ms | %i marks %i drops %i limbs\n",
+					   "entities %.1f marks %.1f gore %.1f particles %.1f local %.1f ms | %i marks (%i drawn) %i drops %i limbs\n",
 					   1000.0f / avg, (float)bodies / frames, (float)moving / frames, (float)steps / frames, (float)ms / frames,
 					   (float)part[CGPERF_ENTS] / frames, (float)part[CGPERF_MARKS] / frames, (float)part[CGPERF_GORE] / frames,
 					   (float)part[CGPERF_PARTICLES] / frames, (float)part[CGPERF_LOCALENTS] / frames,
-					   CG_MarksActive(), CG_GoreDropsActive(), CG_RagdollLimbsActive() );
+					   CG_MarksActive(), cg_marksDrawn, CG_GoreDropsActive(), CG_RagdollLimbsActive() );
 		}
 		start = now;
 		frames = bodies = moving = steps = ms = 0;
@@ -2317,6 +2317,12 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	body->charLevel = CG_RagdollCharLevel( cent->currentState.number );
 
 	rd = CG_RagdollFind( cent->currentState.number );
+	if ( ( cent->currentState.eFlags & EF_DEAD ) && cg_ragdoll.integer && !CG_RagdollEligible( cent ) &&
+		 cent->currentState.number != cg.snap->ps.clientNum ) {
+		// (log the skeleton of the characters left out too, once per model:
+		// to map them later)
+		CG_RagdollWhyNot( cent, body, "left out (special death)" );
+	}
 	if ( !( cent->currentState.eFlags & EF_DEAD ) || !CG_RagdollEligible( cent ) ) {
 		if ( rd ) {     // revived / respawned / turned off
 			trap_R_SetRagdoll( rd->slot, NULL );

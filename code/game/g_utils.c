@@ -756,6 +756,18 @@ void G_Sound( gentity_t *ent, int soundIndex ) {
 G_AnimScriptSound
 =============
 */
+static qboolean G_AnimSoundIsFlame( int soundIndex ) {
+	char name[MAX_QPATH];
+	int i;
+	trap_GetConfigstring( CS_SOUNDS + soundIndex, name, sizeof( name ) );
+	for ( i = 0; name[i]; i++ ) {
+		if ( !Q_stricmpn( name + i, "flame", 5 ) || !Q_stricmpn( name + i, "burn", 4 ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 void G_AnimScriptSound( int soundIndex, vec3_t org, int client ) {
 	gentity_t *e;
 	e = &g_entities[client];
@@ -765,7 +777,8 @@ void G_AnimScriptSound( int soundIndex, vec3_t org, int client ) {
 		 e->aiCharacter != AICHAR_LOPER && e->aiCharacter != AICHAR_LOPER_SPECIAL &&
 		 e->aiCharacter != AICHAR_HELGA && e->aiCharacter != AICHAR_HEINRICH &&
 		 e->aiCharacter != AICHAR_PROTOSOLDIER && e->aiCharacter != AICHAR_SUPERSOLDIER &&
-		 e->aiCharacter != AICHAR_SUPERSOLDIER_LAB ) {   // (those don't ragdoll)
+		 e->aiCharacter != AICHAR_SUPERSOLDIER_LAB &&    // (those don't ragdoll)
+		 !G_AnimSoundIsFlame( soundIndex ) ) {            // (the burning scream still plays)
 		static int logged;
 		if ( logged < 6 ) {
 			char name[MAX_QPATH];

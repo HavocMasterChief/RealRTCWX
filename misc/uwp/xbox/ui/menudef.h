@@ -341,6 +341,7 @@ If you have questions concerning this license or the applicable additional terms
 #define UI_ARMORY_WEAPON_DESC       268    // hub armory: icon + description of the currently-selected weapon
 #define UI_ARMORY_EQUIP_DESC        269    // hub armory: icon + description of the currently-selected equipment item
 #define UI_XBOX_ACHIEVEMENTS        290    // RealRTCWX: achievements browser (grid of icons + details), item named padGrid
+#define UI_XBOX_KEYBOARD            291    // RealRTCWX: on-screen keyboard (naming a save), item named padGrid
 #define UI_ARMORY_WEAPON_PRICE      277    // hub armory: "Price: N" for the currently-selected weapon, fixed position (separate from UI_ARMORY_WEAPON_DESC's flowed text)
 
 #define UI_CARDGAME_CHIPS           270    // Malta hub War card game: chip / bet / pot readout

@@ -3146,7 +3146,14 @@ void CL_Frame( int msec ) {
 		static int lastHitch;
 		if ( Sys_Milliseconds() - lastHitch > 1000 ) {
 			lastHitch = Sys_Milliseconds();
-			Com_Printf( "hitch: %i ms frame (time %i)\n", msec, cl.serverTime );
+			extern int com_uwpLastServerMs, com_uwpLastClientMs, com_uwpLastCgameMs;
+			extern int tr_perfBackMs, tr_perfSwapMs;
+			// (where the previous frame's time went: if these don't add up
+			// to it, the time was spent outside the game - waiting on the
+			// display, the system, a file)
+			Com_Printf( "hitch: %i ms frame (time %i) | last frame: game/AI %i, client %i (cgame %i, render back end %i, swap %i) ms\n",
+						msec, cl.serverTime, com_uwpLastServerMs, com_uwpLastClientMs, com_uwpLastCgameMs,
+						tr_perfBackMs, tr_perfSwapMs );
 		}
 	}
 #endif

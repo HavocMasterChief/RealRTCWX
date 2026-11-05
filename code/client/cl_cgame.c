@@ -1136,10 +1136,11 @@ CL_CGameRendering
 void CL_CGameRendering( stereoFrame_t stereo ) {
 #ifdef RTCW_UWP
 	{
-		extern int com_uwpCgameMs;
+		extern int com_uwpCgameMs, com_uwpLastCgameMs;
 		int t0 = Sys_Milliseconds();
 		VM_Call( cgvm, CG_DRAW_ACTIVE_FRAME, cl.serverTime, stereo, clc.demoplaying );
-		com_uwpCgameMs += Sys_Milliseconds() - t0;
+		com_uwpLastCgameMs = Sys_Milliseconds() - t0;
+		com_uwpCgameMs += com_uwpLastCgameMs;
 	}
 #else
 	VM_Call( cgvm, CG_DRAW_ACTIVE_FRAME, cl.serverTime, stereo, clc.demoplaying );

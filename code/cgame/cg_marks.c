@@ -325,9 +325,62 @@ void CG_ImpactMark( qhandle_t markShader, const vec3_t origin, const vec3_t dir,
 		mark->color[3] = alpha;
 		mark->duration = duration;
 		memcpy( mark->verts, verts, mf->numPoints * sizeof( verts[0] ) );
+		{
+			int k;
+			float r2 = 0;
+			VectorClear( mark->center );
+			for ( k = 0; k < mf->numPoints; k++ ) {
+				VectorAdd( mark->center, verts[k].xyz, mark->center );
+			}
+			VectorScale( mark->center, 1.0f / ( mf->numPoints ? mf->numPoints : 1 ), mark->center );
+			for ( k = 0; k < mf->numPoints; k++ ) {
+				float d = DistanceSquared( mark->center, verts[k].xyz );
+				if ( d > r2 ) {
+					r2 = d;
+				}
+			}
+			mark->radius = sqrt( r2 ) + 1.0f;
+		}
 	}
 }
 
+
+int cg_marksDrawn;      // (the perf line)
+static vec3_t cullOrg, cullAxis[3];
+static float cullTanX, cullTanY;
+static qboolean cullOn;
+
+static void CG_MarkCullSetup( void ) {
+	cullOn = cg.refdef.fov_x > 1 && cg.refdef.fov_x < 179 && cg.refdef.fov_y > 1 && cg.refdef.fov_y < 179;
+	VectorCopy( cg.refdef.vieworg, cullOrg );
+	AxisCopy( cg.refdef.viewaxis, cullAxis );
+	cullTanX = tan( cg.refdef.fov_x * ( M_PI / 360.0f ) );
+	cullTanY = tan( cg.refdef.fov_y * ( M_PI / 360.0f ) );
+}
+
+// outside the view (with its whole bounding sphere), or very far away
+static qboolean CG_MarkCulled( const markPoly_t *mp ) {
+	vec3_t d;
+	float f, s, u, r = mp->radius;
+	if ( !cullOn || r <= 0 ) {
+		return qfalse;  // (an old mark with no sphere)
+	}
+	VectorSubtract( mp->center, cullOrg, d );
+	f = DotProduct( d, cullAxis[0] );
+	if ( f < -r || f > 6000.0f + r ) {
+		return qtrue;   // behind, or beyond anything you'd make out
+	}
+	s = DotProduct( d, cullAxis[1] );
+	u = DotProduct( d, cullAxis[2] );
+	// sphere against the side planes (with the sphere's size along them)
+	if ( fabs( s ) - r * 1.5f > ( f > 0 ? f : 0 ) * cullTanX ) {
+		return qtrue;
+	}
+	if ( fabs( u ) - r * 1.5f > ( f > 0 ? f : 0 ) * cullTanY ) {
+		return qtrue;
+	}
+	return qfalse;
+}
 
 /*
 ===============
@@ -336,6 +389,7 @@ CG_AddMarks
 */
 
 void CG_AddMarks( void ) {
+	int drawn = 0;
 	int j;
 	markPoly_t  *mp, *next;
 	int t;
@@ -344,6 +398,7 @@ void CG_AddMarks( void ) {
 	if ( !cg_markTime.integer ) {
 		return;
 	}
+	CG_MarkCullSetup();
 
 	mp = cg_activeMarkPolys.nextMark;
 	for ( ; mp != &cg_activeMarkPolys ; mp = next ) {
@@ -356,6 +411,14 @@ void CG_AddMarks( void ) {
 			CG_FreeMarkPoly( mp );
 			continue;
 		}
+
+		// RealRTCWX: only what can be seen gets drawn (the original sent
+		// every mark on the map to the renderer every frame; with Max Blood
+		// that's thousands, and it cost the frame rate)
+		if ( CG_MarkCulled( mp ) ) {
+			continue;
+		}
+		drawn++;
 
 		// fade out the energy bursts
 		if ( mp->markShader == cgs.media.energyMarkShader ) {
@@ -412,5 +475,6 @@ void CG_AddMarks( void ) {
 
 		trap_R_AddPolyToScene( mp->markShader, mp->poly.numVerts, mp->verts );
 	}
+	cg_marksDrawn = drawn;
 }
 

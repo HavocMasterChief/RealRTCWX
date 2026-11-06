@@ -1,3 +1,14 @@
+# RealRTCWX: RealRTCW for Xbox
+
+This fork ports RealRTCW to **Xbox Series X|S (Developer Mode)**, with
+ragdolls, an expanded blood and gore system, achievements, named saves and
+more. **To play it, see [XBOX.md](XBOX.md).** Downloads are on the
+[Releases](../../releases) page.
+
+The original RealRTCW readme follows.
+
+---
+
 # RealRTCW
 
 **RealRTCW** is a community-driven single-player overhaul for **Return to Castle Wolfenstein**, built on top of the original **iortcw** and **rtcw-sp** source code.

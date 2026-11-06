@@ -13,6 +13,9 @@ name: Xbox (UWP) package
 on:
   push:
     branches: [ main ]
+    # A version tag (git tag v1.0 && git push origin v1.0) also publishes a
+    # GitHub Release with the package zipped up (see "Publish release").
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 env:
@@ -229,9 +232,15 @@ jobs:
             2. When asked for dependencies, add Dependencies\Microsoft.VCLibs.x64.14.00.appx
             3. Install.
 
-          Game data is not included. Copy your own RealRTCW/RTCW 'main' folder
-          (pak files) into the app's LocalState folder with Device Portal's
-          File Explorer: LocalAppData > RealRTCWX_... > LocalState > main
+          Game data is not included: use your own copy of Return to Castle
+          Wolfenstein (Steam / GOG) with RealRTCW installed on a PC. Either:
+            a) USB drive (easiest): copy the game's 'main' folder to a USB drive
+               as  RealRTCW\main  (so the drive has RealRTCW\main\pak0.pk3),
+               plug it into the Xbox and start the game; or
+            b) Device Portal's File Explorer: copy the 'main' folder's files to
+               LocalAppData > RealRTCWX_... > LocalState > main
+
+          Full guide: https://github.com/${{ github.repository }}/blob/main/XBOX.md
           "@ | Set-Content "$dist\INSTALL.txt"
 
       # Linker map for turning crash addresses (RealRTCW.x64.exe+0x...) into
@@ -252,6 +261,24 @@ jobs:
           name: RealRTCW-Xbox
           path: dist/
           if-no-files-found: error
+
+      # A version tag (v*): a public GitHub Release anyone can download from,
+      # no GitHub login needed (workflow artifacts expire and need one).
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $zip = "$env:RUNNER_TEMP\RealRTCWX-Xbox-$tag.zip"
+          Compress-Archive -Path dist\* -DestinationPath $zip -Force
+          $notes = "RealRTCWX $tag for Xbox Series X|S (Developer Mode).`n`n" +
+                   "Download the zip below, unzip it on a PC and follow INSTALL.txt inside " +
+                   "(or the full guide: https://github.com/${{ github.repository }}/blob/main/XBOX.md).`n`n" +
+                   "Game data is not included: you need your own copy of Return to Castle Wolfenstein " +
+                   "and RealRTCW. Built on RealRTCW by WolfETPlayer (GPL-3.0); source code is in this repository."
+          gh release create $tag $zip -R ${{ github.repository }} --title "RealRTCWX $tag (Xbox)" --notes $notes --target ${{ github.sha }}
 
       # Raw logs can't always be fetched remotely, so surface the first
       # errors as a run annotation (visible in the run summary).

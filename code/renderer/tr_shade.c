@@ -738,7 +738,9 @@ static void ProjectDlightTexture_scalar( void ) {
 }
 
 
+#ifdef RTCW_UWP
 Uint64 tr_perfDlightTicks, tr_perfFlareTicks;     // RealRTCWX: CPU time in dynamic-light passes / flares (perf(lights))
+#endif
 
 static void ProjectDlightTexture( void ) {
 #ifdef RTCW_UWP

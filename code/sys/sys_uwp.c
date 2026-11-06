@@ -69,6 +69,44 @@ const char *Sys_UWP_LocalDir( void ) {
 
 /*
 =================
+Sys_UWP_UsbGamePath
+
+Game data on a USB drive: the first drive with RealRTCW\main\pak0.pk3,
+RTCW\main\pak0.pk3 or main\pak0.pk3 on it (players copy their game folder
+to a stick instead of uploading 1.5 GB through Device Portal). "" if none.
+The folder returned is the one holding main\ (FS_Startup adds it below the
+package and LocalState, so files there still win).
+=================
+*/
+const char *Sys_UWP_UsbGamePath( void ) {
+	static char found[MAX_PATH];
+	static int done;
+	static const char *dirs[] = { "\\RealRTCW", "\\RTCW", "" };
+	WIN32_FILE_ATTRIBUTE_DATA fa;
+	char path[MAX_PATH];
+	int d, k;
+
+	if ( done ) {
+		return found;
+	}
+	done = 1;
+	for ( d = 'D'; d <= 'Z'; d++ ) {
+		if ( ( uwp_installDir[0] & ~32 ) == d || ( uwp_localDir[0] & ~32 ) == d ) {
+			continue;   // (the package's and LocalState's own drives)
+		}
+		for ( k = 0; k < (int)( sizeof( dirs ) / sizeof( dirs[0] ) ); k++ ) {
+			snprintf( path, sizeof( path ), "%c:%s\\main\\pak0.pk3", d, dirs[k] );
+			if ( GetFileAttributesExA( path, GetFileExInfoStandard, &fa ) ) {
+				snprintf( found, sizeof( found ), "%c:%s", d, dirs[k] );
+				return found;
+			}
+		}
+	}
+	return found;
+}
+
+/*
+=================
 Sys_UWP_LoadLibrary
 
 Engine paths are absolute. Packaged DLLs must be loaded relative to the

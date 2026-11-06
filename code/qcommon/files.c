@@ -4354,6 +4354,19 @@ static void FS_Startup( const char *gameName )
 #endif
 
 
+#ifdef RTCW_UWP
+	{
+		// game data on a USB drive (below the package and LocalState)
+		extern const char *Sys_UWP_UsbGamePath( void );
+		cvar_t *usb = Cvar_Get( "fs_usbpath", Sys_UWP_UsbGamePath(), CVAR_INIT | CVAR_PROTECTED );
+		if ( usb->string[0] ) {
+			Com_Printf( "UWP: game data on a USB drive: %s\\%s\n", usb->string, gameName );
+			FS_AddGameDirectory( usb->string, gameName );
+		} else {
+			Com_Printf( "UWP: no game data on a USB drive (looked for RealRTCW\\main\\pak0.pk3, RTCW\\main\\pak0.pk3, main\\pak0.pk3)\n" );
+		}
+	}
+#endif
 	if ( fs_basepath->string[0] ) {
 		FS_AddGameDirectory( fs_basepath->string, gameName );
 	}

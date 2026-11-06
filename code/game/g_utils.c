@@ -783,7 +783,9 @@ void G_AnimScriptSound( int soundIndex, vec3_t org, int client ) {
 			char name[MAX_QPATH];
 			logged++;
 			trap_GetConfigstring( CS_SOUNDS + soundIndex, name, sizeof( name ) );
-			G_Printf( "ragdoll: skipped death animation sound '%s'\n", name );
+			if ( trap_Cvar_VariableIntegerValue( "xb_debugLog" ) ) {
+				G_Printf( "ragdoll: skipped death animation sound '%s'\n", name );
+			}
 		}
 		return;
 	}

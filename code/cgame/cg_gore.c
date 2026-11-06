@@ -40,8 +40,8 @@ static void QDECL CG_GoreLog( const char *fmt, ... ) {
 	char buf[512];
 	int len;
 
-	if ( goLogLines > 4000 ) {
-		return;     // enough
+	if ( goLogLines > 4000 || !CG_XbDebugLog() ) {
+		return;     // enough (or not logging: xb_debugLog 0)
 	}
 	if ( !goLogFile ) {
 		trap_FS_FOpenFile( "gore_log.txt", &goLogFile, FS_APPEND_SYNC );   // synced: survives a crash

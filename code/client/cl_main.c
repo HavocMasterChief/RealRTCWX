@@ -3142,7 +3142,7 @@ void CL_Frame( int msec ) {
 #ifdef RTCW_UWP
 	CL_CheckConsoleGfxMode();
 	// slow frames go in the log (at most one line a second), to find stutters
-	if ( msec > 45 && clc.state == CA_ACTIVE ) {
+	if ( msec > 45 && clc.state == CA_ACTIVE && Cvar_VariableIntegerValue( "xb_debugLog" ) ) {
 		static int lastHitch;
 		if ( Sys_Milliseconds() - lastHitch > 1000 ) {
 			lastHitch = Sys_Milliseconds();

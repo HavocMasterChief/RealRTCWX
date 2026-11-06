@@ -146,6 +146,7 @@ cvar_t  *r_portalsky;   //----(SA)	added
 cvar_t  *r_flares;
 #ifdef RTCW_UWP
 cvar_t  *r_xbSkulls;      // RealRTCWX skulls (g_xbskulls): Mirror World, paint-coloured bullet holes
+cvar_t  *r_xbDebugLog;    // RealRTCWX: diagnostic logging (perf lines etc.), off for players
 cvar_t  *r_xbResTest;     // diagnostic: 0 full, 1 75%, 2 50% 3D view (tr_scene.c)
 #endif
 cvar_t  *r_mode;
@@ -1324,7 +1325,9 @@ void R_Register( void ) {
 	r_lodbias = ri.Cvar_Get( "r_lodbias", "0", CVAR_ARCHIVE );
 	r_flares = ri.Cvar_Get( "r_flares", "1", CVAR_ARCHIVE );
 #ifdef RTCW_UWP
+	r_xbDebugLog = ri.Cvar_Get( "xb_debugLog", "0", CVAR_ARCHIVE );
 	r_xbResTest = ri.Cvar_Get( "r_xbResTest", "0", 0 );
+	ri.Cvar_Set( "r_xbResTest", "0" );     // (the menu option is gone: don't keep a saved setting)
 	r_xbSkulls = ri.Cvar_Get( "g_xbskulls", "0", 0 );
 #endif
 	r_znear = ri.Cvar_Get( "r_znear", "2", CVAR_CHEAT );

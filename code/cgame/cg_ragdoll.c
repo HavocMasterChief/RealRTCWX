@@ -63,6 +63,13 @@ enum {
 #define RD_RIG_DOG      2
 #define RD_RIG_XDOG     3       // the X-Shepherd (RealRTCW): a dog rig with anonymous "BoneNN" bones
 #define RD_NUM_RIGS     4
+// diagnostics (the "ragdoll:" console lines), only with xb_debugLog 1
+int CG_XbDebugLog( void ) {
+	char b[8];
+	trap_Cvar_VariableStringBuffer( "xb_debugLog", b, sizeof( b ) );
+	return atoi( b );
+}
+#define RD_LOG  if ( !CG_XbDebugLog() ) {} else CG_Printf
 #define RD_ISDOG( rig ) ( ( rig ) == RD_RIG_DOG || ( rig ) == RD_RIG_XDOG )
 static const char *rdBoneNames[RD_NUM_RIGS][J_NUM] = {
 	{
@@ -678,6 +685,9 @@ static void CG_RagdollWhyNot( centity_t *cent, const refEntity_t *body, const ch
 	if ( numSeen < 32 ) {
 		seen[numSeen++] = body->hModel;
 	}
+	if ( !CG_XbDebugLog() ) {
+		return;
+	}
 	CG_Printf( "ragdoll: aiChar %i (model %i) gets no ragdoll: %s\n", cent->currentState.aiChar, body->hModel, why );
 	{
 		orientation_t o;
@@ -852,7 +862,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		int ago = rdHits[rd->entityNum].time ? cg.time - rdHits[rd->entityNum].time : -1;
 		if ( logged < 40 ) {
 			logged++;
-			CG_Printf( "ragdoll: body %i falls %i ms after the killing hit, force %.1f\n",
+			RD_LOG( "ragdoll: body %i falls %i ms after the killing hit, force %.1f\n",
 					   rd->entityNum, ago, ago >= 0 && ago < RD_HIT_WINDOW ? rdHits[rd->entityNum].force : 0.0f );
 		}
 	}
@@ -903,7 +913,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 			if ( part < 0 && bestD < 10.0f * 10.0f && rd->wound != J_HEAD && rd->wound != J_CHEST && rd->wound != J_PELVIS ) {
 				cut = rd->wound;
 			}
-			CG_Printf( "ragdoll: body %i killing shot force %.1f hit part %i\n", rd->entityNum, rdHits[rd->entityNum].force, part );
+			RD_LOG( "ragdoll: body %i killing shot force %.1f hit part %i\n", rd->entityNum, rdHits[rd->entityNum].force, part );
 			if ( cut >= 0 ) {
 				rd->haveRef = qtrue;
 				rd->wound = cut;
@@ -1412,7 +1422,7 @@ static void CG_RagdollCleanStart( ragdoll_t *rd ) {
 		fixes++;
 	}
 	if ( fixes ) {
-		CG_Printf( "ragdoll: body %i started with %i bone(s) in something; folded back\n", rd->entityNum, fixes );
+		RD_LOG( "ragdoll: body %i started with %i bone(s) in something; folded back\n", rd->entityNum, fixes );
 	}
 }
 
@@ -1949,7 +1959,7 @@ static qboolean CG_RagdollGibCorpse( ragdoll_t *rd, const vec3_t dir ) {
 	rdKeepValid[rd->entityNum] = qfalse;   // (nothing left to keep)
 	trap_R_SetRagdoll( rd->slot, NULL );
 	rd->active = qfalse;
-	CG_Printf( "ragdoll: body %i gibbed (corpse damage %.1f)\n", rd->entityNum, rd->corpseDamage );
+	RD_LOG( "ragdoll: body %i gibbed (corpse damage %.1f)\n", rd->entityNum, rd->corpseDamage );
 	return qtrue;
 }
 
@@ -2255,7 +2265,7 @@ void CG_RagdollPerfFrame( void ) {
 	}
 	if ( now - start >= 2000 ) {
 		float avg = (float)( now - start ) / frames;
-		if ( avg > 22.0f ) {
+		if ( avg > 22.0f && CG_XbDebugLog() ) {
 			CG_Printf( "perf(cgame): %.0f FPS | bodies drawn %.1f, moving %.1f, %.1f sim steps, ragdoll %.1f ms a frame | "
 					   "entities %.1f marks %.1f gore %.1f particles %.1f local %.1f ms | %i marks (%i drawn) %i drops %i limbs\n",
 					   1000.0f / avg, (float)bodies / frames, (float)moving / frames, (float)steps / frames, (float)ms / frames,
@@ -2284,7 +2294,7 @@ static void CG_RagdollBurnFrame( ragdoll_t *rd, centity_t *cent ) {
 			rd->rollFlip = cg.time + 400 + rand() % 400;
 			rd->phase[0] = random() * 6.28f;
 			rd->phase[1] = random() * 6.28f;
-			CG_Printf( "ragdoll: body %i burning (%i ms of fire left)\n", n, cent->currentState.onFireEnd - cg.time );
+			RD_LOG( "ragdoll: body %i burning (%i ms of fire left)\n", n, cent->currentState.onFireEnd - cg.time );
 		}
 		if ( CG_BloodExtreme() && rdBurn[n] != 1 ) {
 			rdBurn[n] = 1;      // set alight after death
@@ -2458,7 +2468,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 				}
 			}
 			if ( i < J_NUM ) {
-				CG_Printf( "ragdoll: body %i blew up, back to its death animation\n", rd->entityNum );
+				RD_LOG( "ragdoll: body %i blew up, back to its death animation\n", rd->entityNum );
 				trap_R_SetRagdoll( rd->slot, NULL );
 				rd->active = qfalse;
 				rdDeclined[cent->currentState.number] = 1;
@@ -2470,7 +2480,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			float tw = CG_RagdollDogTwist( rd );
 			if ( tw > 90 ) {
 				rd->dogTwistLogged = qtrue;
-				CG_Printf( "ragdoll: dog %i twisted %.0f degrees front to back\n", rd->entityNum, tw );
+				RD_LOG( "ragdoll: dog %i twisted %.0f degrees front to back\n", rd->entityNum, tw );
 			}
 		}
 		// how fast it's moving early in the fall (tuning the death push)
@@ -2483,7 +2493,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 					rd->logMask |= 1 << k;
 					if ( logged < 120 ) {
 						logged++;
-						CG_Printf( "ragdoll: body %i at %i ms: pelvis %.0f, head %.0f units/s\n", rd->entityNum, at[k],
+						RD_LOG( "ragdoll: body %i at %i ms: pelvis %.0f, head %.0f units/s\n", rd->entityNum, at[k],
 								   Distance( rd->p[J_PELVIS], rd->old[J_PELVIS] ) / RD_STEP,
 								   Distance( rd->p[J_HEAD], rd->old[J_HEAD] ) / RD_STEP );
 					}
@@ -2590,7 +2600,7 @@ static void CG_RagdollWriteSave( const char *username ) {
 		trap_FS_Write( &rdKeep[i], sizeof( rdSaved_t ), f );
 	}
 	trap_FS_FCloseFile( f );
-	CG_Printf( "ragdoll: kept %i body poses with save '%s'\n", n, username );
+	RD_LOG( "ragdoll: kept %i body poses with save '%s'\n", n, username );
 }
 
 static void CG_RagdollLoadSaved( void ) {
@@ -2629,7 +2639,7 @@ static void CG_RagdollLoadSaved( void ) {
 		}
 	}
 	trap_FS_FCloseFile( f );
-	CG_Printf( "ragdoll: restoring %i body poses from '%s'\n", n, path );
+	RD_LOG( "ragdoll: restoring %i body poses from '%s'\n", n, path );
 }
 
 // each frame (and right away when the client is about to suspend)
@@ -2794,7 +2804,7 @@ static void CG_RagdollSever( ragdoll_t *rd, int joint, const vec3_t dir ) {
 	CG_GoreHeadBurst( rd->p[chain[0]], dir, rd->entityNum );
 	trap_S_StartSound( rd->p[chain[0]], ENTITYNUM_WORLD, CHAN_AUTO, cgs.media.gibSound );
 	CG_RagdollWake( rd );
-	CG_Printf( "ragdoll: body %i lost a limb (joint %i)\n", rd->entityNum, joint );
+	RD_LOG( "ragdoll: body %i lost a limb (joint %i)\n", rd->entityNum, joint );
 }
 
 static void CG_RagdollLimbStep( rdLimb_t *l ) {

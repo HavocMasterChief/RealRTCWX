@@ -39,7 +39,7 @@ R_PerformanceCounters
 #else
 #	include <SDL3/SDL_timer.h>
 #endif
-extern cvar_t *r_xbResTest;
+extern cvar_t *r_xbResTest, *r_xbDebugLog;
 /*
 RealRTCWX: frame-rate drops on the console. Every 2 s, if the game ran under
 45 FPS, one line goes in the console log with where the time went.
@@ -93,7 +93,7 @@ static void R_UWP_PerfWatch( void ) {
 	}
 	if ( now - start >= 2000 ) {
 		float avg = (float)( now - start ) / frames;
-		if ( avg > 22.0f ) {
+		if ( avg > 22.0f && r_xbDebugLog && r_xbDebugLog->integer ) {
 			ri.Printf( PRINT_ALL, "perf(gpu): %.0f FPS | GPU %.1f ms a frame | %i draw calls, %.1f ms CPU issuing them | resolution test %s\n",
 					   1000.0f / avg, gpu / frames, draws / frames,
 					   (float)( (double)drawTicks * 1000.0 / (double)SDL_GetPerformanceFrequency() ) / frames,

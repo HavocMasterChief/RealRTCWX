@@ -2914,7 +2914,10 @@ shader_t *R_FindShader( const char *name, int lightmapIndex, qboolean mipRawImag
 	shaderText = FindShaderInShaderText( strippedName );
 #ifdef RTCW_UWP
 	if ( !Q_stricmpn( strippedName, "gore/", 5 ) ) {
-		ri.Printf( PRINT_ALL, "gore shader '%s': %s\n", strippedName, shaderText ? "found in script" : "NOT FOUND (implicit)" );
+		extern cvar_t *r_xbDebugLog;
+		if ( !shaderText || ( r_xbDebugLog && r_xbDebugLog->integer ) ) {
+			ri.Printf( PRINT_ALL, "gore shader '%s': %s\n", strippedName, shaderText ? "found in script" : "NOT FOUND (implicit)" );
+		}
 	}
 #endif
 	{

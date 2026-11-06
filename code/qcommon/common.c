@@ -3008,7 +3008,7 @@ void Com_Frame( void ) {
 		}
 		if ( now - start >= 2000 ) {
 			float avg = (float)( now - start ) / frames;
-			if ( avg > 22.0f && com_sv_running && com_sv_running->integer ) {
+			if ( avg > 22.0f && com_sv_running && com_sv_running->integer && Cvar_VariableIntegerValue( "xb_debugLog" ) ) {
 				Com_Printf( "perf(frame): %.0f FPS | game/AI %.1f ms, client+render %.1f ms (cgame %.1f) a frame\n",
 							1000.0f / avg, (float)com_uwpServerMs / frames, (float)com_uwpClientMs / frames,
 							(float)com_uwpCgameMs / frames );

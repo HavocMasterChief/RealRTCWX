@@ -133,10 +133,9 @@ def mode_items(name, group, x, y):
 	itemDef {{
 		name {name}
 		group {group}
-		type ITEM_TYPE_MULTI
-		text "Resolution Test"
-		cvar "r_xbResTest"
-		cvarFloatList {{ "Off" 0 "75%" 1 "50%" 2 }}
+		type ITEM_TYPE_YESNO
+		text "Diagnostic Logging"
+		cvar "xb_debugLog"
 		rect {x} {y + 45} 290 12
 		textalign ITEM_ALIGN_RIGHT
 {style}	}}

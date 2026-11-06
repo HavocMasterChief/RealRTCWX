@@ -2378,6 +2378,7 @@ void CG_RagdollPerfFrame( void );
 enum { CGPERF_ENTS, CGPERF_MARKS, CGPERF_GORE, CGPERF_PARTICLES, CGPERF_LOCALENTS, CGPERF_NUM };
 extern int cg_perfMs[CGPERF_NUM];
 int CG_MarksActive( void );
+int CG_XbDebugLog( void );     // xb_debugLog: diagnostic logging on
 extern int cg_marksDrawn;
 int CG_GoreDropsActive( void );
 int CG_RagdollLimbsActive( void );

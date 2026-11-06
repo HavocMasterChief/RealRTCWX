@@ -144,11 +144,11 @@ cvar_t  *r_uiFullScreen;
 cvar_t  *r_shadows;
 cvar_t  *r_portalsky;   //----(SA)	added
 cvar_t  *r_flares;
-#ifdef RTCW_UWP
+// (defined on every platform - code that checks them is shared - but only
+// registered on Xbox: NULL elsewhere)
 cvar_t  *r_xbSkulls;      // RealRTCWX skulls (g_xbskulls): Mirror World, paint-coloured bullet holes
 cvar_t  *r_xbDebugLog;    // RealRTCWX: diagnostic logging (perf lines etc.), off for players
 cvar_t  *r_xbResTest;     // diagnostic: 0 full, 1 75%, 2 50% 3D view (tr_scene.c)
-#endif
 cvar_t  *r_mode;
 cvar_t  *r_nobind;
 cvar_t  *r_singleShader;

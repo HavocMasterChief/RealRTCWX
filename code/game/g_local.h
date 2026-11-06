@@ -871,6 +871,9 @@ void G_SkullKill( gentity_t *targ, gentity_t *attacker, int mod, qboolean headsh
 void G_SkullBulletHit( gentity_t *attacker, gentity_t *traceEnt, const vec3_t pos );
 qboolean G_SkullToyMiss( gentity_t *attacker, gentity_t *traceEnt, const vec3_t pos );
 qboolean G_SkullRicochet( gentity_t *attacker, int recursion );
+void G_SkullBigHeadTrace( gentity_t *attacker, gentity_t *source, const vec3_t start, const vec3_t end, trace_t *tr );
+void G_XbHeadBox( gentity_t *targ, vec3_t org, float *half );
+qboolean G_SkullKickKills( gentity_t *attacker, gentity_t *traceEnt );
 void G_SkullKick( gentity_t *attacker, gentity_t *traceEnt, const vec3_t forward );
 void G_SkullDrop( gentity_t *self, gentity_t *drop, int weapon );
 int G_SkullGrenadeDelay( int delay );

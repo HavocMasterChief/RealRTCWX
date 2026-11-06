@@ -52,6 +52,60 @@ static const int xbGunPool[] = {
 	WP_FLAMETHROWER, WP_VENOM, WP_TESLA
 };
 
+// Gun Game: only guns this install has. The DLC guns need the DLC (and
+// its setting on), and a gun whose weapon file or model isn't in the
+// game data isn't offered at all (checked once a level)
+static int xbGunOkLevel = -1;
+static qboolean xbGunOk[WP_NUM_WEAPONS];
+
+static qboolean G_SkullFileExists( const char *path ) {
+	fileHandle_t f;
+	int len;
+	if ( !path || !path[0] ) {
+		return qtrue;   // (nothing to check)
+	}
+	len = trap_FS_FOpenFile( path, &f, FS_READ );
+	if ( f ) {
+		trap_FS_FCloseFile( f );
+	}
+	return len > 0 ? qtrue : qfalse;
+}
+
+static qboolean G_SkullGunOk( int w ) {
+	if ( xbGunOkLevel != level.startTime ) {
+		int i;
+		xbGunOkLevel = level.startTime;
+		memset( xbGunOk, 0, sizeof( xbGunOk ) );
+		for ( i = 0; i < (int)( sizeof( xbGunPool ) / sizeof( xbGunPool[0] ) ); i++ ) {
+			int g = xbGunPool[i];
+			gitem_t *item = BG_FindItemForWeapon( g );
+			char *file = BG_GetWeaponFilename( g );
+			qboolean ok = qtrue;
+			switch ( g ) {
+			case WP_M1941: case WP_M1941SCOPE: case WP_DELISLE: case WP_DELISLESCOPE: case WP_AUTO5:
+				ok = g_dlc1.integer ? qtrue : qfalse;
+				break;
+			default:
+				break;
+			}
+			if ( ok && !item ) {
+				ok = qfalse;
+			}
+			if ( ok && file && !G_SkullFileExists( va( "weapons/%s", file ) ) ) {
+				ok = qfalse;
+			}
+			if ( ok && item && !G_SkullFileExists( item->world_model[0] ) ) {
+				ok = qfalse;
+			}
+			xbGunOk[g] = ok;
+			if ( g_cheats.integer && !ok ) {
+				G_DPrintf( "Gun Game: leaving out weapon %i (not in this install)\n", g );
+			}
+		}
+	}
+	return ( w > WP_NONE && w < WP_NUM_WEAPONS ) ? xbGunOk[w] : qfalse;
+}
+
 void G_SkullKill( gentity_t *targ, gentity_t *attacker, int mod, qboolean headshot, const vec3_t point ) {
 	int bits = G_Skulls();
 	int num = attacker - g_entities;
@@ -67,6 +121,9 @@ void G_SkullKill( gentity_t *targ, gentity_t *attacker, int mod, qboolean headsh
 		}
 		attacker->client->ps.stats[STAT_HEALTH] = attacker->health;
 	}
+	if ( bits & SKULL_DRUNK ) {
+		trap_SendServerCommand( num, "xbkill" );   // sobers you up a little (cgame)
+	}
 	if ( headshot && ( bits & SKULL_PARTY ) ) {
 		vec3_t o;
 		VectorCopy( point ? point : targ->r.currentOrigin, o );
@@ -80,10 +137,16 @@ void G_SkullKill( gentity_t *targ, gentity_t *attacker, int mod, qboolean headsh
 		xbSlowUntil = trap_Milliseconds() + 1600;
 	}
 	if ( bits & SKULL_GUNGAME ) {
-		int w, tries = 0;
-		do {
-			w = xbGunPool[rand() % ( sizeof( xbGunPool ) / sizeof( xbGunPool[0] ) )];
-		} while ( w == attacker->client->ps.weapon && ++tries < 8 );
+		int w = WP_NONE, i, n = 0, pick[sizeof( xbGunPool ) / sizeof( xbGunPool[0] )];
+		for ( i = 0; i < (int)( sizeof( xbGunPool ) / sizeof( xbGunPool[0] ) ); i++ ) {
+			if ( G_SkullGunOk( xbGunPool[i] ) && xbGunPool[i] != attacker->client->ps.weapon ) {
+				pick[n++] = xbGunPool[i];
+			}
+		}
+		if ( n == 0 ) {
+			return;
+		}
+		w = pick[rand() % n];
 		COM_BitSet( attacker->client->ps.weapons, w );
 		Add_Ammo( attacker, w, ammoTable[w].maxclip * 4, qtrue );
 		trap_SendServerCommand( num, va( "xbgun %i", w ) );
@@ -140,6 +203,77 @@ qboolean G_SkullToyMiss( gentity_t *attacker, gentity_t *traceEnt, const vec3_t 
 	return z > full * 0.55f ? qtrue : qfalse;
 }
 
+// Big Head: the heads are drawn twice the size, and the top of one sticks
+// out above the enemy's box, so a bullet through it would miss everything.
+// Moves the trace's hit to the first big head on the bullet's way.
+void G_SkullBigHeadTrace( gentity_t *attacker, gentity_t *source, const vec3_t start, const vec3_t end, trace_t *tr ) {
+	vec3_t dir;
+	float len, bestT;
+	int i, best = -1;
+
+	if ( !G_SkullIsPlayer( attacker ) || !G_Skull( SKULL_BIGHEAD ) ) {
+		return;
+	}
+	VectorSubtract( end, start, dir );
+	len = VectorNormalize( dir );
+	if ( len < 1 ) {
+		return;
+	}
+	bestT = tr->fraction * len;
+	for ( i = 0; i < level.maxclients; i++ ) {
+		gentity_t *e = &g_entities[i];
+		vec3_t org;
+		float half, tmin = 0, tmax = bestT;
+		int k;
+		if ( !e->inuse || !e->client || !e->aiCharacter || e->health <= 0 || !e->takedamage ||
+			 e == source || e == attacker || tr->entityNum == i ) {
+			continue;
+		}
+		G_XbHeadBox( e, org, &half );
+		// ray against the box (slabs)
+		for ( k = 0; k < 3; k++ ) {
+			float lo = org[k] - half, hi = org[k] + half;
+			if ( fabs( dir[k] ) < 1e-6f ) {
+				if ( start[k] < lo || start[k] > hi ) {
+					break;
+				}
+			} else {
+				float t1 = ( lo - start[k] ) / dir[k], t2 = ( hi - start[k] ) / dir[k];
+				if ( t1 > t2 ) {
+					float t = t1; t1 = t2; t2 = t;
+				}
+				if ( t1 > tmin ) {
+					tmin = t1;
+				}
+				if ( t2 < tmax ) {
+					tmax = t2;
+				}
+				if ( tmin > tmax ) {
+					break;
+				}
+			}
+		}
+		if ( k < 3 || tmin >= bestT ) {
+			continue;
+		}
+		bestT = tmin;
+		best = i;
+	}
+	if ( best < 0 ) {
+		return;
+	}
+	// just short of the box: IsHeadShot traces on from here into the head
+	if ( bestT > 1 ) {
+		bestT -= 1;
+	}
+	tr->entityNum = best;
+	tr->fraction = bestT / len;
+	VectorMA( start, bestT, dir, tr->endpos );
+	VectorNegate( dir, tr->plane.normal );
+	tr->surfaceFlags = 0;
+	tr->contents = CONTENTS_BODY;
+}
+
 // Ricochet: the player's bullet bounces once off a wall
 qboolean G_SkullRicochet( gentity_t *attacker, int recursion ) {
 	return ( recursion == 0 && G_SkullIsPlayer( attacker ) && G_Skull( SKULL_RICOCHET ) ) ? qtrue : qfalse;
@@ -150,7 +284,14 @@ qboolean G_SkullRicochet( gentity_t *attacker, int recursion ) {
 Boot Camp: your kick launches people
 ===============
 */
+qboolean G_SkullKickKills( gentity_t *attacker, gentity_t *traceEnt ) {
+	return ( G_SkullIsPlayer( attacker ) && traceEnt && traceEnt->client && traceEnt->aiCharacter &&
+			 traceEnt->health > 0 && G_Skull( SKULL_BOOTCAMP ) ) ? qtrue : qfalse;
+}
+
 void G_SkullKick( gentity_t *attacker, gentity_t *traceEnt, const vec3_t forward ) {
+	// (the kick has killed them by now: their body flies on the client,
+	// see CG_XbThrowScale; anything a kick didn't kill still gets thrown)
 	if ( !G_SkullIsPlayer( attacker ) || !traceEnt || !traceEnt->client || !traceEnt->aiCharacter ||
 		 traceEnt->health <= 0 || !G_Skull( SKULL_BOOTCAMP ) ) {
 		return;

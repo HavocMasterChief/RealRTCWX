@@ -1474,11 +1474,15 @@ void CG_GoreSpray( const vec3_t point0, const vec3_t dir, float force, int entit
 	int i, n, back;
 	float k;
 
-	if ( !CG_GoreEnabled() || CG_Skull( 1 << 7 ) || entityNum == cg.snap->ps.clientNum ) {
+	if ( !CG_GoreEnabled() || entityNum == cg.snap->ps.clientNum ) {
 		return;     // (you being hit: the screen effects cover it)
 	}
 	if ( entityNum >= 0 && entityNum < MAX_GENTITIES && !CG_GoreBleeds( &cg_entities[entityNum].currentState ) ) {
 		return;     // armour, zombies (they have their own dust), bosses
+	}
+	if ( CG_Skull( 1 << 7 ) ) {
+		CG_XbConfettiSpray( point, dir, force );     // Confetti Blood: confetti papers the walls instead
+		return;
 	}
 	if ( force < 0.2f ) {
 		force = 0.2f;

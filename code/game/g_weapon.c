@@ -885,6 +885,7 @@ qboolean Bullet_Fire_Extended( gentity_t *source, gentity_t *attacker, vec3_t st
 
     // perform trace with base values (the trace doesn't care about the damage multiplier)
     trap_Trace( &tr, start, NULL, NULL, end, source->s.number, MASK_SHOT );
+    G_SkullBigHeadTrace( attacker, source, start, end, &tr );     // RealRTCWX Big Head skull
 
     if ( ( g_gametype.integer == GT_SURVIVAL || g_aiCollision.integer == 0 ) && tr.startsolid && !g_entities[ tr.entityNum ].takedamage ) {
         int touch[ MAX_GENTITIES ];

@@ -39,7 +39,8 @@ typedef struct {
 
 static confetti_t cfParts[CONFETTI_MAX];
 static int cfNext;
-static qhandle_t cfShader;
+static qhandle_t cfShader, cfMarkShader;
+static int cfMarkFrame, cfMarksThisFrame;
 static sfxHandle_t cfHorn, cfProjector;
 
 static const byte cfColors[][3] = {
@@ -67,6 +68,33 @@ void CG_XbConfetti( const vec3_t origin, int count, float speed ) {
 		memcpy( c->color, cfColors[rand() % 8], 3 );
 		c->start = cg.time;
 		c->life = 2500 + rand() % 2000;
+	}
+}
+
+// Confetti Blood: a hit sprays a jet of confetti the way the bullet went,
+// which papers the wall behind them, and a little back toward you
+void CG_XbConfettiSpray( const vec3_t point, const vec3_t dir, float force ) {
+	int i, n = 8 + (int)( 6 * force );
+	if ( n > 40 ) {
+		n = 40;
+	}
+	for ( i = 0; i < n; i++ ) {
+		confetti_t *c;
+		float sp, spread = 0.12f + 0.15f * random();
+		vec3_t v;
+		CG_XbConfetti( point, 1, 40 );
+		c = &cfParts[( cfNext + CONFETTI_MAX - 1 ) % CONFETTI_MAX];
+		VectorCopy( dir, v );
+		if ( i < 2 ) {
+			VectorNegate( v, v );   // back-spatter
+		}
+		v[0] += crandom() * spread;
+		v[1] += crandom() * spread;
+		v[2] += crandom() * spread;
+		VectorNormalize( v );
+		sp = ( i < 2 ? 150 : 600 + 160 * force ) + random() * 200;
+		VectorScale( v, sp, c->vel );
+		c->size = 0.6f + random() * 0.6f;
 	}
 }
 
@@ -102,6 +130,22 @@ static void CG_XbConfettiDraw( void ) {
 			c->vel[0] += sin( cg.time * 0.004f + i ) * 40 * dt;
 			VectorMA( c->pos, dt, c->vel, next );
 			CG_Trace( &tr, c->pos, NULL, NULL, next, -1, MASK_SOLID );
+			// Confetti Blood: a piece that lands sticks there for good, as
+			// a mark (it stays as long as blood does, see Max Blood)
+			if ( tr.fraction < 1.0f && CG_Skull( SKULL_PAINT ) && !( tr.surfaceFlags & SURF_SKY ) &&
+				 !tr.startsolid ) {
+				if ( cfMarkFrame != cg.clientFrame ) {
+					cfMarkFrame = cg.clientFrame;
+					cfMarksThisFrame = 0;
+				}
+				if ( cfMarksThisFrame++ < 24 ) {
+					CG_ImpactMark( cfMarkShader, tr.endpos, tr.plane.normal, random() * 360,
+								   c->color[0] / 255.0f, c->color[1] / 255.0f, c->color[2] / 255.0f, 1.0f,
+								   qfalse, c->size * 1.2f, qfalse, CG_BloodMarkTime() );
+					c->active = qfalse;
+					continue;
+				}
+			}
 			if ( tr.fraction < 1.0f ) {
 				VectorMA( tr.endpos, 0.3f, tr.plane.normal, c->pos );
 				VectorClear( c->vel );
@@ -199,17 +243,47 @@ void CG_XbPaintModulate( float seed, byte *rgba ) {
 
 /*
 ===============
-Drunk: a slow sway and roll
+Drunk: a sway and roll that keeps getting worse until you get a kill;
+each kill sobers you up a bit (kills come from the server: "xbkill")
 ===============
 */
+static float xbDrunk = -1;      // 0 (a little tipsy) .. 1 (legless); -1: not started
+
+void CG_XbKill_f( void ) {
+	if ( xbDrunk >= 0 ) {
+		xbDrunk -= 0.3f;
+		if ( xbDrunk < 0 ) {
+			xbDrunk = 0;
+		}
+	}
+}
+
 void CG_XbSkullsViewAngles( vec3_t angles ) {
-	float t = cg.time * 0.001f;
+	static int lastTime;
+	float t = cg.time * 0.001f, a, sp;
 	if ( !CG_Skull( SKULL_DRUNK ) ) {
+		xbDrunk = -1;
 		return;
 	}
-	angles[ROLL] += sin( t * 0.9f ) * 7.0f + sin( t * 2.3f ) * 2.0f;
-	angles[PITCH] += sin( t * 1.3f + 1 ) * 3.0f;
-	angles[YAW] += sin( t * 0.7f + 2 ) * 4.0f;
+	if ( xbDrunk < 0 ) {
+		xbDrunk = 0.35f;
+		lastTime = cg.time;
+	}
+	// it builds up over about 45 seconds without a kill (game time, so
+	// not while paused or in the menu)
+	if ( cg.time > lastTime && cg.time - lastTime < 500 ) {
+		xbDrunk += ( cg.time - lastTime ) * 0.001f / 45.0f;
+		if ( xbDrunk > 1 ) {
+			xbDrunk = 1;
+		}
+	}
+	lastTime = cg.time;
+	// twice the old sway at the start, up to four times it, and faster
+	a = 2.0f * ( 0.6f + 1.4f * xbDrunk );
+	sp = 1.0f + 0.5f * xbDrunk;
+	angles[ROLL] += ( sin( t * 0.9f * sp ) * 7.0f + sin( t * 2.3f * sp ) * 2.0f ) * a;
+	angles[PITCH] += sin( t * 1.3f * sp + 1 ) * 3.0f * a;
+	angles[YAW] += sin( t * 0.7f * sp + 2 ) * 4.0f * a;
 }
 
 /*
@@ -272,6 +346,7 @@ void CG_XbSkullsFrame( void ) {
 	cg_xbSkulls = atoi( buf );
 	if ( !cfShader ) {
 		cfShader = trap_R_RegisterShader( "xbox/confetti" );
+		cfMarkShader = trap_R_RegisterShader( "xbox/confetti_mark" );
 		nrGrain = trap_R_RegisterShader( "xbox/newsreel_grain" );
 		nrScratch = trap_R_RegisterShader( "xbox/newsreel_scratch" );
 		nrVignette = trap_R_RegisterShader( "xbox/newsreel_vignette" );

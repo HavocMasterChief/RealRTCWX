@@ -653,16 +653,16 @@ menuDef {
 	name "xbox_surv_skulls"
 	visible 0
 	fullscreen 0
-	rect 70 60 500 297
+	rect 70 50 500 333
 	focusColor 1 .75 0 1
 	style 1
 	border 1
-	onOpen { uiScript xbSkull refresh }
+	onOpen { uiScript xbSkull refresh ; setcvar ui_xbs_desc "Highlight a skull to see what it does." }
 	onESC { close xbox_surv_skulls }
 
 	itemDef {
 		name window
-		rect 0 0 500 297
+		rect 0 0 500 333
 		style WINDOW_STYLE_FILLED
 		border 1
 		bordercolor .5 .4 .3 .8
@@ -720,6 +720,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Big Head: Enemies' heads are twice the size, and so is the target for headshots." }
 		action { uiScript xbSkull 0 }
 	}
 
@@ -737,6 +738,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Party Pooper: Headshot kills burst into confetti, with a party horn." }
 		action { uiScript xbSkull 1 }
 	}
 
@@ -754,6 +756,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Moon Gravity: Low gravity for everyone. Jump higher, and bodies float down slowly." }
 		action { uiScript xbSkull 2 }
 	}
 
@@ -771,6 +774,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Bullet Time: A headshot kill slows time down for a moment." }
 		action { uiScript xbSkull 3 }
 	}
 
@@ -788,6 +792,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Ragdoll Launcher: Kills and blasts send bodies flying." }
 		action { uiScript xbSkull 4 }
 	}
 
@@ -805,6 +810,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Kaboom: Shoot a corpse three times and it explodes." }
 		action { uiScript xbSkull 5 }
 	}
 
@@ -822,6 +828,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Drunk: The view sways, and gets worse the longer you go without a kill. Each kill sobers you up a little." }
 		action { uiScript xbSkull 6 }
 	}
 
@@ -839,6 +846,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Confetti Blood: Hits spray confetti instead of blood, and it sticks to the walls and floor." }
 		action { uiScript xbSkull 7 }
 	}
 
@@ -856,6 +864,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Famine: Enemies drop half as much ammo." }
 		action { uiScript xbSkull 8 }
 	}
 
@@ -873,6 +882,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Mythic: Enemies take half damage from you, so they have twice the health." }
 		action { uiScript xbSkull 9 }
 	}
 
@@ -890,6 +900,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Catch: Enemies always carry grenades and throw them much more often." }
 		action { uiScript xbSkull 10 }
 	}
 
@@ -907,6 +918,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Blind: No HUD, crosshair or weapon on screen." }
 		action { uiScript xbSkull 11 }
 	}
 
@@ -924,6 +936,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Newsreel: The game looks like a 1940s newsreel: black and white, with grain and scratches." }
 		action { uiScript xbSkull 12 }
 	}
 
@@ -941,6 +954,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Vampire: Every kill gives you 15 health." }
 		action { uiScript xbSkull 13 }
 	}
 
@@ -958,6 +972,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Explosive Rounds: Your bullets make small blasts when they hit people or bodies." }
 		action { uiScript xbSkull 14 }
 	}
 
@@ -975,6 +990,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Gun Game: A random weapon after every kill (only guns your game has, the DLC ones only with the DLC)." }
 		action { uiScript xbSkull 15 }
 	}
 
@@ -992,6 +1008,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Ricochet: Your bullets bounce once off walls." }
 		action { uiScript xbSkull 16 }
 	}
 
@@ -1009,6 +1026,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Toy Soldiers: Enemies are half size, and so are their hit boxes." }
 		action { uiScript xbSkull 17 }
 	}
 
@@ -1026,6 +1044,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Silent Assassin: Every gun you fire is suppressed, and enemies don't hear your shots." }
 		action { uiScript xbSkull 18 }
 	}
 
@@ -1043,6 +1062,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Hunted: Every enemy always knows where you are." }
 		action { uiScript xbSkull 19 }
 	}
 
@@ -1060,6 +1080,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Mirror World: The world is flipped left to right. Your gun stays in your right hand." }
 		action { uiScript xbSkull 20 }
 	}
 
@@ -1077,6 +1098,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Boot Camp: Your kick kills instantly and sends the body flying." }
 		action { uiScript xbSkull 21 }
 	}
 
@@ -1094,6 +1116,7 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 .7 .6 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "Turns every skull off." }
 		action { uiScript xbSkull clear }
 	}
 
@@ -1111,7 +1134,25 @@ menuDef {
 		backcolor 1 1 1 .07
 		forecolor 1 1 1 1
 		visible 1
+		onFocus { setcvar ui_xbs_desc "" }
 		action { close xbox_surv_skulls }
+	}
+
+	itemDef {
+		name desc
+		cvar "ui_xbs_desc"
+		rect 12 291 476 34
+		style WINDOW_STYLE_FILLED
+		backcolor 0 0 0 .35
+		textfont UI_FONT_DEFAULT
+		textscale .2
+		textalign ITEM_ALIGN_LEFT
+		textalignx 6
+		textaligny 13
+		forecolor .94 .89 .78 1
+		autowrapped
+		visible 1
+		decoration
 	}
 
 }

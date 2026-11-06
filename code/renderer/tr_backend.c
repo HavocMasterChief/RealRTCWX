@@ -157,7 +157,7 @@ void GL_Cull( int cullType ) {
 			cullFront = !cullFront;
 		}
 #ifdef RTCW_UWP
-		if ( backEnd.viewParms.xbFlipX && !backEnd.projection2D )
+		if ( backEnd.viewParms.xbFlipX && !backEnd.projection2D && !backEnd.xbUnflip )
 		{
 			cullFront = !cullFront;     // Mirror World skull
 		}
@@ -1049,6 +1049,28 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 				oldDepthRange = depthRange;
 				wasCrosshair = isCrosshair;
 			}
+#ifdef RTCW_UWP
+			// Mirror World skull: the world is flipped, but your gun stays
+			// in your right hand (the first-person weapon is drawn with the
+			// projection unflipped, and culled the normal way round)
+			{
+				qboolean unflip = ( depthRange && !isCrosshair && backEnd.viewParms.xbFlipX ) ? qtrue : qfalse;
+				if ( unflip != backEnd.xbUnflip ) {
+					float m[16];
+					memcpy( m, backEnd.viewParms.projectionMatrix, sizeof( m ) );
+					if ( unflip ) {
+						m[0] = -m[0];
+						m[8] = -m[8];
+						m[12] = -m[12];
+					}
+					qglMatrixMode( GL_PROJECTION );
+					qglLoadMatrixf( m );
+					qglMatrixMode( GL_MODELVIEW );
+					backEnd.xbUnflip = unflip;
+					glState.faceCulling = -1;
+				}
+			}
+#endif
 
 			oldEntityNum = entityNum;
 		}
@@ -1088,6 +1110,15 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	if ( depthRange ) {
 		qglDepthRange( 0, 1 );
 	}
+#ifdef RTCW_UWP
+	if ( backEnd.xbUnflip ) {
+		qglMatrixMode( GL_PROJECTION );
+		qglLoadMatrixf( backEnd.viewParms.projectionMatrix );
+		qglMatrixMode( GL_MODELVIEW );
+		backEnd.xbUnflip = qfalse;
+		glState.faceCulling = -1;
+	}
+#endif
 
 	if (r_drawSun->integer) {
 		RB_DrawSun(0.2, tr.sunShader);

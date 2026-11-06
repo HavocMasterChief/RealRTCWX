@@ -340,13 +340,14 @@ def write_raw(name, text):
 # Reset achievements behind three confirmations. Appended to ingame.menu,
 # which holds several menuDefs like campaign_menu.menu.
 # ---------------------------------------------------------------------------
-def _btn(name, text, y, action, show=None, hide=None, w=240, x=30, color="1 1 1 1", cvar=None):
+def _btn(name, text, y, action, show=None, hide=None, w=240, x=30, color="1 1 1 1", cvar=None, on_focus=None):
     test = ""
     if show is not None:
         test = f'\t\tcvarTest "g_cheatedRun"\n\t\tshowCvar {{ "{show}" }}\n'
     elif hide is not None:
         test = f'\t\tcvarTest "g_cheatedRun"\n\t\thideCvar {{ "{hide}" }}\n'
     label = f'cvar "{cvar}"' if cvar else f'text "{text}"'
+    focus = f"\t\tonFocus {{ {on_focus} }}\n" if on_focus else ""
     return f'''
 	itemDef {{
 		name {name}
@@ -362,7 +363,7 @@ def _btn(name, text, y, action, show=None, hide=None, w=240, x=30, color="1 1 1 
 		backcolor 1 1 1 .07
 		forecolor {color}
 		visible 1
-		action {{ {action} }}
+{focus}		action {{ {action} }}
 	}}
 '''
 
@@ -441,6 +442,56 @@ SKULLS = ["Big Head", "Party Pooper", "Moon Gravity", "Bullet Time", "Ragdoll La
           "Toy Soldiers", "Silent Assassin", "Hunted", "Mirror World", "Boot Camp"]
 
 
+# what each skull does, shown under the list for the highlighted one
+# (no quotes or semicolons: they go into a menu script)
+SKULL_DESCS = [
+    "Enemies' heads are twice the size, and so is the target for headshots.",
+    "Headshot kills burst into confetti, with a party horn.",
+    "Low gravity for everyone. Jump higher, and bodies float down slowly.",
+    "A headshot kill slows time down for a moment.",
+    "Kills and blasts send bodies flying.",
+    "Shoot a corpse three times and it explodes.",
+    "The view sways, and gets worse the longer you go without a kill. Each kill sobers you up a little.",
+    "Hits spray confetti instead of blood, and it sticks to the walls and floor.",
+    "Enemies drop half as much ammo.",
+    "Enemies take half damage from you, so they have twice the health.",
+    "Enemies always carry grenades and throw them much more often.",
+    "No HUD, crosshair or weapon on screen.",
+    "The game looks like a 1940s newsreel: black and white, with grain and scratches.",
+    "Every kill gives you 15 health.",
+    "Your bullets make small blasts when they hit people or bodies.",
+    "A random weapon after every kill (only guns your game has, the DLC ones only with the DLC).",
+    "Your bullets bounce once off walls.",
+    "Enemies are half size, and so are their hit boxes.",
+    "Every gun you fire is suppressed, and enemies don't hear your shots.",
+    "Every enemy always knows where you are.",
+    "The world is flipped left to right. Your gun stays in your right hand.",
+    "Your kick kills instantly and sends the body flying.",
+]
+
+
+def _desc_box(y, w, x=12, cvar="ui_xbs_desc"):
+    """A box of wrapped text from a cvar (the highlighted item's description)."""
+    return f'''
+	itemDef {{
+		name desc
+		cvar "{cvar}"
+		rect {x} {y} {w} 34
+		style WINDOW_STYLE_FILLED
+		backcolor 0 0 0 .35
+		textfont UI_FONT_DEFAULT
+		textscale .2
+		textalign ITEM_ALIGN_LEFT
+		textalignx 6
+		textaligny 13
+		forecolor .94 .89 .78 1
+		autowrapped
+		visible 1
+		decoration
+	}}
+'''
+
+
 def skulls_window(name, back):
     """Skulls: two columns of toggles (labels from ui_xbs_<n>, see UI_XbSkull)."""
     sk = SKULLS
@@ -448,12 +499,17 @@ def skulls_window(name, back):
     half = (len(sk) + 1) // 2
     for n, desc in enumerate(sk):
         col, row = divmod(n, half)
+        assert '"' not in SKULL_DESCS[n] and ';' not in SKULL_DESCS[n]
         b += _btn(f"skull{n}", desc, 50 + row * 19, f"uiScript xbSkull {n}",
-                  w=230, x=12 + col * 238, cvar=f"ui_xbs_{n}")
+                  w=230, x=12 + col * 238, cvar=f"ui_xbs_{n}",
+                  on_focus=f'setcvar ui_xbs_desc "{desc}: {SKULL_DESCS[n]}"')
     yb = 50 + half * 19 + 8
-    b += _btn("skullsoff", "All skulls off", yb, "uiScript xbSkull clear", w=230, x=12, color="1 .7 .6 1")
-    b += _btn("skullsback", "Back", yb, back, w=230, x=250)
-    return _window(name, (70, 60, 500, yb + 30), "SKULLS", b, back, on_open="uiScript xbSkull refresh")
+    b += _btn("skullsoff", "All skulls off", yb, "uiScript xbSkull clear", w=230, x=12, color="1 .7 .6 1",
+              on_focus='setcvar ui_xbs_desc "Turns every skull off."')
+    b += _btn("skullsback", "Back", yb, back, w=230, x=250, on_focus='setcvar ui_xbs_desc ""')
+    b += _desc_box(yb + 24, 476)
+    return _window(name, (70, 50, 500, yb + 66), "SKULLS", b, back,
+                   on_open='uiScript xbSkull refresh ; setcvar ui_xbs_desc "Highlight a skull to see what it does."')
 
 
 def cheat_menus():

@@ -1123,6 +1123,7 @@ typedef struct {
 	qboolean skyRenderedThisView;       // flag for drawing sun
 
 	qboolean projection2D;      // if qtrue, drawstretchpic doesn't need to change modes
+	qboolean xbUnflip;          // RealRTCWX Mirror World: the first-person gun is drawn unflipped
 	byte color2D[4];
 	qboolean vertexes2D;        // shader needs to be finished
 #ifdef USE_BLOOM

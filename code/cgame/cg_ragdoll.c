@@ -317,6 +317,7 @@ static struct {
 	int time;
 	vec3_t point, dir;
 	float force;        // weapon force of the hits landing together (a shotgun's pellets add up)
+	qboolean kick;      // it was the player's boot (Boot Camp skull)
 } rdHits[MAX_GENTITIES];
 
 /*
@@ -452,6 +453,7 @@ void CG_RagdollNoteHit( int entityNum, const vec3_t point, int shooter ) {
 		}
 	}
 	rdHits[entityNum].time = cg.time;
+	rdHits[entityNum].kick = cg_xbKickHit;
 	VectorCopy( point, rdHits[entityNum].point );
 	VectorCopy( dir, rdHits[entityNum].dir );
 	if ( !cg_xbKickHit ) {
@@ -705,6 +707,46 @@ went, bounce, leave small blood dots and fade (blood setting respected).
 */
 void CG_LaunchGib( centity_t *cent, vec3_t origin, vec3_t angles, vec3_t velocity, qhandle_t hModel, float sizeScale, int breakCount );
 
+/*
+===============
+CG_RagdollLaunch
+
+Ragdoll Launcher and Boot Camp skulls: the whole body flies, not just the
+part that was hit (a push on one joint gets shared out by the sticks and
+only shoves a body along). The upper body a little faster, so it
+tumbles.
+===============
+*/
+static void CG_RagdollLaunch( ragdoll_t *rd, const vec3_t dir, float speed, float up ) {
+	vec3_t flat, v;
+	int i;
+	VectorCopy( dir, flat );
+	flat[2] = flat[2] > 0.3f ? 0.3f : flat[2] < -0.2f ? -0.2f : flat[2];
+	if ( VectorNormalize( flat ) < 0.1f ) {
+		VectorSet( flat, 1, 0, 0 );
+	}
+	for ( i = 0; i < J_NUM; i++ ) {
+		float k;
+		switch ( i ) {
+		case J_CHEST: case J_HEAD: case J_LSHOULDER: case J_RSHOULDER:
+		case J_LELBOW: case J_RELBOW: case J_LHAND: case J_RHAND:
+			k = 1.15f;
+			break;
+		case J_LKNEE: case J_RKNEE: case J_LFOOT: case J_RFOOT:
+			k = 0.85f;
+			break;
+		default:
+			k = 1.0f;
+			break;
+		}
+		VectorScale( flat, speed * k, v );
+		v[2] += up * k;
+		VectorMA( rd->old[i], -RD_STEP, v, rd->old[i] );
+	}
+	rd->sleeping = qfalse;
+	rd->stillSteps = 0;
+}
+
 static void CG_RagdollHeadshotChunks( centity_t *cent, const vec3_t head, const vec3_t dir, int count ) {
 	clientInfo_t *ci;
 	int i, n, models[8], numModels = 0;
@@ -943,6 +985,13 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 			push[2] += ( 3 + 8 * w ) * sqrt( wf ) * CG_XbThrowScale();
 			VectorAdd( push, cent->currentState.pos.trDelta, push );
 			VectorMA( rd->p[i], -RD_STEP, push, rd->old[i] );
+		}
+		// Boot Camp: a kill with the boot sends them flying; Ragdoll
+		// Launcher: every kill does, harder for heavier weapons
+		if ( rdHits[rd->entityNum].kick && CG_Skull( 1 << 21 ) ) {
+			CG_RagdollLaunch( rd, hd, CG_Skull( 1 << 4 ) ? 1500 : 950, 380 );
+		} else if ( CG_Skull( 1 << 4 ) ) {
+			CG_RagdollLaunch( rd, hd, 380 + 110 * wf, 260 + 30 * wf );
 		}
 	} else {
 		// no recent bullet (explosion, melee...): a push away from the
@@ -2034,6 +2083,10 @@ int CG_RagdollBullet( const vec3_t start, const vec3_t end ) {
 				if ( CG_RagdollGibCorpse( best, dir ) ) {
 					return best->entityNum;
 				}
+			}
+			if ( f > 1 ) {
+				// Launcher / a Boot Camp kick: the whole body goes, too
+				CG_RagdollLaunch( best, dir, ( cg_xbKickHit ? 160 : 60 ) * wf * f / 5.0f + 60, 90 + 25 * wf );
 			}
 			VectorScale( dir, 55 * wf * f, vel );
 			vel[2] += 7 * sqrt( wf ) * ( f > 1 ? f * 0.6f : 1 );

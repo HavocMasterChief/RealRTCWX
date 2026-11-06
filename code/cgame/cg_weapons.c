@@ -5946,6 +5946,20 @@ static void CG_VenomSpinRumble( centity_t *cent, qboolean spinning ) {
 	CG_PadRumbleEx( 0.0f, 0.05f + 0.1f * k, 70, 0.15f + 0.35f * k, 70, 0.0f );
 }
 
+// the guns Silent Assassin quiets (not the flamethrower, Tesla,
+// launchers or anything thrown)
+qboolean CG_XbSilencedWeapon( int w ) {
+	switch ( w ) {
+	case WP_KNIFE: case WP_FLAMETHROWER: case WP_TESLA: case WP_PANZERFAUST:
+	case WP_GRENADE_LAUNCHER: case WP_GRENADE_PINEAPPLE: case WP_DYNAMITE:
+	case WP_AIRSTRIKE: case WP_POISONGAS: case WP_SMOKE_BOMB: case WP_DYNAMITE_ENG:
+	case WP_M7: case WP_NONE:
+		return qfalse;
+	default:
+		return w > WP_NONE && w < WP_NUM_WEAPONS ? qtrue : qfalse;
+	}
+}
+
 void CG_FireWeapon( centity_t *cent, int event ) {
 	entityState_t *ent;
 	int c;
@@ -6056,6 +6070,17 @@ void CG_FireWeapon( centity_t *cent, int event ) {
 		fireEchosound = &weap->flashEchoSound[0];
 	}
 
+
+	// RealRTCWX Silent Assassin skull: every gun of yours fires with the
+	// silenced Luger's report, no echo and no flash
+	if ( !cent->currentState.aiChar && CG_Skull( 1 << 18 ) && CG_XbSilencedWeapon( ent->weapon ) ) {
+		CG_RegisterWeapon( WP_SILENCER, qfalse );
+		if ( cg_weapons[WP_SILENCER].flashSound[0] ) {
+			firesound = &cg_weapons[WP_SILENCER].flashSound[0];
+			fireEchosound = NULL;
+			cent->muzzleFlashTime = 0;
+		}
+	}
 
 	// play a sound
 	for ( c = 0 ; c < 4 ; c++ ) {

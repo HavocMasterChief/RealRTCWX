@@ -834,6 +834,10 @@ static void CG_ServerCommand( void ) {
 		CG_XbParty_f();
 		return;
 	}
+	if ( !strcmp( cmd, "xbkill" ) ) {
+		CG_XbKill_f();
+		return;
+	}
 	if ( !strcmp( cmd, "xbgun" ) ) {
 		CG_XbGun_f();
 		return;

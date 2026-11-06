@@ -784,6 +784,49 @@ qboolean IsHeadShotWeapon( int mod, gentity_t *targ, gentity_t *attacker ) {
 
 /*
 ==============
+G_XbHeadBox
+
+Where a client's head hit box is, and its half size (RealRTCWX: shared by
+IsHeadShot and the Big Head skull's bullet check, which also sizes it for
+the Big Head and Toy Soldiers skulls the way cgame draws them)
+==============
+*/
+void G_XbHeadBox( gentity_t *targ, vec3_t org, float *half ) {
+	orientation_t or;
+	float up = 6;
+	*half = 6;
+	// Big Head: cgame doubles the head about tag_head (the base of the
+	// neck), so the box is twice the size and twice as far up
+	if ( targ->aiCharacter && G_Skull( 1 << 0 ) ) {
+		up = 12;
+		*half = 12;
+	}
+	VectorCopy( targ->r.currentOrigin, org );
+	// RF, if there is a valid tag_head for this entity, then use that
+	if ( ( targ->r.svFlags & SVF_CASTAI ) && trap_GetTag( targ->s.number, "tag_head", &or ) ) {
+		VectorCopy( or.origin, org );
+		VectorMA( org, up, or.axis[2], org );    // tag is at base of neck
+	} else if ( targ->client->ps.pm_flags & PMF_DUCKED ) { // closer fake offset for 'head' box when crouching
+		org[2] += targ->client->ps.crouchViewHeight + 8 + ( up - 6 );
+	} else {
+		org[2] += targ->client->ps.viewheight + ( up - 6 );
+	}
+	// Toy Soldiers: the enemy is drawn at half size from its feet
+	// (cg_players.c), so its head is half as high and half as big
+	if ( targ->aiCharacter && G_Skull( 1 << 17 ) ) {
+		vec3_t feet;
+		int k;
+		VectorCopy( targ->r.currentOrigin, feet );
+		feet[2] += targ->r.mins[2];
+		for ( k = 0; k < 3; k++ ) {
+			org[k] = feet[k] + ( org[k] - feet[k] ) * 0.5f;
+		}
+		*half *= 0.5f + 0.0833f;    // (6 -> 3.5)
+	}
+}
+
+/*
+==============
 IsHeadShot
 ==============
 */
@@ -792,7 +835,6 @@ qboolean IsHeadShot( gentity_t *targ, gentity_t *attacker, vec3_t dir, vec3_t po
 	trace_t tr;
 	vec3_t start, end;
 	gentity_t   *traceEnt;
-	orientation_t or;
 
 	qboolean head_shot_weapon = qfalse;
 
@@ -808,43 +850,17 @@ qboolean IsHeadShot( gentity_t *targ, gentity_t *attacker, vec3_t dir, vec3_t po
 	head_shot_weapon = IsHeadShotWeapon( mod, targ, attacker );
 
 	if ( head_shot_weapon ) {
+		vec3_t horg;
+		float hs;
 		head = G_Spawn();
-
-		G_SetOrigin( head, targ->r.currentOrigin );
-
-		// RF, if there is a valid tag_head for this entity, then use that
-		if ( ( targ->r.svFlags & SVF_CASTAI ) && trap_GetTag( targ->s.number, "tag_head", &or ) ) {
-			VectorCopy( or.origin, head->r.currentOrigin );
-			VectorMA( head->r.currentOrigin, 6, or.axis[2], head->r.currentOrigin );    // tag is at base of neck
-		} else if ( targ->client->ps.pm_flags & PMF_DUCKED ) { // closer fake offset for 'head' box when crouching
-			head->r.currentOrigin[2] += targ->client->ps.crouchViewHeight + 8; // JPW NERVE 16 is kludge to get head height to match up
-		}
-		//else if(targ->client->ps.legsAnim == LEGS_IDLE && targ->aiCharacter == AICHAR_SOLDIER)	// standing with legs bent (about a head shorter than other leg poses)
-		//	head->r.currentOrigin[2] += targ->client->ps.viewheight;
-		else {
-			head->r.currentOrigin[2] += targ->client->ps.viewheight; // JPW NERVE pulled this	// 6 is fudged "head height" value
-
-		}
+		G_XbHeadBox( targ, horg, &hs );
+		G_SetOrigin( head, horg );
 		VectorCopy( head->r.currentOrigin, head->s.origin );
 		VectorCopy( targ->r.currentAngles, head->s.angles );
 		VectorCopy( head->s.angles, head->s.apos.trBase );
 		VectorCopy( head->s.angles, head->s.apos.trDelta );
-		VectorSet( head->r.mins, -6, -6, -6 ); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
-		VectorSet( head->r.maxs, 6, 6, 6 ); // changed this z from 0 to 6
-		// RealRTCWX Toy Soldiers skull: the enemy is drawn at half size from
-		// its feet (cg_players.c), so its head is half as high and half as big
-		if ( targ->aiCharacter && G_Skull( 1 << 17 ) ) {
-			vec3_t feet;
-			int k;
-			VectorCopy( targ->r.currentOrigin, feet );
-			feet[2] += targ->r.mins[2];
-			for ( k = 0; k < 3; k++ ) {
-				head->r.currentOrigin[k] = feet[k] + ( head->r.currentOrigin[k] - feet[k] ) * 0.5f;
-			}
-			VectorCopy( head->r.currentOrigin, head->s.origin );
-			VectorSet( head->r.mins, -3.5f, -3.5f, -3.5f );
-			VectorSet( head->r.maxs, 3.5f, 3.5f, 3.5f );
-		}
+		VectorSet( head->r.mins, -hs, -hs, -hs ); // JPW NERVE changed this z from -12 to -6 for crouching, also removed standing offset
+		VectorSet( head->r.maxs, hs, hs, hs ); // changed this z from 0 to 6
 		head->clipmask = CONTENTS_SOLID;
 		head->r.contents = CONTENTS_SOLID;
 
@@ -1013,6 +1029,7 @@ void G_DamageExt( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	int knockback;
 	int hitEventType = HIT_NONE;
 	int xbWasAlive = targ->health > 0;  // RealRTCWX skulls: kills, not hits on corpses
+	qboolean xbHeadshot = qfalse;
 
 	if ( hitEventOut ) {
 		*hitEventOut = HIT_NONE;
@@ -1366,6 +1383,7 @@ void G_DamageExt( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 
 
 	if ( IsHeadShot( targ, attacker, dir, point, mod ) ) {
+			xbHeadshot = qtrue;     // RealRTCWX skulls (the hit event becomes HIT_DEATHSHOT on a kill)
 
 			// Upgrade the hit event to headshot if we have not yet classified it as a teamshot (covertops etc..)
 			if ( hitEventType != HIT_TEAMSHOT ) {
@@ -1559,7 +1577,7 @@ void G_DamageExt( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 
 			targ->enemy = attacker;
 			if ( xbWasAlive ) {     // RealRTCWX skulls: Vampire, Party Pooper, Bullet Time, Gun Game
-				G_SkullKill( targ, attacker, mod, hitEventType == HIT_HEADSHOT ? qtrue : qfalse, point );
+				G_SkullKill( targ, attacker, mod, xbHeadshot, point );
 			}
 			if ( targ->die ) { // Ridah, mg42 doesn't have die func (FIXME)
 				targ->die( targ, inflictor, attacker, take, mod );

@@ -1771,6 +1771,12 @@ int Cmd_WolfKick_f( gentity_t *ent ) {
 
 		}
 
+		// RealRTCWX Boot Camp skull: the kick kills outright (twice their
+		// health and armour, through Mythic's halving; G_Damage keeps a
+		// kick from gibbing them)
+		if ( G_SkullKickKills( ent, traceEnt ) ) {
+			damage = ( traceEnt->health + traceEnt->client->ps.stats[STAT_ARMOR] ) * 2 + 10;
+		}
 		G_Damage( traceEnt, ent, ent, forward, tr.endpos, damage, 0, MOD_KICKED );   //----(SA)	modified
 		G_SkullKick( ent, traceEnt, forward );     // RealRTCWX Boot Camp skull
 	}

@@ -7,14 +7,14 @@ starting a new campaign or loading a save from another playthrough.
 #ifndef BG_XBSKULLS_H
 #define BG_XBSKULLS_H
 
-#define SKULL_BIGHEAD       ( 1 << 0 )  // cgame: enemies' heads twice the size
+#define SKULL_BIGHEAD       ( 1 << 0 )  // game+cgame: enemies' heads (and head hit boxes) twice the size
 #define SKULL_PARTY         ( 1 << 1 )  // game+cgame: headshot kills burst into confetti, with a cheer
 #define SKULL_MOON          ( 1 << 2 )  // game+cgame: low gravity (bodies float too)
 #define SKULL_BULLETTIME    ( 1 << 3 )  // game: slow motion for a moment on headshot kills
-#define SKULL_LAUNCHER      ( 1 << 4 )  // cgame: hits and blasts throw bodies 5x harder
+#define SKULL_LAUNCHER      ( 1 << 4 )  // cgame: kills, hits and blasts send bodies flying
 #define SKULL_KABOOM        ( 1 << 5 )  // game+cgame: a corpse shot a few times explodes
-#define SKULL_DRUNK         ( 1 << 6 )  // cgame: swaying camera
-#define SKULL_PAINT         ( 1 << 7 )  // cgame+renderer: blood in bright paint colours
+#define SKULL_DRUNK         ( 1 << 6 )  // game+cgame: swaying view, worse until you kill ("xbkill")
+#define SKULL_PAINT         ( 1 << 7 )  // cgame+renderer: confetti instead of blood, stuck to the walls
 #define SKULL_FAMINE        ( 1 << 8 )  // game: enemies drop half the ammo
 #define SKULL_MYTHIC        ( 1 << 9 )  // game: enemies take half damage (double health)
 #define SKULL_CATCH         ( 1 << 10 ) // game: enemies throw grenades much more often
@@ -25,10 +25,10 @@ starting a new campaign or loading a save from another playthrough.
 #define SKULL_GUNGAME       ( 1 << 15 ) // game+cgame: a random weapon after every kill
 #define SKULL_RICOCHET      ( 1 << 16 ) // game: bullets bounce once off walls
 #define SKULL_TOY           ( 1 << 17 ) // cgame: enemies half size
-#define SKULL_SILENT        ( 1 << 18 ) // game: enemies don't hear your gunfire
+#define SKULL_SILENT        ( 1 << 18 ) // game+cgame: your guns are suppressed, enemies don't hear them
 #define SKULL_HUNTED        ( 1 << 19 ) // game: every enemy always knows where you are
-#define SKULL_MIRROR        ( 1 << 20 ) // cgame+renderer+client: the world flipped left to right
-#define SKULL_BOOTCAMP      ( 1 << 21 ) // game+cgame: your kick launches people
+#define SKULL_MIRROR        ( 1 << 20 ) // cgame+renderer+client: the world flipped left to right (not your gun)
+#define SKULL_BOOTCAMP      ( 1 << 21 ) // game+cgame: your kick kills and launches people
 #define SKULL_COUNT         22
 
 #endif

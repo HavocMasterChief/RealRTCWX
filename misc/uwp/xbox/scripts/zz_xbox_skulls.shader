@@ -13,6 +13,19 @@ xbox/confetti
 	}
 }
 
+// Confetti Blood: a paper square stuck to a wall or the floor (a mark)
+xbox/confetti_mark
+{
+	nopicmip
+	polygonOffset
+	{
+		map $whiteimage
+		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+		rgbGen vertex
+		alphaGen vertex
+	}
+}
+
 xbox/newsreel_grain
 {
 	nopicmip

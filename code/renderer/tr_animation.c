@@ -2353,10 +2353,31 @@ static int R_RagdollSegForName( const char *n ) {
 	return -1;
 }
 
+// the X-Shepherd's anonymous bones (see cg_ragdoll.c, RD_RIG_XDOG): the
+// ones that start a body part; the rest follow their parent
+static int R_RagdollSegForXdog( const char *n ) {
+	static const struct { const char *name; int seg; } parts[] = {
+		{ "Bone02", 0 }, { "Bone03", 0 }, { "Bone04", 1 }, { "Bone05", 1 }, { "Bone06", 2 },
+		{ "Bone53", 1 }, { "Bone54", 3 }, { "Bone55", 4 },     // front left
+		{ "Bone41", 1 }, { "Bone42", 5 }, { "Bone43", 6 },     // front right
+		{ "Bone29", 7 }, { "Bone30", 8 },                      // hind left
+		{ "Bone17", 9 }, { "Bone18", 10 },                     // hind right
+		{ "Bone11", 0 }                                        // the tail
+	};
+	int i;
+	for ( i = 0; i < (int)( sizeof( parts ) / sizeof( parts[0] ) ); i++ ) {
+		if ( !Q_stricmp( n, parts[i].name ) ) {
+			return parts[i].seg;
+		}
+	}
+	return -1;
+}
+
 static const signed char *R_RagdollBoneMap( const mdsHeader_t *mds ) {
 	mdsBoneInfo_t *bi;
 	rdBoneMap_t *m;
 	int i, s;
+	qboolean xdog = qfalse;
 
 	for ( i = 0; i < rd_numMaps; i++ ) {
 		if ( rd_maps[i].mds == mds ) {
@@ -2366,8 +2387,13 @@ static const signed char *R_RagdollBoneMap( const mdsHeader_t *mds ) {
 	m = &rd_maps[rd_numMaps < 32 ? rd_numMaps++ : 31];
 	m->mds = mds;
 	bi = ( mdsBoneInfo_t * )( (byte *)mds + mds->ofsBones );
+	for ( i = 0; i < mds->numBones; i++ ) {
+		if ( !Q_stricmp( bi[i].name, "tag_ffootright" ) ) {
+			xdog = qtrue;   // (only the X-Shepherd has front-foot tags and BoneNN legs)
+		}
+	}
 	for ( i = 0; i < mds->numBones && i < MDS_MAX_BONES; i++ ) {
-		s = R_RagdollSegForName( bi[i].name );
+		s = xdog && strncmp( bi[i].name, "Bip", 3 ) ? R_RagdollSegForXdog( bi[i].name ) : R_RagdollSegForName( bi[i].name );
 		if ( s < 0 ) {
 			s = ( bi[i].parent >= 0 && bi[i].parent < i ) ? m->seg[bi[i].parent] : 0;
 		}

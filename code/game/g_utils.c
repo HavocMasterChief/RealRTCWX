@@ -776,6 +776,7 @@ void G_AnimScriptSound( int soundIndex, vec3_t org, int client ) {
 	if ( client > 0 && e->client && ( e->health <= 0 || e->client->ps.pm_type == PM_DEAD ) &&
 		 e->aiCharacter != AICHAR_LOPER && e->aiCharacter != AICHAR_LOPER_SPECIAL &&
 		 e->aiCharacter != AICHAR_HELGA && e->aiCharacter != AICHAR_HEINRICH &&     // (those don't ragdoll)
+		 e->aiCharacter != AICHAR_DOG && e->aiCharacter != AICHAR_XSHEPHERD &&   // (a dog's death sounds are its yelp)
 		 !G_AnimSoundIsFlame( soundIndex ) ) {            // (the burning scream still plays)
 		static int logged;
 		if ( logged < 6 ) {

@@ -61,7 +61,9 @@ enum {
 #define RD_RIG_HUMAN    0
 #define RD_RIG_HUMAN2   1
 #define RD_RIG_DOG      2
-#define RD_NUM_RIGS     3
+#define RD_RIG_XDOG     3       // the X-Shepherd (RealRTCW): a dog rig with anonymous "BoneNN" bones
+#define RD_NUM_RIGS     4
+#define RD_ISDOG( rig ) ( ( rig ) == RD_RIG_DOG || ( rig ) == RD_RIG_XDOG )
 static const char *rdBoneNames[RD_NUM_RIGS][J_NUM] = {
 	{
 		"Bip01 Pelvis", "Bip01 Spine3", "Bip01 Head",
@@ -83,6 +85,17 @@ static const char *rdBoneNames[RD_NUM_RIGS][J_NUM] = {
 		"BipRFLeg2", "BipRFLeg3", "BipRFLeg5",
 		"BipLBLeg1", "BipLBLeg2", "BipLBLeg4",
 		"BipRBLeg1", "BipRBLeg2", "BipRBLeg4"
+	},
+	{
+		// X-Shepherd (models/players/xdog): spine Bone02-05, head Bone08;
+		// front legs Bone53.. (left) / Bone41.. (right) from the chest,
+		// hind legs Bone29.. (left) / Bone17.. (right) from the spine
+		// (sides from its tag_ffootleft / tag_footright etc.)
+		"Bip01 Pelvis", "Bone05", "Bone08",
+		"Bone54", "Bone55", "Bone57",
+		"Bone42", "Bone43", "Bone45",
+		"Bone29", "Bone30", "Bone32",
+		"Bone17", "Bone18", "Bone20"
 	}
 };
 
@@ -270,6 +283,7 @@ static qboolean CG_GoreEnabled_Ragdoll( void ) {
 	return cg_blood.integer && cg_bloodMode.integer != BLOODMODE_OFF;
 }
 static void CG_RagdollCleanStart( ragdoll_t *rd );
+static void CG_RagdollKeepPose( const ragdoll_t *rd );
 static void CG_RagdollDogInit( ragdoll_t *rd );
 
 // ragdoll poses kept with savegames (save/<name>.rag)
@@ -281,10 +295,14 @@ typedef struct {
 	vec3_t axis[3], torsoAxis[3], origin;
 	vec3_t p[J_NUM];
 } rdSaved_t;
-static rdSaved_t rdSaved[RD_MAX];
+// every body whose pose is known, by entity: from a loaded save (until the
+// body is seen and rebuilt), or a body whose ragdoll slot went to another.
+// Saves write all of these as well as the live ragdolls, so a save made
+// before you've looked at the bodies again (or with more bodies than
+// slots) doesn't lose them.
+static rdSaved_t rdKeep[MAX_GENTITIES];
+static qboolean rdKeepValid[MAX_GENTITIES];
 static char rdLastSave[256];     // the last g_lastSave we answered
-static int rdNumSaved;
-static qboolean rdSavedUsed[RD_MAX];
 static int rdStamp;
 
 // the last bullet that hit each entity (where, which way, when)
@@ -778,6 +796,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 			return NULL;    // all in use: this one keeps its death animation
 		}
 		trap_R_SetRagdoll( rdBodies[oldest].slot, NULL );
+		CG_RagdollKeepPose( &rdBodies[oldest] );     // (its pose stays with the saves)
 		rd = &rdBodies[oldest];
 	}
 	slot = (int)( rd - rdBodies ) + 1;
@@ -893,7 +912,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 		}
 		if ( rd->wound == J_HEAD && bestD < 10.0f * 10.0f ) {
 			// Extreme: a sniper round or a close shotgun blast takes the head off
-			if ( CG_BloodExtreme() && rdHits[rd->entityNum].force >= 3.0f && rd->rig != RD_RIG_DOG &&
+			if ( CG_BloodExtreme() && rdHits[rd->entityNum].force >= 3.0f && !RD_ISDOG( rd->rig ) &&
 				 CG_RagdollBleeds( cent->currentState.aiChar ) && !CG_Skull( 1 << 7 ) ) {
 				rdHeadless[rd->entityNum] = 1;
 				CG_RagdollHeadshotChunks( cent, rd->p[J_HEAD], hd, 22 );
@@ -949,7 +968,7 @@ static ragdoll_t *CG_RagdollStart( centity_t *cent, const refEntity_t *body ) {
 	for ( i = 0; i < (int)RD_NUM_LIMITS; i++ ) {
 		rd->limit[i] = rdLimits[i].frac * Distance( rd->p[rdLimits[i].a], rd->p[rdLimits[i].b] );
 	}
-	if ( rd->rig == RD_RIG_DOG ) {
+	if ( RD_ISDOG( rd->rig ) ) {
 		CG_RagdollDogInit( rd );
 	}
 	CG_RagdollCleanStart( rd );    // (after the bone lengths are taken from the pose)
@@ -1245,7 +1264,7 @@ not snap straight back).
 static void CG_RagdollNeckLimit( ragdoll_t *rd ) {
 	vec3_t up, h, perp;
 	float len, c, maxC = 0.5f, along;
-	if ( rd->rig == RD_RIG_DOG ) {
+	if ( RD_ISDOG( rd->rig ) ) {
 		return;
 	}
 	VectorSubtract( rd->p[J_CHEST], rd->p[J_PELVIS], up );
@@ -1425,7 +1444,7 @@ static void CG_RagdollConstrain( ragdoll_t *rd ) {
 		VectorMA( a, diff, d, a );
 		VectorMA( b, -diff, d, b );
 	}
-	if ( rd->rig != RD_RIG_DOG ) {
+	if ( !RD_ISDOG( rd->rig ) ) {
 		CG_RagdollJointLimits( rd );    // knees/elbows bend one way (a biped's)
 	} else {
 		CG_RagdollDogLimits( rd );
@@ -1442,7 +1461,7 @@ static void CG_RagdollCollide( ragdoll_t *rd, vec3_t start[J_NUM] ) {
 	for ( i = 0; i < J_NUM; i++ ) {
 		trace_t tr;
 		vec3_t mins, maxs;
-		float r = rdRadius[i] * rd->scale * ( ( rd->rig == RD_RIG_DOG && i >= J_LSHOULDER ) ? 0.6f : 1.0f );
+		float r = rdRadius[i] * rd->scale * ( ( RD_ISDOG( rd->rig ) && i >= J_LSHOULDER ) ? 0.6f : 1.0f );
 
 		VectorSet( mins, -r, -r, -r );
 		VectorSet( maxs, r, r, r );
@@ -1831,7 +1850,7 @@ static void CG_RagdollPose( ragdoll_t *rd ) {
 		VectorSubtract( cur[rdSegs[s].p1], cur[rdSegs[s].p0], pc );
 		VectorSubtract( cur[rdSegs[s].s1], cur[rdSegs[s].s0], hc );
 		VectorSubtract( cur[J_CHEST], cur[J_PELVIS], h2c );
-		if ( rd->rig == RD_RIG_DOG && s == 0 ) {
+		if ( RD_ISDOG( rd->rig ) && s == 0 ) {
 			// dog: the hips alone are too close together to say which way
 			// the back half faces; the shoulders steady it
 			vec3_t t;
@@ -1916,7 +1935,7 @@ into gibs (any blood setting but off, as the original game's corpse gibs). qtrue
 static qboolean CG_RagdollGibCorpse( ragdoll_t *rd, const vec3_t dir ) {
 	centity_t *bc;
 	vec3_t org, gd;
-	if ( !CG_GoreEnabled_Ragdoll() || CG_Skull( 1 << 7 ) || rd->corpseDamage < 18.0f || rd->entityNum >= MAX_GENTITIES || rd->rig == RD_RIG_DOG ||
+	if ( !CG_GoreEnabled_Ragdoll() || CG_Skull( 1 << 7 ) || rd->corpseDamage < 18.0f || rd->entityNum >= MAX_GENTITIES || RD_ISDOG( rd->rig ) ||
 		 !CG_RagdollBleeds( cg_entities[rd->entityNum].currentState.aiChar ) ) {
 		return qfalse;
 	}
@@ -1927,6 +1946,7 @@ static qboolean CG_RagdollGibCorpse( ragdoll_t *rd, const vec3_t dir ) {
 	CG_GibPlayer( bc, org, gd );
 	CG_GoreHeadBurst( rd->p[J_CHEST], dir, rd->entityNum );
 	rdGibbed[rd->entityNum] = 1;
+	rdKeepValid[rd->entityNum] = qfalse;   // (nothing left to keep)
 	trap_R_SetRagdoll( rd->slot, NULL );
 	rd->active = qfalse;
 	CG_Printf( "ragdoll: body %i gibbed (corpse damage %.1f)\n", rd->entityNum, rd->corpseDamage );
@@ -2340,6 +2360,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 		}
 		rdDeclined[cent->currentState.number] = 0;
 		if ( !( cent->currentState.eFlags & EF_DEAD ) ) {
+			rdKeepValid[cent->currentState.number] = qfalse;   // alive again: no pose to keep
 			rdHeadless[cent->currentState.number] = 0;
 			rdGibbed[cent->currentState.number] = 0;
 			rdBurn[cent->currentState.number] = 0;
@@ -2357,14 +2378,9 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 	}
 	if ( !rd ) {
 		rdSaved_t *sv = NULL;
-		int k;
-		for ( k = 0; k < rdNumSaved; k++ ) {
-			if ( !rdSavedUsed[k] && rdSaved[k].entityNum == cent->currentState.number &&
-				 rdSaved[k].aiChar == cent->currentState.aiChar ) {
-				sv = &rdSaved[k];
-				rdSavedUsed[k] = qtrue;
-				break;
-			}
+		int en = cent->currentState.number;
+		if ( en >= 0 && en < MAX_GENTITIES && rdKeepValid[en] && rdKeep[en].aiChar == cent->currentState.aiChar ) {
+			sv = &rdKeep[en];   // (kept: the live ragdoll is written from now on)
 		}
 		if ( sv ) {
 			// a body from a loaded save: rebuild it from its saved pose,
@@ -2450,7 +2466,7 @@ void CG_RagdollBody( centity_t *cent, refEntity_t *body ) {
 			}
 		}
 		CG_RagdollPose( rd );
-		if ( rd->rig == RD_RIG_DOG && !rd->dogTwistLogged ) {
+		if ( RD_ISDOG( rd->rig ) && !rd->dogTwistLogged ) {
 			float tw = CG_RagdollDogTwist( rd );
 			if ( tw > 90 ) {
 				rd->dogTwistLogged = qtrue;
@@ -2516,7 +2532,32 @@ static void CG_RagdollSaveName( const char *in, char *out, int outSize ) {
 	Q_strcat( out, outSize, ".rag" );
 }
 
+// a body's pose into rdKeep (what saves write)
+static void CG_RagdollKeepPose( const ragdoll_t *rd ) {
+	rdSaved_t *sv;
+	if ( !rd->active || rd->entityNum < 0 || rd->entityNum >= MAX_GENTITIES ) {
+		return;
+	}
+	sv = &rdKeep[rd->entityNum];
+	memset( sv, 0, sizeof( *sv ) );
+	sv->entityNum = rd->entityNum;
+	sv->aiChar = cg_entities[rd->entityNum].currentState.aiChar;
+	sv->wound = rd->wound;
+	sv->frame = rd->pose.frame;
+	sv->oldframe = rd->pose.oldframe;
+	sv->torsoFrame = rd->pose.torsoFrame;
+	sv->oldTorsoFrame = rd->pose.oldTorsoFrame;
+	sv->backlerp = rd->pose.backlerp;
+	sv->torsoBacklerp = rd->pose.torsoBacklerp;
+	memcpy( sv->axis, rd->pose.axis, sizeof( sv->axis ) );
+	memcpy( sv->torsoAxis, rd->pose.torsoAxis, sizeof( sv->torsoAxis ) );
+	VectorCopy( rd->pose.origin, sv->origin );
+	memcpy( sv->p, rd->p, sizeof( sv->p ) );
+	rdKeepValid[rd->entityNum] = qtrue;
+}
+
 static void CG_RagdollWriteSave( const char *username ) {
+	static ragdoll_t *live[MAX_GENTITIES];
 	char path[MAX_QPATH], file[MAX_QPATH];
 	fileHandle_t f;
 	int i, n = 0, magic = RD_SAVE_MAGIC;
@@ -2526,35 +2567,27 @@ static void CG_RagdollWriteSave( const char *username ) {
 	if ( trap_FS_FOpenFile( path, &f, FS_WRITE ) < 0 ) {
 		return;
 	}
+	memset( live, 0, sizeof( live ) );
 	for ( i = 0; i < RD_MAX; i++ ) {
-		if ( rdBodies[i].active ) {
+		if ( rdBodies[i].active && rdBodies[i].entityNum >= 0 && rdBodies[i].entityNum < MAX_GENTITIES ) {
+			live[rdBodies[i].entityNum] = &rdBodies[i];
+		}
+	}
+	for ( i = 0; i < MAX_GENTITIES; i++ ) {
+		if ( live[i] || ( rdKeepValid[i] && ( cg_entities[i].currentState.eFlags & EF_DEAD ) ) ) {
 			n++;
 		}
 	}
 	trap_FS_Write( &magic, sizeof( magic ), f );
 	trap_FS_Write( cgs.mapname, MAX_QPATH, f );
 	trap_FS_Write( &n, sizeof( n ), f );
-	for ( i = 0; i < RD_MAX; i++ ) {
-		ragdoll_t *rd = &rdBodies[i];
-		rdSaved_t sv;
-		if ( !rd->active ) {
+	for ( i = 0; i < MAX_GENTITIES; i++ ) {
+		if ( live[i] ) {
+			CG_RagdollKeepPose( live[i] );  // (and up to date for the next save)
+		} else if ( !rdKeepValid[i] || !( cg_entities[i].currentState.eFlags & EF_DEAD ) ) {
 			continue;
 		}
-		memset( &sv, 0, sizeof( sv ) );
-		sv.entityNum = rd->entityNum;
-		sv.aiChar = cg_entities[rd->entityNum].currentState.aiChar;
-		sv.wound = rd->wound;
-		sv.frame = rd->pose.frame;
-		sv.oldframe = rd->pose.oldframe;
-		sv.torsoFrame = rd->pose.torsoFrame;
-		sv.oldTorsoFrame = rd->pose.oldTorsoFrame;
-		sv.backlerp = rd->pose.backlerp;
-		sv.torsoBacklerp = rd->pose.torsoBacklerp;
-		memcpy( sv.axis, rd->pose.axis, sizeof( sv.axis ) );
-		memcpy( sv.torsoAxis, rd->pose.torsoAxis, sizeof( sv.torsoAxis ) );
-		VectorCopy( rd->pose.origin, sv.origin );
-		memcpy( sv.p, rd->p, sizeof( sv.p ) );
-		trap_FS_Write( &sv, sizeof( sv ), f );
+		trap_FS_Write( &rdKeep[i], sizeof( rdSaved_t ), f );
 	}
 	trap_FS_FCloseFile( f );
 	CG_Printf( "ragdoll: kept %i body poses with save '%s'\n", n, username );
@@ -2565,8 +2598,7 @@ static void CG_RagdollLoadSaved( void ) {
 	fileHandle_t f;
 	int len, magic = 0, n = 0, i;
 
-	rdNumSaved = 0;
-	memset( rdSavedUsed, 0, sizeof( rdSavedUsed ) );
+	memset( rdKeepValid, 0, sizeof( rdKeepValid ) );
 	trap_Cvar_VariableStringBuffer( "savegame_filename", name, sizeof( name ) );
 	if ( !name[0] ) {
 		return;
@@ -2583,16 +2615,20 @@ static void CG_RagdollLoadSaved( void ) {
 	trap_FS_Read( map, MAX_QPATH, f );
 	trap_FS_Read( &n, sizeof( n ), f );
 	map[MAX_QPATH - 1] = 0;
-	if ( magic != RD_SAVE_MAGIC || Q_stricmp( map, cgs.mapname ) || n < 0 || n > RD_MAX ||
+	if ( magic != RD_SAVE_MAGIC || Q_stricmp( map, cgs.mapname ) || n < 0 || n > MAX_GENTITIES ||
 		 len < (int)( sizeof( int ) * 2 + MAX_QPATH + n * sizeof( rdSaved_t ) ) ) {
 		trap_FS_FCloseFile( f );
 		return;
 	}
 	for ( i = 0; i < n; i++ ) {
-		trap_FS_Read( &rdSaved[i], sizeof( rdSaved_t ), f );
+		rdSaved_t sv;
+		trap_FS_Read( &sv, sizeof( sv ), f );
+		if ( sv.entityNum >= 0 && sv.entityNum < MAX_GENTITIES ) {
+			rdKeep[sv.entityNum] = sv;
+			rdKeepValid[sv.entityNum] = qtrue;
+		}
 	}
 	trap_FS_FCloseFile( f );
-	rdNumSaved = n;
 	CG_Printf( "ragdoll: restoring %i body poses from '%s'\n", n, path );
 }
 
@@ -2687,7 +2723,7 @@ static void CG_RagdollSever( ragdoll_t *rd, int joint, const vec3_t dir ) {
 	int mask, chain[3], n, i, s, slot, oldest = 0;
 	rdLimb_t *l = NULL;
 
-	if ( !CG_BloodExtreme() || rd->rig == RD_RIG_DOG || !rd->haveRef || CG_Skull( 1 << 7 ) ||
+	if ( !CG_BloodExtreme() || RD_ISDOG( rd->rig ) || !rd->haveRef || CG_Skull( 1 << 7 ) ||
 		 !CG_RagdollBleeds( cg_entities[rd->entityNum].currentState.aiChar ) ||
 		 !CG_RagdollCutFor( joint, &mask, chain, &n ) || ( rd->severedMask & mask ) ) {
 		return;

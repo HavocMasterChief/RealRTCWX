@@ -142,6 +142,18 @@ R_BoxSurfaces_r
 
 =================
 */
+static qboolean r_markBlood;    // this R_MarkFragments is for blood (orientation | MARK_BLOOD)
+
+static qboolean R_BloodTakes( const shader_t *sh ) {
+	if ( sh->surfaceFlags & ( SURF_NOIMPACT | SURF_SKY | SURF_NODRAW | SURF_GLASS ) ) {
+		return qfalse;
+	}
+	if ( sh->contentFlags & ( CONTENTS_WATER | CONTENTS_SLIME | CONTENTS_LAVA | CONTENTS_FOG | CONTENTS_TRANSLUCENT ) ) {
+		return qfalse;
+	}
+	return sh->sort < SS_BLEND0;   // (not a see-through surface)
+}
+
 void R_BoxSurfaces_r( mnode_t *node, vec3_t mins, vec3_t maxs, surfaceType_t **list, int listsize, int *listlength, vec3_t dir ) {
 
 	int s, c;
@@ -181,7 +193,9 @@ void R_BoxSurfaces_r( mnode_t *node, vec3_t mins, vec3_t maxs, surfaceType_t **l
 		//
 		surf = *mark;
 		// check if the surface has NOIMPACT or NOMARKS set
-		if ( ( surf->shader->surfaceFlags & ( SURF_NOIMPACT | SURF_NOMARKS ) )
+		// (RealRTCWX: blood still lands on solid "nomarks" ground - rain-wet
+		// streets, puddles - but never on sky, water, glass or see-through)
+		if ( ( ( surf->shader->surfaceFlags & ( SURF_NOIMPACT | SURF_NOMARKS ) ) && !( r_markBlood && R_BloodTakes( surf->shader ) ) )
 			 || ( surf->shader->contentFlags & CONTENTS_FOG ) ) {
 			surf->viewCount = tr.viewCount;
 		}
@@ -298,6 +312,7 @@ int R_OldMarkFragments( int numPoints, const vec3_t *points, const vec3_t projec
 	vec3_t v1, v2;
 	int             *indexes;
 
+	r_markBlood = qfalse;
 	if (numPoints <= 0) {
 		return 0;
 	}
@@ -517,6 +532,10 @@ int R_MarkFragments( int orientation, const vec3_t *points, const vec3_t project
 
 	//increment view count for double check prevention
 	tr.viewCount++;
+
+	// RealRTCWX: blood (cgame sets this bit in the orientation)
+	r_markBlood = ( orientation & 0x20000 ) != 0;
+	orientation &= ~0x20000;
 
 	// RF, negative maxFragments means we want original mapping
 	if ( maxFragments < 0 ) {

@@ -264,9 +264,27 @@ void CG_ImpactMark( qhandle_t markShader, const vec3_t origin, const vec3_t dir,
 	// get the fragments
 	//VectorScale( dir, -20, projection );
 	VectorScale( dir, radius * 2, projection );
-	numFragments = trap_CM_MarkFragments( (int)orientation, (void *)originalPoints,
-										  projection, MAX_MARK_POINTS, (float *)&markPoints[0],
-										  MAX_MARK_FRAGMENTS * multMaxFragments, markFragments );
+	{
+		int o = ( (int)orientation % 360 + 360 ) % 360;
+		if ( CG_IsBloodMark( markShader ) ) {
+			trace_t tr;
+			vec3_t a, b;
+			o |= 0x20000;   // blood: rain-wet "nomarks" ground takes it too (tr_marks.c)
+			// on such ground it's thinned by the water and washes away
+			VectorMA( origin, 2, dir, a );
+			VectorMA( origin, -16, dir, b );
+			CG_Trace( &tr, a, NULL, NULL, b, ENTITYNUM_NONE, MASK_SOLID );
+			if ( tr.fraction < 1.0f && ( tr.surfaceFlags & SURF_NOMARKS ) ) {
+				alpha *= 0.55f;
+				if ( duration <= 0 || duration > 60000 ) {
+					duration = 60000;
+				}
+			}
+		}
+		numFragments = trap_CM_MarkFragments( o, (void *)originalPoints,
+											  projection, MAX_MARK_POINTS, (float *)&markPoints[0],
+											  MAX_MARK_FRAGMENTS * multMaxFragments, markFragments );
+	}
 
 	colors[0] = red * 255;
 	colors[1] = green * 255;

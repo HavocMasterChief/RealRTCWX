@@ -3136,11 +3136,26 @@ static qboolean UI_XbAch_HandleKey( int key ) {
 		sel += XBACH_COLS;
 		break;
 	case K_PAD0_LEFTSHOULDER:
-		sel -= XBACH_COLS * XBACH_ROWS;
+	case K_PAD0_RIGHTSHOULDER: {
+		// a whole page: the view moves three rows and the selection keeps
+		// its place on screen (it used to move 24 while the view scrolled
+		// just far enough to show it - one new row, two repeated)
+		int rows = ( xbAchNum + XBACH_COLS - 1 ) / XBACH_COLS;
+		int maxTop = rows > XBACH_ROWS ? rows - XBACH_ROWS : 0;
+		int top = xbAchTop + ( key == K_PAD0_RIGHTSHOULDER ? XBACH_ROWS : -XBACH_ROWS );
+		if ( top > maxTop ) {
+			top = maxTop;
+		}
+		if ( top < 0 ) {
+			top = 0;
+		}
+		sel += ( top - xbAchTop ) * XBACH_COLS;
+		if ( top == xbAchTop ) {    // already at the end: go to the first / last one
+			sel = key == K_PAD0_RIGHTSHOULDER ? xbAchNum - 1 : 0;
+		}
+		xbAchTop = top;
 		break;
-	case K_PAD0_RIGHTSHOULDER:
-		sel += XBACH_COLS * XBACH_ROWS;
-		break;
+	}
 	default:
 		return qfalse;
 	}

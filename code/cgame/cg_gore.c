@@ -355,7 +355,7 @@ static void CG_GoreSpawnPool( const vec3_t origin, float radius, int growTime, i
 
 	numFrags = 0;
 	if ( entityNum == ENTITYNUM_WORLD ) {
-		numFrags = trap_CM_MarkFragments( 0, (void *)points, projection, GORE_POOL_MAX_POINTS,
+		numFrags = trap_CM_MarkFragments( 0x20000 /* blood */, (void *)points, projection, GORE_POOL_MAX_POINTS,
 										  (float *)&markPoints[0], GORE_POOL_MAX_FRAGS, frags );
 	}
 	if ( numFrags <= 0 ) {
@@ -598,7 +598,7 @@ static void CG_GoreStartRun( const vec3_t point, const vec3_t normal ) {
 	VectorScale( normal, -6.0f, projection );
 	numFrags = 0;
 	if ( wallEnt == ENTITYNUM_WORLD ) {
-		numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_RUN_MAX_POINTS,
+		numFrags = trap_CM_MarkFragments( 0x20000 /* blood */, (void *)quad, projection, GORE_RUN_MAX_POINTS,
 										  (float *)&markPoints[0], GORE_RUN_MAX_FRAGS, frags );
 	}
 	if ( numFrags <= 0 ) {
@@ -1109,7 +1109,7 @@ static void CG_GoreSpawnFoot( const vec3_t point, const vec3_t normal, const vec
 	VectorScale( normal, -8.0f, projection );
 	numFrags = 0;
 	if ( entityNum == ENTITYNUM_WORLD ) {
-		numFrags = trap_CM_MarkFragments( 0, (void *)quad, projection, GORE_FOOT_MAX_POINTS,
+		numFrags = trap_CM_MarkFragments( 0x20000 /* blood */, (void *)quad, projection, GORE_FOOT_MAX_POINTS,
 										  (float *)&markPoints[0], GORE_FOOT_MAX_FRAGS, frags );
 	}
 	if ( numFrags <= 0 ) {

@@ -720,7 +720,12 @@ static void IN_XbAimUp( void ) {
 CL_JoystickMove
 =================
 */
+// RealRTCWX: the yaw aim assist added this frame (Mirror World flips the
+// player's turning but not this, see CL_CreateCmd)
+static float cl_aaYawAdded;
+
 void CL_JoystickMove( usercmd_t *cmd ) {
+	cl_aaYawAdded = 0;
 	CL_UpdateAimAssistPreset();
     float anglespeed;
 
@@ -1028,6 +1033,7 @@ if ( j_aimassist && j_aimassist->integer && CL_UsingGamepadNow() && !cl_weaponWh
 					stickW = 0.0f;
 				stickW = stickW * stickW; // optional curve
 				cl.viewangles[YAW] += dy * m * stickW;
+				cl_aaYawAdded += dy * m * stickW;
 				cl.viewangles[PITCH] += dp * m * stickW * 0.65f;
 			}
         }
@@ -1062,6 +1068,7 @@ if ( j_aimassist && j_aimassist->integer && CL_UsingGamepadNow() && !cl_weaponWh
                     float m = j_aimassist_strafemagnet->value * strength * escape;
 
                     cl.viewangles[YAW]   += sdy * m;
+                    cl_aaYawAdded += sdy * m;
                     cl.viewangles[PITCH] += sdp * (m * 0.25f);
                 }
             }
@@ -1314,7 +1321,9 @@ usercmd_t CL_CreateCmd( void ) {
 	// RealRTCWX Mirror World skull: the picture is flipped left to right, so
 	// turning and strafing are too (left on the stick is still left on screen)
 	if ( Cvar_VariableIntegerValue( "g_xbskulls" ) & ( 1 << 20 ) ) {
-		cl.viewangles[YAW] = oldAngles[YAW] - ( cl.viewangles[YAW] - oldAngles[YAW] );
+		// (aim assist's pull is toward the target in the world already, so
+		// it isn't flipped, or it would push the crosshair off them)
+		cl.viewangles[YAW] = oldAngles[YAW] - ( cl.viewangles[YAW] - oldAngles[YAW] - cl_aaYawAdded ) + cl_aaYawAdded;
 		cmd.rightmove = -cmd.rightmove;
 	}
 #endif

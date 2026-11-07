@@ -13,7 +13,7 @@ menuDef {
 	style WINDOW_STYLE_FILLED
 	forecolor 0 0 0 0
 	backcolor 0 0 0 0
-	onOpen { setcvar g_gameskill 2 ; uiScript loadCampaignArenas ; uiScript xbLoadSaves }
+	onOpen { setcvar g_gameskill 2 ; uiScript loadCampaignArenas ; uiScript xbLoadSaves ; uiScript xbNGPlus refresh }
 	onEsc { close campaign_menu ; open play_menu }
 itemDef
 	{
@@ -144,6 +144,44 @@ itemDef
 	}
 
 	itemDef {
+		name xb_ngplus
+		text "NEW GAME +"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .34
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 24
+		rect 40 254 240 32
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		cvarTest "ui_xbNGShow"
+		showCvar { "1" }
+		visible 1
+		mouseEnter { setitemcolor xb_ngplus backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_ngplus backcolor 1 1 1 .07 }
+		action { setcvar ui_camp_chapter 0 ; uiScript loadCampaignArenas ; close campaign_menu ; open xbox_difficulty_ngplus }
+	}
+
+	itemDef {
+		text "NEW GAME +   Beat the campaign to unlock"
+		textfont UI_FONT_BIG
+		textscale .22
+		textalign ITEM_ALIGN_LEFT
+		textalignx 0
+		textaligny 11
+		rect 40 264 300 14
+		forecolor .6 .6 .6 .7
+		cvarTest "ui_xbNGShow"
+		showCvar { "3" }
+		visible 1
+		decoration
+	}
+
+	itemDef {
 		name xb_newgame_s
 		text "NEW GAME"
 		type ITEM_TYPE_BUTTON
@@ -187,6 +225,44 @@ itemDef
 		mouseEnter { setitemcolor xb_mission_s backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_mission_s backcolor 1 1 1 .07 }
 		action { close campaign_menu ; open xbox_missions }
+	}
+
+	itemDef {
+		name xb_ngplus_s
+		text "NEW GAME +"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .34
+		textalign ITEM_ALIGN_LEFT
+		textalignx 10
+		textaligny 24
+		rect 40 296 240 32
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		cvarTest "ui_xbNGShow"
+		showCvar { "2" }
+		visible 1
+		mouseEnter { setitemcolor xb_ngplus_s backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_ngplus_s backcolor 1 1 1 .07 }
+		action { setcvar ui_camp_chapter 0 ; uiScript loadCampaignArenas ; close campaign_menu ; open xbox_difficulty_ngplus }
+	}
+
+	itemDef {
+		text "NEW GAME +   Beat the campaign to unlock"
+		textfont UI_FONT_BIG
+		textscale .22
+		textalign ITEM_ALIGN_LEFT
+		textalignx 0
+		textaligny 11
+		rect 40 306 300 14
+		forecolor .6 .6 .6 .7
+		cvarTest "ui_xbNGShow"
+		showCvar { "4" }
+		visible 1
+		decoration
 	}
 
 	itemDef {
@@ -452,7 +528,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill0 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill0 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -473,7 +549,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill1 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill1 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -494,7 +570,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill2 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill2 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -515,7 +591,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill3 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill3 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -536,7 +612,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill4 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill4 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_new ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_new ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -674,7 +750,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill0 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill0 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -695,7 +771,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill1 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill1 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -716,7 +792,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill2 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill2 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -737,7 +813,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill3 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill3 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -758,7 +834,7 @@ itemDef
 		visible 1
 		mouseEnter { setitemcolor xb_skill4 backcolor .3 .6 .2 .55 }
 		mouseExit { setitemcolor xb_skill4 backcolor 1 1 1 .07 }
-		action { close xbox_difficulty_mission ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign }
+		action { close xbox_difficulty_mission ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off ; uiScript StartCampaign }
 	}
 
 	itemDef {
@@ -778,6 +854,247 @@ itemDef
 
 	itemDef {
 		text "A  Start          Y  Campaign Options          B  Back"
+		textfont UI_FONT_BIG
+		textscale .22
+		textalign ITEM_ALIGN_CENTER
+		textalignx 320
+		textaligny 11
+		rect 0 448 640 14
+		forecolor 1 1 1 .9
+		visible 1
+		decoration
+	}
+
+}
+
+menuDef {
+	name "xbox_difficulty_ngplus"
+	visible 0
+	fullscreen 1
+	rect 0 0 640 480
+	focusColor .9 .9 .9 1
+	style WINDOW_STYLE_FILLED
+	forecolor 0 0 0 0
+	backcolor 0 0 0 0
+	onOpen {  }
+	onEsc { close xbox_difficulty_ngplus ; open campaign_menu }
+itemDef
+	{
+		name realrtcw_background
+		style WINDOW_STYLE_SHADER
+		rect -120 -9.25 917 500
+		background "realrtcw_background"
+		visible 1
+		decoration
+	}
+itemDef
+	{
+		name realrtcw_logo
+		style WINDOW_STYLE_SHADER
+		rect -107 0 480 480
+		background "ui/assets/realrtcw_logo.tga"
+		visible 1
+		decoration
+	}
+				itemDef {
+		decoration
+					name				mappreview
+					group				campCreate
+					ownerdraw		     UI_CREATEMAPPREVIEW
+					rect				29 146 229 114
+					visible 1
+					}
+				itemDef {
+		decoration
+					name				mappreview
+					group				campCreate
+					style				WINDOW_STYLE_FILLED
+					rect				28 145 230 115
+					border				1
+					bordercolor			.5 .5 .5 .5
+					visible 1
+					}
+	itemDef {
+		text "NEW GAME +"
+		textfont UI_FONT_BIG
+		textscale .3
+		textalign ITEM_ALIGN_CENTER
+		textalignx 115
+		textaligny 11
+		rect 28 268 230 14
+		forecolor 1 1 1 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		rect 300 140 300 180
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .5
+		backcolor 0 0 0 .8
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		text "Select Difficulty"
+		textfont UI_FONT_NORMAL
+		textscale .25
+		textalign ITEM_ALIGN_CENTER
+		textalignx 144
+		textaligny 14
+		rect 306 145 288 20
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .5
+		backcolor .3 0.5 0.2 .25
+		forecolor 1 1 1 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		name xb_skill0
+		text "@CAMP_GAMESKILL_EASY"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .25
+		textalign ITEM_ALIGN_CENTER
+		textalignx 138
+		textaligny 16
+		rect 312 172 276 22
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		mouseEnter { setitemcolor xb_skill0 backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_skill0 backcolor 1 1 1 .07 }
+		action { close xbox_difficulty_ngplus ; setcvar g_gameskill 0 ; setcvar g_level_was_selected 1 ; setcvar ui_camp_bonusmode 0 ; uiScript xbNGPlus start ; uiScript StartCampaign }
+	}
+
+	itemDef {
+		name xb_skill1
+		text "@CAMP_GAMESKILL_MEDIUM"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .25
+		textalign ITEM_ALIGN_CENTER
+		textalignx 138
+		textaligny 16
+		rect 312 200 276 22
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		mouseEnter { setitemcolor xb_skill1 backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_skill1 backcolor 1 1 1 .07 }
+		action { close xbox_difficulty_ngplus ; setcvar g_gameskill 1 ; setcvar g_level_was_selected 1 ; setcvar ui_camp_bonusmode 0 ; uiScript xbNGPlus start ; uiScript StartCampaign }
+	}
+
+	itemDef {
+		name xb_skill2
+		text "@CAMP_GAMESKILL_HARD"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .25
+		textalign ITEM_ALIGN_CENTER
+		textalignx 138
+		textaligny 16
+		rect 312 228 276 22
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		mouseEnter { setitemcolor xb_skill2 backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_skill2 backcolor 1 1 1 .07 }
+		action { close xbox_difficulty_ngplus ; setcvar g_gameskill 2 ; setcvar g_level_was_selected 1 ; setcvar ui_camp_bonusmode 0 ; uiScript xbNGPlus start ; uiScript StartCampaign }
+	}
+
+	itemDef {
+		name xb_skill3
+		text "@CAMP_GAMESKILL_MAX"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .25
+		textalign ITEM_ALIGN_CENTER
+		textalignx 138
+		textaligny 16
+		rect 312 256 276 22
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		mouseEnter { setitemcolor xb_skill3 backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_skill3 backcolor 1 1 1 .07 }
+		action { close xbox_difficulty_ngplus ; setcvar g_gameskill 3 ; setcvar g_level_was_selected 1 ; setcvar ui_camp_bonusmode 0 ; uiScript xbNGPlus start ; uiScript StartCampaign }
+	}
+
+	itemDef {
+		name xb_skill4
+		text "@CAMP_GAMESKILL_REALISM"
+		type ITEM_TYPE_BUTTON
+		textfont UI_FONT_BIG
+		textscale .25
+		textalign ITEM_ALIGN_CENTER
+		textalignx 138
+		textaligny 16
+		rect 312 284 276 22
+		style WINDOW_STYLE_FILLED
+		border 1
+		bordercolor .5 .5 .5 .3
+		backcolor 1 1 1 .07
+		forecolor 1 1 1 1
+		visible 1
+		mouseEnter { setitemcolor xb_skill4 backcolor .3 .6 .2 .55 }
+		mouseExit { setitemcolor xb_skill4 backcolor 1 1 1 .07 }
+		action { close xbox_difficulty_ngplus ; setcvar g_gameskill 4 ; setcvar g_level_was_selected 1 ; setcvar ui_camp_bonusmode 0 ; uiScript xbNGPlus start ; uiScript StartCampaign }
+	}
+
+	itemDef {
+		text "Set options and the Famine, Mythic, Catch, Ricochet"
+		textfont UI_FONT_BIG
+		textscale .19
+		textalign ITEM_ALIGN_CENTER
+		textalignx 138
+		textaligny 11
+		rect 312 326 276 14
+		forecolor .8 .72 .58 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		text "and Mirror World skulls. Achievements stay on."
+		textfont UI_FONT_BIG
+		textscale .19
+		textalign ITEM_ALIGN_CENTER
+		textalignx 138
+		textaligny 11
+		rect 312 340 276 14
+		forecolor .8 .72 .58 1
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		rect 0 445 640 20
+		style WINDOW_STYLE_FILLED
+		backcolor 0 0 0 .6
+		visible 1
+		decoration
+	}
+
+	itemDef {
+		text "A  Start          B  Back"
 		textfont UI_FONT_BIG
 		textscale .22
 		textalign ITEM_ALIGN_CENTER

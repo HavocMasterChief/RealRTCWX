@@ -191,6 +191,7 @@ vmCvar_t g_ee_skinMercenary;
 vmCvar_t g_ee_skinZombie;
 vmCvar_t g_ee_earlyWeapons;
 vmCvar_t g_ee_endgameSwitch;
+vmCvar_t g_xbNGPlus;
 vmCvar_t g_ee_progress;
 vmCvar_t g_ee_svAgent1;
 
@@ -250,6 +251,7 @@ cvarTable_t gameCvarTable[] = {
 	{&g_midgame, "g_midgame", "0", CVAR_ARCHIVE | CVAR_LATCH, 0, qfalse},
 	{&g_vanilla_guns, "g_vanilla_guns", "0", CVAR_ARCHIVE | CVAR_LATCH, 0, qfalse},
 	{&g_dlc1, "g_dlc1", "0", CVAR_ARCHIVE | CVAR_LATCH, 0, qfalse},
+	{&g_xbNGPlus, "g_xbNGPlus", "0", CVAR_ARCHIVE, 0, qfalse},     // RealRTCWX New Game+ playthrough (ui_main.c)
 
 	// Armory loadout builder (hub maps) - points budget and per-item costs, easy to retune
 	{&g_loadoutPoints, "g_loadoutPoints", "10", CVAR_ARCHIVE | CVAR_CHEAT, 0, qfalse},
@@ -2932,4 +2934,14 @@ void G_ScheduleEndgame( int delay ) {
 
 	trap_Cvar_Set( "g_reloading", va( "%d", RELOAD_ENDGAME ) );
 	level.reloadDelayTime = level.time + delay;
+
+	// RealRTCWX: the campaign has been beaten on this console, which
+	// unlocks New Game+ (ui_main.c UI_XbNGRefresh)
+	if ( g_gametype.integer != GT_SURVIVAL ) {
+		fileHandle_t f;
+		if ( trap_FS_FOpenFile( "xb_beatgame.dat", &f, FS_WRITE ) >= 0 ) {
+			trap_FS_Write( "1\n", 2, f );
+			trap_FS_FCloseFile( f );
+		}
+	}
 }

@@ -526,9 +526,19 @@ def main():
                                 "close campaign_menu ; open xbox_difficulty_new", scale=".34", align="ITEM_ALIGN_LEFT"), has)
         campaign += when(button("xb_mission" + sfx, "CHOOSE MISSION", 40, y + 42, 240, 32,
                                 "close campaign_menu ; open xbox_missions", scale=".34", align="ITEM_ALIGN_LEFT"), has)
+        # NEW GAME + once the campaign has been beaten, a dim note before
+        # (ui_xbNGShow: 1/2 unlocked without/with a save, 3/4 locked; one
+        # cvarTest per item, so it covers both; ui_main.c UI_XbNGRefresh)
+        ng = button("xb_ngplus" + sfx, "NEW GAME +", 40, y + 84, 240, 32,
+                    "setcvar ui_camp_chapter 0 ; uiScript loadCampaignArenas ; "
+                    "close campaign_menu ; open xbox_difficulty_ngplus", scale=".34", align="ITEM_ALIGN_LEFT")
+        campaign += ng.replace("\t\tvisible 1\n", f'\t\tcvarTest "ui_xbNGShow"\n\t\tshowCvar {{ "{2 if has else 1}" }}\n\t\tvisible 1\n', 1)
+        lk = label("NEW GAME +   Beat the campaign to unlock", 40, y + 94, 300, scale=".22",
+                   color=".6 .6 .6 .7", align="ITEM_ALIGN_LEFT")
+        campaign += lk.replace("visible 1", f'cvarTest "ui_xbNGShow"\n\t\tshowCvar {{ "{4 if has else 3}" }}\n\t\tvisible 1', 1)
     campaign += hints("A  Select          B  Back")
     out = menu("campaign_menu", campaign,
-               on_open="setcvar g_gameskill 2 ; uiScript loadCampaignArenas ; uiScript xbLoadSaves",
+               on_open="setcvar g_gameskill 2 ; uiScript loadCampaignArenas ; uiScript xbLoadSaves ; uiScript xbNGPlus refresh",
                on_esc="close campaign_menu ; open play_menu")
 
     # --- 2. Mission list
@@ -566,16 +576,28 @@ def main():
     skills = re.search(r'cvarFloatList\s*\{([^}]*)\}', [i for i in its if field(i, 'cvar') == 'g_gameskill'][0]).group(1)
     skills = re.findall(r'"([^"]+)"\s+(\d+)', skills)
     for kind, title, back in (("new", "NEW GAME", "close xbox_difficulty_new ; open campaign_menu"),
-                              ("mission", "MISSION", "close xbox_difficulty_mission ; open xbox_missions")):
+                              ("mission", "MISSION", "close xbox_difficulty_mission ; open xbox_missions"),
+                              ("ngplus", "NEW GAME +", "close xbox_difficulty_ngplus ; open campaign_menu")):
         mname = "xbox_difficulty_" + kind
         body = background
         body += preview.replace("visible\t\t\t\t1", "visible 1")
         body += label(title, 28, 268, 230, scale=".3", color="1 1 1 1")
         body += panel(300, 140, 300, 40 + 28 * len(skills), "Select Difficulty")
         for n, (text, val) in enumerate(skills):
+            # New Game+: its own options and skulls, and none of the
+            # Campaign Options' bonus modes; anything else: back to the
+            # player's own options (ui_main.c, xbNGPlus)
+            run = ("setcvar ui_camp_bonusmode 0 ; uiScript xbNGPlus start" if kind == "ngplus" else
+                   "setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript xbNGPlus off")
             body += button(f"xb_skill{val}", text, 312, 172 + 28 * n, 276, 22,
                            f"close {mname} ; setcvar g_gameskill {val} ; setcvar g_level_was_selected 1 ; "
-                           f"setcvar g_cheatedRun 0 ; setcvar g_xbcheats 0 ; setcvar g_xbskulls 0 ; uiScript StartCampaign", scale=".25")
+                           f"{run} ; uiScript StartCampaign", scale=".25")
+        if kind == "ngplus":
+            body += label("Set options and the Famine, Mythic, Catch, Ricochet", 312, 186 + 28 * len(skills), 276, scale=".19", color=".8 .72 .58 1")
+            body += label("and Mirror World skulls. Achievements stay on.", 312, 200 + 28 * len(skills), 276, scale=".19", color=".8 .72 .58 1")
+            body += hints("A  Start          B  Back")
+            out += menu(mname, body, on_esc=back)
+            continue
         body += f'''
 	itemDef {{
 		name padY

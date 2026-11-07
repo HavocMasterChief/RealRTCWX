@@ -32,7 +32,8 @@ menuDef
 	disableColor .5 .5 .5 1
 	
 	onOpen
-	{ 
+	{
+		uiScript xbNGPlus menu; 
 		hide realrtcw_ingame_save;
 		hide realrtcw_ingame_load;
 		hide realrtcw_ingame_controls;
@@ -313,8 +314,8 @@ menuDef
 	name xbcheats
 	type 1
 	text "CHEATS"
-	cvarTest "g_gameType"
-	hideCvar { "3" }
+	cvarTest "ui_xbNoCheats"
+	hideCvar { "1" }
 	rect 10 375 178 26
 	textfont UI_FONT_DEFAULT
 	textscale .3

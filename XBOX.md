@@ -11,6 +11,9 @@ made for this port:
   gibbing on the Extreme blood setting, and a Max Blood option for how long
   it stays
 - Achievements, with an in-game browser
+- New Game+, unlocked by beating the campaign: fixed tougher options, the
+  Famine, Mythic, Catch, Ricochet and Mirror World skulls always on, and
+  achievements still count. Its saves are marked NG+.
 - Named saves, typed on an on-screen keyboard
 - An HL2-style flashlight
 - Crouch stealth

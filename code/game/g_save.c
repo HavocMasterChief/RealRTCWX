@@ -1411,9 +1411,11 @@ qboolean G_SaveGame( char *username ) {
 	// RealRTCWX: whether this playthrough used cheats (save/<name>.cht)
 	{
 		fileHandle_t cf;
-		// "<0|1> <skulls>": the cheat mark, then the skulls in use
-		const char *txt = va( "%c %i", trap_Cvar_VariableIntegerValue( "g_cheatedRun" ) ? '1' : '0',
-							  trap_Cvar_VariableIntegerValue( "g_xbskulls" ) );
+		// "<0|1> <skulls> <0|1>": the cheat mark, the skulls in use, and
+		// whether it's a New Game+ playthrough
+		const char *txt = va( "%c %i %i", trap_Cvar_VariableIntegerValue( "g_cheatedRun" ) ? '1' : '0',
+							  trap_Cvar_VariableIntegerValue( "g_xbskulls" ),
+							  trap_Cvar_VariableIntegerValue( "g_xbNGPlus" ) ? 1 : 0 );
 		if ( trap_FS_FOpenFile( va( "save\\%s.cht", username ), &cf, FS_WRITE ) >= 0 ) {
 			trap_FS_Write( txt, strlen( txt ), cf );
 			trap_FS_FCloseFile( cf );
@@ -1493,10 +1495,18 @@ void G_LoadGame( char *filename ) {
 				trap_FS_FCloseFile( cf );
 			}
 			trap_Cvar_Set( "g_cheatedRun", c == '1' ? "1" : "0" );
-			if ( filename ) {
-				trap_Cvar_Set( "g_xbcheats", "0" );   // a different save; a death reload keeps the toggles
-				// the skulls that playthrough was using (none without cheats)
-				trap_Cvar_Set( "g_xbskulls", ( c == '1' && buf[1] == ' ' ) ? va( "%i", atoi( buf + 2 ) ) : "0" );
+			{
+				// New Game+ ("<c> <skulls> 1"; the UI has put its options in
+				// place before the load, see ui_main.c UI_XbNGForSave)
+				char *sp = buf[1] == ' ' ? strchr( buf + 2, ' ' ) : NULL;
+				int ng = ( sp && atoi( sp + 1 ) ) ? 1 : 0;
+				trap_Cvar_Set( "g_xbNGPlus", ng ? "1" : "0" );
+				if ( filename ) {
+					trap_Cvar_Set( "g_xbcheats", "0" );   // a different save; a death reload keeps the toggles
+					// the skulls that playthrough was using (none without cheats,
+					// New Game+'s own)
+					trap_Cvar_Set( "g_xbskulls", ( ( c == '1' || ng ) && buf[1] == ' ' ) ? va( "%i", atoi( buf + 2 ) ) : "0" );
+				}
 			}
 		}
 	}

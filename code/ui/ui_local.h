@@ -697,6 +697,7 @@ typedef struct {
 
 	const char *mission;            // RealRTCWX: "Escape!" (from the arenas)
 	int cheated;                    // RealRTCWX: the playthrough used cheats (save/<file>.cht)
+	int ngplus;                     // RealRTCWX: a New Game+ playthrough (save/<file>.cht)
 } savegameInfo;
 //----(SA)	end
 

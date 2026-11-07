@@ -576,7 +576,8 @@ def achievements_menu(name, on_esc):
 
 
 def text_button(name, text, y, action, hide_survival=False):
-    test = '\tcvarTest "g_gameType"\n\thideCvar { "3" }\n' if hide_survival else ""
+    # (ui_xbNoCheats: survival or New Game+, set as the in-game menu opens)
+    test = '\tcvarTest "ui_xbNoCheats"\n\thideCvar { "1" }\n' if hide_survival else ""
     return f'''
 	itemDef
 	{{
@@ -605,6 +606,10 @@ def cheats_button(t):
     """A CHEATS entry under Quit in the in-game menu."""
     item = text_button("xbcheats", "CHEATS", 375, "open ingame_cheats", True)
     item += text_button("xbachievements", "ACHIEVEMENTS", 404, "open ingame_achievements")
+    # no Cheats in survival or New Game+ (ui_main.c, "xbNGPlus menu")
+    i = t.index("onOpen")
+    i = t.index("{", i) + 1
+    t = t[:i] + "\n\t\tuiScript xbNGPlus menu;" + t[i:]
     i = t.index("name quit")
     j = t.index("}", t.index("mouseExit", i)) + 1      # end of its mouseExit { }
     j = t.index("}", j) + 1                             # end of the quit item

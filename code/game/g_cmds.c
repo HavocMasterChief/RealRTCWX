@@ -2162,8 +2162,8 @@ static void Cmd_XbCheat_f( gentity_t *ent ) {
 	char name[MAX_TOKEN_CHARS];
 	int bits = G_XbCheats(), i;
 
-	if ( trap_Argc() < 2 || ent->health <= 0 ) {
-		return;
+	if ( trap_Argc() < 2 || ent->health <= 0 || g_xbNGPlus.integer ) {
+		return;     // (no cheats in New Game+)
 	}
 	trap_Argv( 1, name, sizeof( name ) );
 	trap_Cvar_Set( "g_cheatedRun", "1" );

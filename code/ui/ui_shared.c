@@ -2827,6 +2827,37 @@ qboolean Item_Slider_HandleKey( itemDef_t *item, int key, qboolean down ) {
 }
 
 
+/*
+RealRTCWX New Game+: the Game Options it sets can't be changed during an
+NG+ playthrough (g_xbNGPlus 1); they're drawn dimmed and ignore the pad.
+Keep in step with xbNGOptions in ui_main.c.
+*/
+static const char *xbNGLocked[] = {
+	"g_midgame", "g_fullarsenal", "g_endmapbonus", "g_vanilla_guns",
+	"g_reinforce", "g_airespawn", "g_spawndogs", "g_spawnpriests", "g_spawnxshepherds",
+	"g_aicanheadshot", "g_fireonthemove",
+	"g_realism", "g_regen", "g_overheal", "g_weaponfalloff", "g_jumptime",
+	"cg_draw2D", "cg_hudstyle", "cg_cursorHints", "cg_bloodMode", "cg_bloodAmount",
+	"cg_hudstamina", "cg_hudweapicon", "cg_hudammoclip", "cg_journalstyle", "cg_drawCheckpoint",
+	NULL
+};
+
+qboolean Item_XbNGLocked( itemDef_t *item ) {
+	int i;
+	if ( !item || !item->cvar || !item->cvar[0] || !DC->getCVarValue( "g_xbNGPlus" ) ) {
+		return qfalse;
+	}
+	if ( item->type != ITEM_TYPE_YESNO && item->type != ITEM_TYPE_MULTI && item->type != ITEM_TYPE_SLIDER ) {
+		return qfalse;
+	}
+	for ( i = 0; xbNGLocked[i]; i++ ) {
+		if ( !Q_stricmp( item->cvar, xbNGLocked[i] ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 qboolean Item_HandleKey( itemDef_t *item, int key, qboolean down ) {
 
 	if ( itemCapture ) {
@@ -2846,6 +2877,10 @@ qboolean Item_HandleKey( itemDef_t *item, int key, qboolean down ) {
 
 	if ( !down ) {
 		return qfalse;
+	}
+
+	if ( Item_XbNGLocked( item ) ) {
+		return qfalse;      // set by New Game+
 	}
 
 	switch ( item->type ) {
@@ -3730,6 +3765,9 @@ void Item_TextColor( itemDef_t *item, vec4_t *newColor ) {
 		if ( item->cvarFlags & ( CVAR_ENABLE | CVAR_DISABLE ) && !Item_EnableShowViaCvar( item, CVAR_ENABLE ) ) {
 			memcpy( newColor, &parent->disableColor, sizeof( vec4_t ) );
 		}
+	}
+	if ( Item_XbNGLocked( item ) ) {
+		( *newColor )[0] = ( *newColor )[1] = ( *newColor )[2] = 0.45f;     // set by New Game+
 	}
 }
 

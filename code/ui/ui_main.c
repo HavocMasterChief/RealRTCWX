@@ -5227,6 +5227,147 @@ static const char *UI_XbMissionName( const char *map ) {
 	return String_Alloc( map );
 }
 
+/*
+RealRTCWX: New Game+ (Campaign > New Game +, once the campaign has been
+beaten). Fixed Game Options (below; ui_shared.c locks them), five skulls
+that stay on, no Cheats menu, and achievements still count. The player's
+own settings are kept in ngplus_backup.cfg while an NG+ playthrough is
+going, and put back when they start or load anything else. Whether a save
+is NG+ is the third field of its save/<name>.cht ("<cheated> <skulls> <ng>").
+*/
+#define XB_NG_SKULLS    ( ( 1 << 8 ) | ( 1 << 9 ) | ( 1 << 10 ) | ( 1 << 16 ) | ( 1 << 20 ) )   // Famine, Mythic, Catch, Ricochet, Mirror World
+#define XB_NG_BACKUP    "ngplus_backup.cfg"
+
+static const struct { const char *cvar, *value; } xbNGOptions[] = {
+	{ "g_midgame", "1" },           // Story Progression: Cutscenes & Malta Hub
+	{ "g_fullarsenal", "1" },       // Weapon Roster: RealRTCW
+	{ "g_endmapbonus", "1" },       // Rewards for Secrets
+	{ "g_vanilla_guns", "0" },      // Weapon Models: High Definition
+	{ "g_reinforce", "2" },         // Additional Enemies: Even More
+	{ "g_airespawn", "1" },         // AI Respawn: Once
+	{ "g_spawndogs", "1" },
+	{ "g_spawnpriests", "1" },
+	{ "g_spawnxshepherds", "1" },
+	{ "g_aicanheadshot", "1" },
+	{ "g_fireonthemove", "1" },
+	{ "g_realism", "1" },           // Realistic Movement
+	{ "g_regen", "2" },             // Health Regen: Partial
+	{ "g_overheal", "1" },          // Overheal: Modern
+	{ "g_weaponfalloff", "1" },     // Realistic Ballistics
+	{ "g_jumptime", "1" },          // Strafejump
+	{ "cg_draw2D", "1" },           // Enable HUD
+	{ "cg_hudstyle", "5" },         // HUD Style: Vanilla
+	{ "cg_cursorHints", "0" },      // Cursor Hints: Off
+	{ "cg_bloodMode", "3" },        // Blood: Extreme
+	{ "cg_bloodAmount", "3" },      // Max Blood: Unlimited
+	{ "cg_hudstamina", "0" },       // Stamina Bar: No
+	{ "cg_hudweapicon", "1" },
+	{ "cg_hudammoclip", "1" },
+	{ "cg_journalstyle", "1" },
+	{ "cg_drawCheckpoint", "1" },
+};
+#define XB_NG_COUNT ( (int)( sizeof( xbNGOptions ) / sizeof( xbNGOptions[0] ) ) )
+
+// the player's own settings are kept while NG+ is on
+static qboolean UI_XbNGBackedUp( void ) {
+	char buf[8];
+	return UI_XbReadFile( XB_NG_BACKUP, buf, sizeof( buf ) ) > 0 ? qtrue : qfalse;
+}
+
+static void UI_XbNGApply( void ) {
+	int i;
+	if ( !UI_XbNGBackedUp() ) {
+		fileHandle_t f;
+		if ( trap_FS_FOpenFile( XB_NG_BACKUP, &f, FS_WRITE ) >= 0 ) {
+			for ( i = 0; i < XB_NG_COUNT; i++ ) {
+				char v[64];
+				const char *line;
+				trap_Cvar_VariableStringBuffer( xbNGOptions[i].cvar, v, sizeof( v ) );
+				line = va( "%s \"%s\"\n", xbNGOptions[i].cvar, v );
+				trap_FS_Write( line, strlen( line ), f );
+			}
+			trap_FS_FCloseFile( f );
+		}
+	}
+	for ( i = 0; i < XB_NG_COUNT; i++ ) {
+		trap_Cvar_Set( xbNGOptions[i].cvar, xbNGOptions[i].value );
+	}
+	trap_Cvar_Set( "g_xbNGPlus", "1" );
+	trap_Cvar_Set( "g_cheatedRun", "0" );
+	trap_Cvar_Set( "g_xbcheats", "0" );
+	trap_Cvar_Set( "g_xbskulls", va( "%i", XB_NG_SKULLS ) );
+}
+
+// back to the player's own settings (anything that isn't NG+)
+static void UI_XbNGOff( void ) {
+	char buf[2048], *p;
+	trap_Cvar_Set( "g_xbNGPlus", "0" );
+	if ( UI_XbReadFile( XB_NG_BACKUP, buf, sizeof( buf ) ) <= 0 ) {
+		return;
+	}
+	p = buf;
+	while ( *p ) {
+		char name[64];
+		const char *tok = COM_Parse( &p );
+		if ( !tok[0] ) {
+			break;
+		}
+		Q_strncpyz( name, tok, sizeof( name ) );
+		tok = COM_ParseExt( &p, qfalse );
+		trap_Cvar_Set( name, tok );
+	}
+	trap_FS_Delete( XB_NG_BACKUP );
+}
+
+// the .cht of a save: whether it's NG+
+static qboolean UI_XbSaveIsNG( const char *file, int *cheated ) {
+	char buf[32], *p = buf;
+	int c, sk, ng = 0;
+	UI_XbReadFile( va( "save/%s.cht", file ), buf, sizeof( buf ) );
+	c = buf[0] == '1';
+	if ( cheated ) {
+		*cheated = c;
+	}
+	if ( buf[0] ) {
+		COM_Parse( &p );            // cheated
+		sk = atoi( COM_Parse( &p ) );
+		ng = atoi( COM_Parse( &p ) );
+		(void)sk;
+	}
+	return ng ? qtrue : qfalse;
+}
+
+// before loading a save: its playthrough's settings
+static void UI_XbNGForSave( const char *file ) {
+	if ( file && UI_XbSaveIsNG( file, NULL ) ) {
+		UI_XbNGApply();
+	} else {
+		UI_XbNGOff();
+	}
+}
+
+// Campaign menu: unlocked by beating the campaign (the final chapter's
+// achievement, or the game's own mark for any finish, cheats or not)
+static void UI_XbNGRefresh( void ) {
+	char buf[4096];
+	qboolean beat = qfalse;
+	if ( UI_XbReadFile( "xb_beatgame.dat", buf, 8 ) > 0 ) {
+		beat = qtrue;
+	} else if ( UI_XbReadFile( "achievements.dat", buf, sizeof( buf ) ) > 0 ) {
+		char *s = buf;
+		while ( ( s = strstr( s, "ACH_CHAPTER_7" ) ) != NULL ) {
+			if ( s[13] != '_' ) {
+				beat = qtrue;
+				break;
+			}
+			s += 13;
+		}
+	}
+	// which NEW GAME + item the Campaign menu shows: 1/2 the button (no
+	// save / a save, so it sits under the right buttons), 3/4 the locked note
+	trap_Cvar_Set( "ui_xbNGShow", va( "%i", ( beat ? 1 : 3 ) + ( (int)trap_Cvar_VariableValue( "ui_xbHasSave" ) ? 1 : 0 ) ) );
+}
+
 static void UI_XbLoadSaves( void ) {
 	int i;
 
@@ -5234,17 +5375,10 @@ static void UI_XbLoadSaves( void ) {
 	for ( i = 0; i < uiInfo.savegameCount; i++ ) {
 		savegameInfo *sg = &uiInfo.savegameList[i];
 		fileHandle_t f;
-		char c = '0';
 
 		sg->mission = UI_XbMissionName( sg->mapName ? sg->mapName : "" );
-		sg->cheated = 0;
-		if ( trap_FS_FOpenFile( va( "save/%s.cht", sg->savegameFile ), &f, FS_READ ) > 0 ) {
-			trap_FS_Read( &c, 1, f );
-			sg->cheated = ( c == '1' );
-		}
-		if ( f ) {
-			trap_FS_FCloseFile( f );
-		}
+		sg->ngplus = UI_XbSaveIsNG( sg->savegameFile, &sg->cheated );
+		f = 0;
 		// a name the player gave it (save/<file>.nam, see UI_XbKbSave)
 		f = 0;
 		{
@@ -5559,6 +5693,7 @@ static void UI_XbSaveOver( void ) {
 static void UI_XbContinue( void ) {
 	UI_XbLoadSaves();
 	if ( uiInfo.savegameCount ) {
+		UI_XbNGForSave( uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[0]].savegameFile );
 		trap_Cmd_ExecuteText( EXEC_APPEND, va( "loadgame %s\n",
 			uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[0]].savegameFile ) );
 	}
@@ -5676,11 +5811,32 @@ static void UI_RunMenuScript( char **args ) {
 			UI_XbLoadSaves();
 			return;
 		}
+		if ( Q_stricmp( name, "xbNGPlus" ) == 0 ) {
+			// "start": an NG+ playthrough from the first mission (the
+			// difficulty is set by then); "off": anything else; "refresh":
+			// the Campaign menu checks whether it's unlocked
+			const char *what;
+			if ( String_Parse( args, &what ) ) {
+				if ( !Q_stricmp( what, "start" ) ) {
+					UI_XbNGApply();
+				} else if ( !Q_stricmp( what, "off" ) ) {
+					UI_XbNGOff();
+				} else if ( !Q_stricmp( what, "menu" ) ) {
+					// the in-game menu: no Cheats in survival or New Game+
+					trap_Cvar_Set( "ui_xbNoCheats", ( (int)trap_Cvar_VariableValue( "g_gameType" ) == 3 ||
+													 (int)trap_Cvar_VariableValue( "g_xbNGPlus" ) ) ? "1" : "0" );
+				} else {
+					UI_XbNGRefresh();
+				}
+			}
+			return;
+		}
 		if ( Q_stricmp( name, "xbContinue" ) == 0 ) {
 			UI_XbContinue();
 			return;
 		}
 		if ( Q_stricmp( name, "xbSurvBegin" ) == 0 ) {
+			UI_XbNGOff();       // (New Game+ is campaign only)
 			// RealRTCWX survival: start with or without the cheats/skulls set
 			// on the options screen (achievements are off for a cheated run)
 			if ( (int)trap_Cvar_VariableValue( "ui_xbSurvCheats" ) ) {
@@ -5998,6 +6154,7 @@ static void UI_RunMenuScript( char **args ) {
 			if ( DC->getCVarValue( "developer" ) ) {
 				Com_Printf( "would load game (developer 0):\n   %s\n", uiInfo.savegameList[i].savegameFile );
 			} else {
+				UI_XbNGForSave( uiInfo.savegameList[i].savegameFile );     // RealRTCWX New Game+
 				trap_Cmd_ExecuteText( EXEC_APPEND, va( "loadgame %s\n", uiInfo.savegameList[i].savegameFile ) );
 			}
 
@@ -7421,8 +7578,11 @@ static const char *UI_FeederItemText( float feederID, int index, int column, qha
 					const char *m = uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[index]].mission;
 					return m ? m : "";
 				}
-			case 3:     // RealRTCWX: cheats
-				return uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[index]].cheated ? "CHEATS" : "";
+			case 3:     // RealRTCWX: New Game+ / cheats
+				{
+					savegameInfo *sg = &uiInfo.savegameList[uiInfo.savegameStatus.displaySavegames[index]];
+					return sg->ngplus ? "NG+" : sg->cheated ? "CHEATS" : "";
+				}
 
 			}
 		}

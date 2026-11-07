@@ -359,6 +359,18 @@ static void CG_DrawCursorhint( rectDef_t *rect ) {
 	qboolean redbar = qfalse;
 
 	if ( !cg_cursorHints.integer ) {
+		// RealRTCWX: hints off hides the icons, but the exit's mission
+		// stats still come up as you walk up to it
+		CG_CheckForCursorHints();
+		if ( cg.cursorHintIcon == HINT_EXIT || cg.cursorHintIcon == HINT_NOEXIT ) {
+			cg.exitStatsFade = 250;
+			if ( !cg.exitStatsTime ) {
+				cg.exitStatsTime = cg.time;
+			}
+			CG_DrawExitStats();
+		} else {
+			cg.exitStatsTime = 0;   // fades up again next time
+		}
 		return;
 	}
 

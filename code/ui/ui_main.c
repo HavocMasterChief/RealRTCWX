@@ -5244,7 +5244,7 @@ static const struct { const char *cvar, *value; } xbNGOptions[] = {
 	{ "g_endmapbonus", "1" },       // Rewards for Secrets
 	{ "g_vanilla_guns", "0" },      // Weapon Models: High Definition
 	{ "g_reinforce", "2" },         // Additional Enemies: Even More
-	{ "g_airespawn", "1" },         // AI Respawn: Once
+	{ "g_airespawn", "0" },         // AI Respawn: No
 	{ "g_spawndogs", "1" },
 	{ "g_spawnpriests", "1" },
 	{ "g_spawnxshepherds", "1" },
